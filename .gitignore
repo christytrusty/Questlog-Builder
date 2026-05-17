@@ -1,0 +1,17 @@
+# Local editor and OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local-only project work
+backups/
+sandbox testing/
+notes/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Dependency folders, if tooling is added later
+node_modules/

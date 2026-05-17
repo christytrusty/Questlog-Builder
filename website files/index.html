@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Questlog JSON Editor</title>
+  <link rel="stylesheet" href="style.css">
+<style>
+    :root {
+      --bg:#131210; --sf:#1b1a16; --sf2:#232118; --sf3:#2a2924;
+      --bd:#302e26; --bd2:#3c3a30;
+      --tx:#e6e2d6; --mu:#7a7568; --mu2:#4a4840;
+      --ac:#d4924a; --ac-bg:rgba(212,146,74,.09); --ac-hi:rgba(212,146,74,.18);
+      --ok:#5a8a4a; --ok-bg:rgba(90,138,74,.12);
+      --err:#c05040; --err-bg:rgba(192,80,64,.1);
+      --json-bg:#0d0c0a; --json-tx:#c8c0a8;
+      --font:'DM Sans',system-ui,sans-serif; --mono:'JetBrains Mono',ui-monospace,monospace;
+      --r:3px; --r2:5px;
+    }
+    [data-theme="light"] {
+      --bg:#edeae0; --sf:#faf8f2; --sf2:#f0ece3; --sf3:#e8e3d8;
+      --bd:#ccc8bc; --bd2:#bab6aa;
+      --tx:#252018; --mu:#857d6e; --mu2:#c0bab0;
+      --ac:#b87030; --ac-bg:rgba(184,112,48,.08); --ac-hi:rgba(184,112,48,.16);
+      --ok:#3a7028; --ok-bg:rgba(58,112,40,.1);
+      --err:#a03828; --err-bg:rgba(160,56,40,.08);
+      --json-bg:#f0ece0; --json-tx:#2a2010;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    html,body{height:100%;}
+    body{font-family:var(--font);background:var(--bg);color:var(--tx);font-size:13.5px;line-height:1.5;display:flex;flex-direction:column;overflow:hidden;}
+
+    /* ── TOP BAR ─────────────────────────────────────────────── */
+    .topbar{height:44px;flex-shrink:0;background:var(--sf);border-bottom:1px solid var(--bd);display:flex;align-items:center;padding:0 14px;gap:10px;}
+    .logo{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13px;letter-spacing:.01em;color:var(--tx);text-decoration:none;}
+    .logo-gem{width:18px;height:18px;background:var(--ac);border-radius:2px;display:grid;grid-template-columns:1fr 1fr;gap:1.5px;padding:3px;flex-shrink:0;}
+    .logo-gem span{background:#0d0c0a;border-radius:1px;display:block;}
+    .logo-gem span:last-child{opacity:.35;}
+    .tb-div{width:1px;height:16px;background:var(--bd2);}
+    .tb-links{display:flex;gap:1px;}
+    .tb-links a{color:var(--mu);text-decoration:none;font-size:12px;padding:3px 7px;border-radius:var(--r);transition:color .12s,background .12s;}
+    .tb-links a:hover{color:var(--tx);background:var(--sf2);}
+    .tb-space{flex:1;}
+    .tb-actions{display:flex;align-items:center;gap:6px;}
+    .ns-wrap{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--mu);}
+    .ns-wrap input{width:80px;padding:4px 7px;background:var(--bg);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--font);font-size:12px;outline:none;}
+    .ns-wrap input:focus{border-color:var(--ac);}
+
+    /* ── BUTTONS ──────────────────────────────────────────────── */
+    .btn{font-family:var(--font);font-size:12.5px;font-weight:500;padding:5px 11px;border-radius:var(--r);border:1px solid var(--bd2);background:var(--sf2);color:var(--tx);cursor:pointer;transition:background .1s,border-color .1s;white-space:nowrap;line-height:1.4;}
+    .btn:hover{background:var(--sf3);border-color:var(--bd2);}
+    .btn-primary{background:var(--ac);border-color:var(--ac);color:#131210;font-weight:600;}
+    .btn-primary:hover{filter:brightness(1.08);}
+    .btn-ghost{background:transparent;border-color:transparent;color:var(--mu);}
+    .btn-ghost:hover{background:var(--sf2);color:var(--tx);}
+    /* Theme toggle: bright in dark mode, dark in light mode */
+    [data-theme="dark"] #themeToggle{color:#e8c06a;border-color:rgba(232,192,106,.35);}
+    [data-theme="light"] #themeToggle{color:#2a2010;border-color:var(--bd2);background:var(--sf2);}
+    .btn-danger{color:var(--err);border-color:rgba(192,80,64,.3);background:transparent;}
+    .btn-danger:hover{background:var(--err-bg);}
+    .btn-sm{padding:3px 8px;font-size:12px;}
+    .btn-dashed{border-style:dashed;border-color:var(--bd2);background:transparent;color:var(--mu);width:100%;justify-content:center;display:flex;align-items:center;gap:4px;margin-top:3px;}
+    .btn-dashed:hover{border-color:var(--ac);color:var(--ac);background:var(--ac-bg);}
+    .toggle-label{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--mu);cursor:pointer;user-select:none;}
+    .toggle-label input{accent-color:var(--ac);}
+
+    /* ── MAIN 3-COLUMN ────────────────────────────────────────── */
+    .app-body{flex:1;display:grid;grid-template-columns:190px 1fr 300px;min-height:0;overflow:hidden;}
+
+    /* ── SIDEBAR ──────────────────────────────────────────────── */
+    .sidebar{border-right:1px solid var(--bd);display:flex;flex-direction:column;min-height:0;background:var(--bg);}
+    .sb-scroll{flex:1;overflow-y:auto;padding:6px 5px;}
+    .sb-group{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--mu2);padding:10px 5px 4px;user-select:none;}
+    .sb-empty{font-size:11.5px;color:var(--mu);padding:3px 5px;font-style:italic;}
+
+    /* file items */
+    .fi{padding:5px 7px;border-radius:var(--r);cursor:default;display:flex;align-items:center;gap:5px;color:var(--mu);transition:background .1s;min-width:0;}
+    .fi:hover{background:var(--sf2);}
+    .fi.active{background:var(--ac-bg);color:var(--ac);}
+    .fi.drop-target{background:var(--ac-hi);outline:1.5px dashed var(--ac);outline-offset:-2px;}
+    .fi .fi-tag{font-size:8.5px;font-weight:700;padding:1px 3px;border-radius:2px;background:var(--sf2);color:var(--mu);letter-spacing:.04em;flex-shrink:0;}
+    .fi.active .fi-tag{background:var(--ac-hi);color:var(--ac);}
+    .fi .fi-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:inherit;cursor:pointer;}
+
+    /* ── Context menu ──────────────────────────────────────────── */
+    .ctx-menu{position:fixed;background:var(--sf);border:1px solid var(--bd2);border-radius:var(--r2);box-shadow:0 8px 28px rgba(0,0,0,.45);z-index:1000;display:none;flex-direction:column;min-width:160px;overflow:hidden;}
+    .ctx-menu.open{display:flex;}
+    .ctx-menu button{border:none;border-radius:0;background:none;text-align:left;color:var(--tx);font-size:12.5px;padding:8px 14px;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:9px;transition:background .1s;}
+    .ctx-menu button:hover{background:var(--sf2);}
+    .ctx-menu button.ctx-danger{color:var(--err);}
+    .ctx-sep{height:1px;background:var(--bd);margin:3px 0;flex-shrink:0;}
+    .ctx-icon{font-size:11px;width:14px;text-align:center;flex-shrink:0;opacity:.7;}
+
+    /* ── Rename modal ──────────────────────────────────────────── */
+    .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:2000;}
+    .modal-bg.open{display:flex;}
+    .modal-card{background:var(--sf);border:1px solid var(--bd2);border-radius:var(--r2);padding:20px 22px;min-width:300px;box-shadow:0 20px 60px rgba(0,0,0,.6);}
+    .modal-title{font-size:13px;font-weight:600;color:var(--tx);margin-bottom:14px;}
+    .modal-sub{font-size:11px;color:var(--mu);margin-bottom:8px;}
+    .modal-input{width:100%;padding:7px 9px;border-radius:var(--r);border:1px solid var(--bd2);background:var(--bg);color:var(--tx);font-family:var(--font);font-size:13.5px;outline:none;transition:border-color .12s;}
+    .modal-input:focus{border-color:var(--ac);}
+    .modal-actions{display:flex;gap:8px;margin-top:14px;justify-content:flex-end;}
+    .fi .fi-name-input{flex:1;min-width:0;background:var(--bg);color:var(--tx);border:1px solid var(--ac);border-radius:2px;padding:1px 4px;font:inherit;font-size:12px;outline:none;}
+    .fi .fi-del,.fi .fi-unlink{opacity:0;background:none;border:none;cursor:pointer;font-size:10px;padding:1px 4px;border-radius:2px;transition:all .1s;flex-shrink:0;font-family:var(--font);}
+    .fi:hover .fi-del,.fi:hover .fi-unlink{opacity:1;}
+    .fi .fi-del{color:var(--err);}
+    .fi .fi-del:hover{background:var(--err-bg);}
+    .fi .fi-unlink{color:var(--mu);}
+    .fi .fi-unlink:hover{color:var(--ac);}
+    .fi-children{padding-left:13px;}
+    .drop-zone-active{background:var(--ac-bg);border-radius:var(--r);outline:1.5px dashed var(--ac);outline-offset:-2px;}
+
+    .sb-foot{padding:8px;border-top:1px solid var(--bd);display:flex;flex-direction:column;gap:5px;}
+    .sb-foot-btns{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+    input[type="file"]{display:none;}
+
+    /* ── CENTER PANEL ─────────────────────────────────────────── */
+    .form-panel{display:flex;flex-direction:column;min-height:0;overflow:hidden;background:var(--sf);}
+    .form-tabs{display:flex;align-items:center;gap:2px;padding:8px 18px;border-bottom:1px solid var(--bd);flex-shrink:0;flex-wrap:wrap;}
+    .tab-btn{font-size:12px;font-weight:500;padding:4px 10px;border-radius:20px;border:1px solid transparent;background:transparent;color:var(--mu);cursor:pointer;transition:all .12s;font-family:var(--font);}
+    .tab-btn:hover{background:var(--sf2);color:var(--tx);}
+    .tab-btn.active{background:var(--ac-bg);border-color:rgba(212,146,74,.35);color:var(--ac);}
+    .adv-wrap{position:relative;}
+    .adv-menu{position:absolute;top:calc(100% + 4px);left:0;background:var(--sf);border:1px solid var(--bd2);border-radius:var(--r2);box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:200;display:none;flex-direction:column;min-width:120px;overflow:hidden;}
+    .adv-menu.open{display:flex;}
+    .adv-menu button{border:none;border-radius:0;background:none;text-align:left;color:var(--tx);font-size:12.5px;padding:7px 14px;cursor:pointer;font-family:var(--font);}
+    .adv-menu button:hover{background:var(--sf2);}
+    .adv-menu button.adv-active{color:var(--ac);}
+    .form-scroll{flex:1;overflow-y:auto;padding:16px 20px 24px;}
+    #globalMsg{padding:6px 20px 0;}
+
+    /* ── SECTION — flat document style ─────────────────────────── */
+    .section{border:none;border-bottom:1px solid var(--bd);background:transparent;margin-bottom:0;}
+    .section:last-of-type{border-bottom:none;}
+    .section>summary{padding:16px 0 8px;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;cursor:pointer;list-style:none;color:var(--ac);display:flex;align-items:center;gap:5px;}
+    .section>summary::-webkit-details-marker{display:none;}
+    .section>summary::before{content:'';display:inline-block;width:5px;height:5px;border-radius:1px;background:var(--ac);flex-shrink:0;}
+    .section[open]>summary{}
+    .sec-body{padding:2px 0 18px;}
+    .g2{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;}
+    .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+
+    /* ── FIELDS ───────────────────────────────────────────────── */
+    .field{margin-bottom:8px;}
+    .field:last-child{margin-bottom:0;}
+    .field>label,.field-label{display:block;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mu);margin-bottom:4px;}
+    .field input[type="text"],.field input[type="number"],.field select,.field textarea{width:100%;padding:6px 8px;border-radius:var(--r);border:1px solid var(--bd2);background:var(--bg);color:var(--tx);font-family:var(--font);font-size:13px;outline:none;transition:border-color .12s;}
+    .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--ac);}
+    .field textarea{font-family:var(--mono);font-size:11.5px;min-height:66px;resize:vertical;line-height:1.55;}
+    .field select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237a7568'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;padding-right:24px;}
+    .field input[type="checkbox"]{accent-color:var(--ac);}
+    .color-pair{display:grid;grid-template-columns:30px 1fr;gap:5px;align-items:center;}
+    .color-pair input[type="color"]{width:30px;height:28px;padding:2px;border:1px solid var(--bd2);border-radius:var(--r);background:var(--bg);cursor:pointer;}
+    .hint{font-size:11px;color:var(--mu);margin-top:3px;line-height:1.5;}
+    .sub-h{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);display:flex;align-items:center;gap:7px;margin:12px 0 7px;}
+    .sub-h:first-child{margin-top:0;}
+    .sub-h::after{content:'';flex:1;height:1px;background:var(--bd);}
+    .check-row{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--tx);margin-bottom:6px;}
+    .check-row input[type="checkbox"]{accent-color:var(--ac);}
+
+    /* ── INSERT / FORMAT DROPDOWNS ────────────────────────────── */
+    .desc-toolbar{display:flex;gap:4px;margin-bottom:5px;position:relative;}
+    .drop-wrap{position:relative;display:inline-block;}
+    .drop-menu{position:absolute;bottom:calc(100% + 4px);left:0;background:var(--sf);border:1px solid var(--bd2);border-radius:var(--r5);box-shadow:0 -4px 20px rgba(0,0,0,.3);z-index:300;display:none;flex-direction:column;min-width:180px;max-height:260px;overflow-y:auto;overflow-x:hidden;}
+    .drop-menu.open{display:flex;}
+    .drop-menu button{border:none;border-radius:0;background:none;text-align:left;color:var(--tx);font-size:12.5px;padding:6px 12px;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:8px;}
+    .drop-menu button:hover{background:var(--sf2);}
+    .fmt-section-label{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);padding:7px 12px 3px;border-top:1px solid var(--bd);}
+    .fmt-section-label:first-child{border-top:none;}
+    .color-swatch{width:10px;height:10px;border-radius:1px;flex-shrink:0;border:1px solid rgba(0,0,0,.3);}
+
+    /* ── OPT DESC ─────────────────────────────────────────────── */
+    .opt-expand{font-size:12px;padding:5px 10px;color:var(--mu);border-style:dashed;background:transparent;width:100%;margin-bottom:7px;border-radius:var(--r);}
+    .opt-expand:hover{color:var(--ac);border-color:var(--ac);}
+
+    /* ── CARDS ────────────────────────────────────────────────── */
+    .obj-card,.rew-card{border:1px solid var(--bd);border-radius:var(--r2);padding:10px;margin-bottom:7px;background:var(--bg);}
+    .card-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px;margin-bottom:9px;}
+    .card-title{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mu);}
+    .card-head select{font-size:12px;padding:3px 20px 3px 7px;border-radius:var(--r);border:1px solid var(--bd2);background:var(--sf2);color:var(--tx);font-family:var(--font);appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237a7568'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 6px center;outline:none;}
+    .card-actions{display:flex;gap:4px;}
+    .nested{margin-top:8px;padding-left:10px;border-left:2px solid var(--bd2);}
+
+    /* ── JSON PANEL ───────────────────────────────────────────── */
+    .json-panel{border-left:1px solid var(--bd);display:flex;flex-direction:column;min-height:0;background:var(--json-bg);}
+    .json-head{padding:9px 12px;display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--bd);flex-shrink:0;}
+    .json-dot{width:7px;height:7px;border-radius:50%;background:var(--ac);flex-shrink:0;}
+    .json-head-label{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);}
+    .json-head-spacer{flex:1;}
+    #liveJson{flex:1;width:100%;padding:12px;border:none;background:transparent;color:var(--json-tx);font-family:var(--mono);font-size:11.5px;line-height:1.65;resize:none;outline:none;min-height:0;}
+
+    /* ── MISC ─────────────────────────────────────────────────── */
+    .msg{padding:7px 12px;border-radius:var(--r);font-size:12px;margin-bottom:8px;}
+    .msg.ok{background:var(--ok-bg);color:#9ed4b3;border:1px solid rgba(90,138,74,.25);}
+    .msg.err{background:var(--err-bg);color:#f0a8a8;border:1px solid rgba(192,80,64,.25);}
+    .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:48px 16px;color:var(--mu);text-align:center;}
+    .kbd{font-family:var(--mono);font-size:10px;background:var(--sf2);padding:1px 4px;border-radius:2px;border:1px solid var(--bd2);}
+    .docs-note{font-size:11px;color:var(--mu);line-height:1.7;padding:14px 0 0;border-top:1px solid var(--bd);margin-top:10px;}
+    .docs-note a{color:var(--ac);text-decoration:none;}
+    .panel-move button{padding:1px 5px;font-size:11px;color:var(--mu);border:1px solid transparent;background:transparent;cursor:pointer;border-radius:2px;font-family:var(--font);}
+    .panel-move button:hover{background:var(--sf2);border-color:var(--bd);}
+    .section>summary .panel-move{float:right;display:inline-flex;gap:2px;margin-left:auto;}
+    .hidden{display:none!important;}
+    ::-webkit-scrollbar{width:5px;height:5px;}
+    ::-webkit-scrollbar-track{background:transparent;}
+    ::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:3px;}
+/* ── VALIDATION PANEL ─────────────────────────────────────────── */
+.validation-panel{border-bottom:1px solid var(--bd);background:linear-gradient(180deg,rgba(212,146,74,.045),transparent);padding:9px 10px 10px;flex-shrink:0;max-height:210px;display:flex;flex-direction:column;gap:7px;}
+.validation-toolbar{display:flex;align-items:center;gap:7px;min-width:0;}
+.validation-title{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);}
+.validation-badge{margin-left:auto;font-size:10.5px;font-weight:700;border:1px solid var(--bd2);border-radius:999px;padding:2px 7px;color:var(--mu);background:var(--sf2);white-space:nowrap;}
+.validation-badge.ok{color:#9ed4b3;background:var(--ok-bg);border-color:rgba(90,138,74,.35);}
+.validation-badge.warn{color:#e5bc75;background:rgba(212,146,74,.12);border-color:rgba(212,146,74,.35);}
+.validation-badge.err{color:#f0a8a8;background:var(--err-bg);border-color:rgba(192,80,64,.35);}
+.validation-actions{display:flex;align-items:center;gap:8px;}
+.validation-toggle{font-size:11px;}
+.validation-list{overflow:auto;min-height:36px;max-height:130px;font-size:11.25px;line-height:1.45;color:var(--mu);padding-right:2px;}
+.validation-empty{padding:6px 2px;color:var(--mu);font-style:italic;}
+.validation-issue{border:1px solid var(--bd);border-radius:var(--r);background:rgba(0,0,0,.12);padding:6px 7px;margin-bottom:5px;cursor:pointer;transition:background .1s,border-color .1s;}
+.validation-issue:hover{background:var(--sf2);border-color:var(--bd2);}
+.validation-issue.err{border-color:rgba(192,80,64,.35);background:var(--err-bg);}
+.validation-issue.warn{border-color:rgba(212,146,74,.35);background:rgba(212,146,74,.08);}
+.validation-issue.info{border-color:rgba(122,117,104,.32);}
+.validation-issue-top{display:flex;align-items:center;gap:5px;margin-bottom:3px;}
+.validation-sev{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;}
+.validation-issue.err .validation-sev{color:#f0a8a8;}
+.validation-issue.warn .validation-sev{color:#e5bc75;}
+.validation-issue.info .validation-sev{color:var(--mu);}
+.validation-file{font-family:var(--mono);font-size:10px;color:var(--json-tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.validation-path{font-family:var(--mono);font-size:10px;color:var(--mu2);margin-left:auto;white-space:nowrap;}
+.validation-msg{color:var(--tx);}
+
+  
+/* ── Minecraft ID autocomplete ───────────────────────────────── */
+.mc-ac{position:absolute;z-index:99998;max-height:210px;overflow-y:auto;background:var(--sf);border:1px solid var(--bd2);border-radius:var(--r2);box-shadow:0 14px 38px rgba(0,0,0,.42);padding:4px;}
+.mc-ac.hidden{display:none;}
+.mc-ac-head{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);padding:4px 6px 6px;border-bottom:1px solid var(--bd);margin-bottom:3px;}
+.mc-ac-row{display:grid;grid-template-columns:1fr;gap:1px;width:100%;border:0;background:transparent;color:var(--tx);text-align:left;border-radius:var(--r);padding:5px 6px;cursor:pointer;font-family:var(--mono);font-size:11px;}
+.mc-ac-row:hover,.mc-ac-row:focus{background:var(--ac-bg);outline:none;}
+.mc-ac-row small{font-family:var(--font);font-size:10px;color:var(--mu);}
+.validation-badge.missing{color:#f2cf8a;background:rgba(212,146,74,.14);border-color:rgba(212,146,74,.42);}
+.validation-issue.missing{border-color:rgba(212,146,74,.44);background:rgba(212,146,74,.1);}
+.validation-issue.missing .validation-sev{color:#f2cf8a;}
+
+
+.validation-issue.error{border-color:rgba(192,80,64,.35);background:var(--err-bg);}
+.validation-issue.error .validation-sev{color:#f0a8a8;}
+
+
+/* UI cleanup pass */
+.clean-topbar{gap:9px;}
+.autosave-status{font-size:11px;color:var(--mu);white-space:nowrap;}
+.sidebar{width:100%;}
+.sb-foot{gap:8px;}
+.sidebar-actions{display:grid;grid-template-columns:1fr;gap:6px;}
+.sidebar-actions .btn{width:100%;justify-content:center;}
+.sidebar-section-label{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--mu2);padding:4px 2px 0;}
+.sidebar-options{border:1px solid var(--bd);border-radius:var(--r);padding:6px 7px;background:rgba(0,0,0,.08);}
+.sidebar-options summary{cursor:pointer;color:var(--mu);font-size:11.5px;user-select:none;}
+.sidebar-options .toggle-label{margin-top:7px;display:flex;}
+.reset-sidebar-btn{width:100%;}
+.raw-json-toggle{font-size:11px;}
+.section>summary{cursor:default;pointer-events:none;}
+.section>summary .panel-move{pointer-events:auto;}
+.section:not([open]){display:block;}
+.docs-note{opacity:.75;}
+/* Keep old grid class harmless after sidebar cleanup. */
+.sb-foot-btns{display:grid;grid-template-columns:1fr;gap:6px;}
+
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <a class="logo" href="#">
+    <div class="logo-gem"><span></span><span></span><span></span><span></span></div>
+    Questlog
+  </a>
+  <div class="tb-div"></div>
+  <nav class="tb-links">
+    <a href="https://modrinth.com/mod/questlog" target="_blank" rel="noreferrer">Modrinth</a>
+    <a href="https://moddedmc.wiki/en/project/questlog/latest/docs" target="_blank" rel="noreferrer">Wiki</a>
+    <a href="https://github.com/infernalstudios/Questlog/tree/1.20.1/examples/questlog" target="_blank" rel="noreferrer">Examples</a>
+  </nav>
+  <div class="tb-space"></div>
+  <div class="tb-actions clean-topbar">
+    <span class="autosave-status" id="autosaveStatus">Autosave ready</span>
+    <div class="tb-div"></div>
+    <div class="ns-wrap"><span>namespace</span><input type="text" id="defaultNs" value="questlog" title="Namespace for new files"></div>
+    <button class="btn btn-ghost btn-sm" id="themeToggle" title="Toggle light/dark mode">☀</button>
+  </div>
+</div>
+
+<!-- APP BODY -->
+<div class="app-body">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sb-scroll" id="fileList"></div>
+    <div class="sb-foot">
+      <div class="sidebar-actions primary-actions">
+        <button class="btn btn-primary" id="btnNewQuest">+ Quest</button>
+        <button class="btn" id="btnNewChapter">+ Chapter</button>
+        <button class="btn" id="btnTemplates">✦ Templates</button>
+      </div>
+      <div class="sidebar-section-label">Project</div>
+      <div class="sidebar-actions project-actions">
+        <input type="file" id="fileImport" accept=".json,application/json,.zip,application/zip,application/x-zip-compressed" multiple="">
+        <button class="btn" id="btnPickImport">Import JSON / ZIP…</button>
+        <button class="btn btn-primary" id="btnDownload">Download current</button>
+        <button class="btn" id="btnDownloadAll">Export project ZIP</button>
+      </div>
+      <details class="sidebar-options">
+        <summary>Export / editor options</summary>
+        <label class="toggle-label"><input type="checkbox" id="compactJson"> Minify exported JSON</label>
+        <div class="hint">Off = readable formatting. On = smaller files.</div>
+      </details>
+      <button class="btn btn-danger-soft reset-sidebar-btn" id="btnResetProgress" title="Reset all editor progress">Reset saved progress</button>
+    </div>
+  </aside>
+
+  <!-- FORM PANEL -->
+  <div class="form-panel">
+    <div class="form-tabs" id="formTabs"></div>
+    <div id="globalMsg"></div>
+    <div class="form-scroll" id="formScroll">
+      <div id="panelForm"></div>
+      <div class="docs-note">
+        Loads from <span class="kbd">config/questlog/quests/</span> and <span class="kbd">config/questlog/chapters/</span>.
+        Arrays <span class="kbd">requirements</span>, <span class="kbd">objectives</span>, <span class="kbd">rewards</span> always required.
+        Requirements auto-gate quests — no need for <span class="kbd">hidden: true</span>.
+        <a href="https://github.com/infernalstudios/Questlog" target="_blank" rel="noreferrer">Source</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- JSON PANEL -->
+  <div class="json-panel">
+    <div class="json-head">
+      <div class="json-dot"></div>
+      <span class="json-head-label" id="jsonPanelLabel">Live JSON</span>
+      <div class="json-head-spacer"></div>
+      <label class="toggle-label raw-json-toggle" title="Hide the visual editor and edit the current file directly"><input type="checkbox" id="viewRaw"> Edit raw</label>
+    </div>
+    <section class="validation-panel" aria-label="Quest validation panel">
+      <div class="validation-toolbar">
+        <span class="validation-title">Validation</span>
+        <span class="validation-badge" id="validationBadge">Ready</span>
+      </div>
+      <div class="validation-actions">
+        <button type="button" class="btn btn-sm" id="btnValidate">Validate</button>
+        <label class="toggle-label validation-toggle"><input type="checkbox" id="validateProject" checked> Project-wide</label>
+      </div>
+      <div class="validation-list" id="validationList">Create or import quests to validate them.</div>
+    </section>
+    <textarea id="liveJson" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="none"></textarea>
+  </div>
+
+</div>
+
+<!-- Context menu -->
+<div class="ctx-menu" id="ctxMenu">
+  <button id="ctxEditName"><span class="ctx-icon">✎</span>Edit name</button>
+  <button id="ctxDuplicate"><span class="ctx-icon">⎘</span>Duplicate</button>
+  <div class="ctx-sep"></div>
+  <button id="ctxDelete" class="ctx-danger"><span class="ctx-icon">✕</span>Delete</button>
+</div>
+
+<!-- Rename modal -->
+<div class="modal-bg" id="renameModal">
+  <div class="modal-card">
+    <div class="modal-title">Rename file</div>
+    <div class="modal-sub">Name without .json extension</div>
+    <input class="modal-input" id="renameInput" type="text" autocomplete="off" spellcheck="false">
+    <div class="modal-actions">
+      <button class="btn" id="renameCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="renameConfirmBtn">Rename</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Quest templates modal -->
+<div class="modal-bg" id="templateModal">
+  <div class="modal-card template-card">
+    <div class="modal-title">Quest templates</div>
+    <div class="modal-sub">Vanilla-focused starter quests. They are real working quests you can create, then swap the IDs/text for your own pack.</div>
+    <div class="template-toolbar template-toolbar-wide">
+      <input class="modal-input" id="templateSearch" type="text" placeholder="Search templates..." autocomplete="off" spellcheck="false">
+      <select class="modal-input" id="templateCategory">
+        <option value="all">All categories</option>
+      </select>
+      <select class="modal-input" id="templateComplexity">
+        <option value="all">All complexity</option>
+      </select>
+      <select class="modal-input" id="templateTag">
+        <option value="all">All objective tags</option>
+      </select>
+    </div>
+    <div class="template-actions">
+      <button class="btn btn-primary" id="templateCreatePack">Create starter pack</button>
+      <button class="btn" id="templateCloseBtn">Close</button>
+    </div>
+    <div class="template-list" id="templateList"></div>
+  </div>
+</div>
+
+<!-- Reset progress modal -->
+<div class="modal-bg" id="resetModal">
+  <div class="modal-card reset-card">
+    <div class="modal-title">Reset all progress?</div>
+    <div class="modal-sub">This clears every quest, chapter, and autosaved editor state in this browser. Export a ZIP first if you want a backup.</div>
+    <div class="modal-actions">
+      <button class="btn" id="resetCancelBtn">Cancel</button>
+      <button class="btn btn-danger-soft" id="resetContinueBtn">I understand</button>
+    </div>
+  </div>
+  <div class="modal-card reset-card reset-danger-card" id="resetModalDanger">
+    <div class="danger-emoji">🔴</div>
+    <div class="modal-title danger-title">DELETE</div>
+    <div class="modal-sub danger-copy">Final warning. This wipes the editor clean and removes the saved recovery data.</div>
+    <div class="modal-actions">
+      <button class="btn" id="resetBackBtn">Go back</button>
+      <button class="btn btn-delete-final" id="resetDeleteBtn">🔴 DELETE</button>
+    </div>
+  </div>
+</div>
+
+<script src="error-guard.js"></script>
+<script src="jszip.min.js"></script>
+<script src="minecraft-ids.js"></script>
+<script src="minecraft-sounds.js"></script>
+<script src="app.js"></script>
+
+</body></html>
