@@ -6,6 +6,26 @@
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 function esc(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function maybeRunStorageRecovery(){
+  const params=new URLSearchParams(location.search);
+  const backupKey='ql.project.autosave.before-v2.2';
+  if(params.get('restore')==='pre-v2.2'){
+    const backup=localStorage.getItem(backupKey);
+    if(backup&&confirm('Restore the saved project backup from before v2.2? This replaces the current autosaved project in this browser.')){
+      localStorage.setItem('ql.project.autosave.v2',backup);
+    }
+    params.delete('restore');
+  }
+  if(params.get('reset')==='saved-progress'&&confirm('Clear saved Questlog editor progress for this browser? This can fix broken old saved data, but it removes the current autosaved project and undo history.')){
+    Object.keys(localStorage)
+      .filter(k=>k.startsWith('ql.')&&k!==backupKey)
+      .forEach(k=>localStorage.removeItem(k));
+    params.delete('reset');
+  }
+  const query=params.toString();
+  history.replaceState(null,'',location.pathname+(query?`?${query}`:'')+location.hash);
+}
+maybeRunStorageRecovery();
 
 // ── Theme ─────────────────────────────────────────────────────────
 let cTheme=localStorage.getItem('ql.theme')||'dark';
@@ -18,6 +38,10 @@ const MC_STATS=["minecraft:leave_game","minecraft:play_time","minecraft:total_wo
 const EQUIP_SLOTS=["head","chest","legs","feet","mainhand","offhand","body"];
 const OBJ_TYPES=["questlog:stat","questlog:block_mine","questlog:block_place","questlog:entity_breed","questlog:entity_death","questlog:entity_kill","questlog:entity_tame","questlog:item_craft","questlog:item_drop","questlog:item_equip","questlog:item_obtain","questlog:item_use","questlog:visit_biome","questlog:visit_dimension","questlog:visit_position","questlog:trample","questlog:enchant","questlog:effect_added","questlog:visit_structure","questlog:or","questlog:not","questlog:block_interact","questlog:entity_approach","questlog:quest_complete","questlog:read","questlog:advancement","questlog:unobtainable"];
 const REW_TYPES=["questlog:item","questlog:command","questlog:experience","questlog:loot_table"];
+const NO_AMOUNT_OBJECTIVES=new Set(["questlog:or","questlog:not","questlog:read","questlog:unobtainable","questlog:quest_complete"]);
+const APP_VERSION='2.2';
+window.QUESTLOG_APP_VERSION=APP_VERSION;
+document.documentElement.dataset.questlogAppVersion=APP_VERSION;
 const PANEL_DEF=["display","progress","sounds","layout","labels","badge"];
 const PANEL_FIELDS={display:["title","sort_order","chapter","translatable","include_in_main","hidden","description","description_completed","description_failed","icon"],progress:["requirements","objectives","failures","rewards"],sounds:["completed_sound","triggered_sound","toast_on_unlock","toast_on_complete","show_popup_on_unlock"],layout:["background_texture","right_panel_texture","peripheral_texture","overlay","overlay_width","overlay_height","overlay_x_offset","overlay_y_offset","left_panel_width","right_panel_width","panel_height","left_panel_x_offset","left_panel_y_offset","right_panel_x_offset","right_panel_y_offset"],labels:["back_button_text","collect_button_text","uncollected_text","collected_text","text_color","completed_text_color","hovered_text_color","title_color","progress_text_color"],badge:["badge"]};
 const ADV_KEYS=["layout","labels","badge"];
@@ -37,16 +61,80 @@ let mode='quest',quests={},chapters={},currentFile=null,rawMode=false,jsonFocuse
 let isDragging=false,draggedQuest=null;
 let panelOrder=loadOrder();
 let activeAdvKey=null; // which advanced section is currently shown
+let toastSeq=0;
 
 function debounce(fn,ms){let t;return function(...a){clearTimeout(t);t=setTimeout(()=>fn.apply(this,a),ms);};}
-function showMsg(t,ok){const el=$('#globalMsg');el.innerHTML=t?`<div class="msg ${ok?'ok':'err'}">${esc(t)}</div>`:'';}
+function onClick(sel,fn){const el=$(sel);if(el)el.onclick=fn;else console.warn(`[missing ui] ${sel}`);}
+function onEvent(sel,type,fn){const el=$(sel);if(el)el.addEventListener(type,fn);else console.warn(`[missing ui] ${sel}`);}
+function showMsg(t,ok){
+  const stack=$('#toastStack');if(!stack)return;
+  if(!t){stack.innerHTML='';return;}
+  const toast=document.createElement('div');
+  toast.className=`toast ${ok?'ok':'err'}`;
+  toast.dataset.toastId=String(++toastSeq);
+  toast.textContent=t;
+  stack.prepend(toast);
+  const close=()=>{
+    toast.classList.add('leaving');
+    setTimeout(()=>toast.remove(),260);
+  };
+  setTimeout(close,5000);
+}
+function setupHelpInteractions(){
+  const tip=$('#hoverTip');if(!tip)return;
+  const wait=1000,tolerance=5;
+  let active=null,candidate=null,timer=null,last={x:0,y:0};
+  const targetFrom=e=>e.target&&e.target.closest?e.target.closest('[data-tip]'):null;
+  const clearTimer=()=>{if(timer){clearTimeout(timer);timer=null;}};
+  const place=(x,y)=>{
+    const pad=12;
+    tip.style.left=`${Math.min(x+14,window.innerWidth-tip.offsetWidth-pad)}px`;
+    tip.style.top=`${Math.min(y+14,window.innerHeight-tip.offsetHeight-pad)}px`;
+  };
+  const hide=()=>{
+    clearTimer();active=null;candidate=null;tip.style.display='none';
+  };
+  const schedule=(el,x,y)=>{
+    if(!tooltipsEnabled||!el?.dataset?.tip){hide();return;}
+    clearTimer();candidate=el;active=null;tip.style.display='none';last={x,y};
+    timer=setTimeout(()=>{
+      if(!tooltipsEnabled||candidate!==el)return;
+      active=el;tip.textContent=el.dataset.tip;tip.style.display='block';place(last.x,last.y);
+    },wait);
+  };
+  document.addEventListener('mousemove',e=>{
+    const el=targetFrom(e);
+    if(!el){hide();return;}
+    const dx=Math.abs(e.clientX-last.x),dy=Math.abs(e.clientY-last.y);
+    if(active===el){place(e.clientX,e.clientY);return;}
+    if(candidate===el&&dx<=tolerance&&dy<=tolerance)return;
+    schedule(el,e.clientX,e.clientY);
+  });
+  document.addEventListener('mouseover',e=>{
+    const el=targetFrom(e);if(el)schedule(el,e.clientX,e.clientY);
+  });
+  document.addEventListener('mouseout',e=>{if(targetFrom(e))hide();});
+  document.addEventListener('focusin',e=>{
+    const el=targetFrom(e);if(!el)return;
+    const r=el.getBoundingClientRect();schedule(el,r.left,r.bottom);
+  });
+  document.addEventListener('focusout',e=>{if(targetFrom(e))hide();});
+}
 function getNs(){return($('#defaultNs')?.value||'questlog').trim();}
+function objectiveSupportsAmount(t){return !NO_AMOUNT_OBJECTIVES.has(t||'');}
 
 
 // ── Autosave / recovery ──────────────────────────────────────────
 const AUTOSAVE_KEY='ql.project.autosave.v2';
+const PRE_V22_BACKUP_KEY='ql.project.autosave.before-v2.2';
+const AUTOSAVE_PREF_KEY='ql.autosave.enabled';
+const TOOLTIP_PREF_KEY='ql.tooltips.enabled';
 let autosaveTimer=null;
 let suppressAutosave=false;
+let autosaveEnabled=localStorage.getItem(AUTOSAVE_PREF_KEY)!=='false';
+let tooltipsEnabled=localStorage.getItem(TOOLTIP_PREF_KEY)!=='false';
+const HISTORY_LIMIT=60;
+let undoStack=[],redoStack=[],historyRestoring=false;
 function autosavePayload(){
   return {
     version:2,
@@ -55,8 +143,86 @@ function autosavePayload(){
     mode,
     currentFile,
     quests,
-    chapters
+    chapters,
+    undoStack,
+    redoStack,
+    rawMode:!!$('#viewRaw')?.checked
   };
+}
+function cloneProjectState(){
+  return {
+    namespace:getNs(),
+    mode,
+    currentFile,
+    quests:JSON.parse(JSON.stringify(quests)),
+    chapters:JSON.parse(JSON.stringify(chapters)),
+    rawMode:!!$('#viewRaw')?.checked
+  };
+}
+function stateSig(s){
+  return JSON.stringify({
+    namespace:s.namespace,
+    mode:s.mode,
+    currentFile:s.currentFile,
+    quests:s.quests,
+    chapters:s.chapters,
+    rawMode:s.rawMode
+  });
+}
+function updateHistoryButtons(){
+  const u=$('#btnUndo'),r=$('#btnRedo');
+  if(u)u.disabled=!undoStack.length;
+  if(r)r.disabled=!redoStack.length;
+}
+function pushHistorySnapshot(){
+  if(historyRestoring)return;
+  const snap=cloneProjectState();
+  const sig=stateSig(snap);
+  const last=undoStack[undoStack.length-1];
+  if(last&&stateSig(last)===sig)return;
+  undoStack.push(snap);
+  if(undoStack.length>HISTORY_LIMIT)undoStack.shift();
+  redoStack=[];
+  updateHistoryButtons();
+  scheduleAutosave();
+}
+function syncVisibleStateForHistory(){
+  if(historyRestoring)return;
+  if(rawMode)return;
+  if(mode==='quest')syncQ();
+  else if($('#cf_name'))$('#cf_name').oninput?.();
+}
+function restoreProjectState(s){
+  historyRestoring=true;
+  suppressAutosave=true;
+  quests=JSON.parse(JSON.stringify(s.quests||{}));
+  chapters=JSON.parse(JSON.stringify(s.chapters||{}));
+  mode=s.mode==='chapter'?'chapter':'quest';
+  currentFile=s.currentFile||null;
+  if(s.namespace&&$('#defaultNs'))$('#defaultNs').value=s.namespace;
+  if($('#viewRaw'))$('#viewRaw').checked=!!s.rawMode;
+  rawMode=!!s.rawMode;
+  suppressAutosave=false;
+  renderFileList();
+  renderMain();
+  renderValidation();
+  saveAutosaveNow('history');
+  historyRestoring=false;
+  updateHistoryButtons();
+}
+function undoProject(){
+  if(!undoStack.length)return;
+  syncVisibleStateForHistory();
+  redoStack.push(cloneProjectState());
+  restoreProjectState(undoStack.pop());
+  showMsg('Undid last change.',true);
+}
+function redoProject(){
+  if(!redoStack.length)return;
+  syncVisibleStateForHistory();
+  undoStack.push(cloneProjectState());
+  restoreProjectState(redoStack.pop());
+  showMsg('Redid change.',true);
 }
 function autosaveHasWork(data){
   return !!(data && ((data.quests&&Object.keys(data.quests).length)||(data.chapters&&Object.keys(data.chapters).length)));
@@ -67,21 +233,47 @@ function updateAutosaveStatus(msg){
 }
 function saveAutosaveNow(reason='saved'){
   if(suppressAutosave)return;
+  if(!autosaveEnabled){updateAutosaveStatus('Manual save mode');return;}
   try{
     localStorage.setItem(AUTOSAVE_KEY,JSON.stringify(autosavePayload()));
-    updateAutosaveStatus('Autosaved');
+    updateAutosaveStatus('Auto save mode');
   }catch(err){
     updateAutosaveStatus('Autosave failed');
     console.warn('[autosave]',err);
   }
 }
 const scheduleAutosave=debounce(()=>saveAutosaveNow('change'),650);
+function setAutosaveEnabled(enabled){
+  autosaveEnabled=!!enabled;
+  localStorage.setItem(AUTOSAVE_PREF_KEY,autosaveEnabled?'true':'false');
+  const box=$('#autosaveToggle');if(box)box.checked=autosaveEnabled;
+  if(autosaveEnabled){saveAutosaveNow('enabled');showMsg('Autosave enabled.',true);}
+  else{updateAutosaveStatus('Manual save mode');showMsg('Autosave disabled.',true);}
+}
+function setTooltipsEnabled(enabled){
+  tooltipsEnabled=!!enabled;
+  localStorage.setItem(TOOLTIP_PREF_KEY,tooltipsEnabled?'true':'false');
+  const box=$('#tooltipsToggle');if(box)box.checked=tooltipsEnabled;
+  const tip=$('#hoverTip');if(tip)tip.style.display='none';
+  showMsg(tooltipsEnabled?'Tooltips enabled.':'Tooltips disabled.',true);
+}
+function preservePreV22Autosave(raw){
+  if(!raw)return;
+  try{
+    if(!localStorage.getItem(PRE_V22_BACKUP_KEY)){
+      localStorage.setItem(PRE_V22_BACKUP_KEY,raw);
+    }
+  }catch(err){console.warn('[autosave backup]',err);}
+}
 function loadAutosave(){
   try{
     const raw=localStorage.getItem(AUTOSAVE_KEY);if(!raw)return false;
+    preservePreV22Autosave(raw);
     const data=JSON.parse(raw);if(!autosaveHasWork(data))return false;
     quests=data.quests&&typeof data.quests==='object'?data.quests:{};
     chapters=data.chapters&&typeof data.chapters==='object'?data.chapters:{};
+    undoStack=Array.isArray(data.undoStack)?data.undoStack.slice(-HISTORY_LIMIT):[];
+    redoStack=Array.isArray(data.redoStack)?data.redoStack.slice(-HISTORY_LIMIT):[];
     Object.values(quests).forEach(q=>{fixQA(q);nqbd(q);});
     if(data.namespace&&$('#defaultNs'))$('#defaultNs').value=data.namespace;
     if(data.mode==='chapter'||data.mode==='quest')mode=data.mode;
@@ -134,7 +326,13 @@ const defQ=()=>({title:'New Quest',requirements:[],objectives:[],rewards:[]});
 const defC=()=>({name:'New Chapter',icon:{item:'minecraft:knowledge_book'}});
 function getCD(){if(!currentFile)return null;return mode==='quest'?quests[currentFile]:chapters[currentFile];}
 function setCD(o){if(!currentFile)return;if(mode==='quest')quests[currentFile]=o;else chapters[currentFile]=o;}
-function fixQA(q){if(!Array.isArray(q.requirements))q.requirements=[];if(!Array.isArray(q.objectives))q.objectives=[];if(!Array.isArray(q.rewards))q.rewards=[];}
+function fixQA(q){if(!Array.isArray(q.requirements))q.requirements=[];if(!Array.isArray(q.objectives))q.objectives=[];if(!Array.isArray(q.rewards))q.rewards=[];fixKnownLegacyIds(q);}
+function fixKnownLegacyIds(q){
+  if(!q||typeof q!=='object')return;
+  if(q.completed_sound==='minecraft:block.stonecutter.take_result')q.completed_sound='minecraft:ui.stonecutter.take_result';
+  if(q.triggered_sound==='minecraft:block.stonecutter.take_result')q.triggered_sound='minecraft:ui.stonecutter.take_result';
+  (q.rewards||[]).forEach(r=>{if(r&&r.claim_sound==='minecraft:block.stonecutter.take_result')r.claim_sound='minecraft:ui.stonecutter.take_result';});
+}
 function defIncMain(ch){return ch==='questlog:main'||ch==='main';}
 
 // ── Binding helpers ───────────────────────────────────────────────
@@ -146,31 +344,91 @@ function questBoundCh(qn){
 }
 function bindQ(qn,cn){
   const q=quests[qn];if(!q)return;
+  pushHistorySnapshot();
   q.chapter=`${getNs()}:${cn.replace(/\.json$/i,'')}`;
   renderFileList();if(currentFile===qn&&mode==='quest'){renderMain();}
 }
 function unbindQ(qn){
   const q=quests[qn];if(!q)return;
+  pushHistorySnapshot();
   delete q.chapter;
   renderFileList();if(currentFile===qn&&mode==='quest'){renderMain();}
 }
 
 // ── Rename ────────────────────────────────────────────────────────
+function bindChapterDropTarget(el,cf){
+  el.ondragover=e=>{
+    if(!draggedQuest)return;
+    e.preventDefault();
+    if(e.dataTransfer)e.dataTransfer.dropEffect='move';
+    el.classList.add(el.classList.contains('fi')?'drop-target':'drop-zone-active');
+  };
+  el.ondragleave=()=>el.classList.remove('drop-target','drop-zone-active');
+  el.ondrop=e=>{
+    if(!draggedQuest)return;
+    e.preventDefault();
+    el.classList.remove('drop-target','drop-zone-active');
+    if(questBoundCh(draggedQuest)!==cf)bindQ(draggedQuest,cf);
+    draggedQuest=null;
+  };
+}
+
+function itemKindLabel(kind){return kind==='chapter'?'chapter':'quest';}
+function setRenameModalError(t){
+  const el=$('#renameError');if(!el)return;
+  el.textContent=t||'';
+  el.classList.toggle('open',!!t);
+}
+function closeRenameModal(){
+  $('#renameModal')?.classList.remove('open');
+  setRenameModalError('');
+}
+
 function startRename(row,oldName,kind){
   const nameEl=row.querySelector('.fi-name');if(!nameEl||nameEl.querySelector('input'))return;
   const base=oldName.replace(/\.json$/i,'');
   const inp=document.createElement('input');inp.className='fi-name-input';inp.value=base;
   nameEl.innerHTML='';nameEl.appendChild(inp);inp.focus();inp.select();
+  let done=false;
   const commit=()=>{
+    if(done)return;
     let nv=(inp.value||'').trim().replace(/\.json$/i,'');
-    if(!nv||nv===base){renderFileList();return;}
+    if(!nv){
+      showMsg(`Name your ${itemKindLabel(kind)} something.`,false);
+      inp.focus();
+      return;
+    }
+    if(nv===base){done=true;renderFileList();return;}
     const nn=nv+'.json';
-    if(kind==='quest'){if(quests[nn]){showMsg('Name taken.',false);renderFileList();return;}quests[nn]=quests[oldName];delete quests[oldName];if(currentFile===oldName)currentFile=nn;}
-    else{if(chapters[nn]){showMsg('Name taken.',false);renderFileList();return;}chapters[nn]=chapters[oldName];delete chapters[oldName];if(currentFile===oldName)currentFile=nn;}
+    if(kind==='quest'){if(quests[nn]&&nn!==oldName){showMsg('Name taken.',false);return;}quests[nn]=quests[oldName];delete quests[oldName];if(currentFile===oldName)currentFile=nn;}
+    else{if(chapters[nn]&&nn!==oldName){showMsg('Name taken.',false);return;}chapters[nn]=chapters[oldName];delete chapters[oldName];if(currentFile===oldName)currentFile=nn;}
+    done=true;
     renderFileList();if(currentFile===nn)renderMain();
   };
-  inp.onblur=commit;inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();commit();}if(e.key==='Escape')renderFileList();};
+  inp.onblur=commit;inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();commit();}if(e.key==='Escape'){done=true;renderFileList();}};
   inp.onclick=e=>e.stopPropagation();
+  inp.oninput=e=>e.stopPropagation();
+}
+
+function bindFileNameRename(row,name,kind){
+  const nameEl=row.querySelector('.fi-name');
+  if(!nameEl)return;
+  let clickTimer=null;
+
+  nameEl.onclick=e=>{
+    clearTimeout(clickTimer);
+    if(e.detail>1)return;
+    clickTimer=setTimeout(()=>{
+      if(!isDragging&&!nameEl.querySelector('input'))selectFile(name,kind);
+    },180);
+  };
+
+  nameEl.ondblclick=e=>{
+    clearTimeout(clickTimer);
+    e.preventDefault();
+    e.stopPropagation();
+    startRename(row,name,kind);
+  };
 }
 
 // ── File list ─────────────────────────────────────────────────────
@@ -188,23 +446,19 @@ function renderFileList(){
   cNames.forEach(cf=>{
     const wrap=document.createElement('div');
     const cRow=makeFiRow(cf,'C',cf===currentFile&&mode==='chapter');
-    cRow.querySelector('.fi-name').onclick=()=>selectFile(cf,'chapter');
+    bindFileNameRename(cRow,cf,'chapter');
     cRow.oncontextmenu=e=>showCtxMenu(e,cf,'chapter');
     cRow.querySelector('.fi-tag').onclick=()=>selectFile(cf,'chapter');
-    cRow.querySelector('.fi-del').onclick=e=>{e.stopPropagation();if(!confirm(`Delete ${cf}?`))return;delete chapters[cf];if(currentFile===cf&&mode==='chapter')currentFile=null;renderFileList();renderMain();};
-    cRow.ondragover=e=>{e.preventDefault();if(draggedQuest)cRow.classList.add('drop-target');};
-    cRow.ondragleave=()=>cRow.classList.remove('drop-target');
-    cRow.ondrop=e=>{e.preventDefault();cRow.classList.remove('drop-target');if(draggedQuest){bindQ(draggedQuest,cf);draggedQuest=null;}};
+    bindChapterDropTarget(cRow,cf);
     wrap.appendChild(cRow);
-    const kids=document.createElement('div');kids.className='fi-children';
+    const kids=document.createElement('div');kids.className='fi-children chapter-drop-zone';
+    bindChapterDropTarget(kids,cf);
     (boundTo[cf]||[]).forEach(qn=>{
       const qRow=makeFiRow(qn,'Q',qn===currentFile&&mode==='quest',true);
       qRow.draggable=true;
-      qRow.querySelector('.fi-name').onclick=()=>selectFile(qn,'quest');
+      bindFileNameRename(qRow,qn,'quest');
       qRow.oncontextmenu=e=>showCtxMenu(e,qn,'quest');
       qRow.querySelector('.fi-tag').onclick=()=>selectFile(qn,'quest');
-      qRow.querySelector('.fi-del').onclick=e=>{e.stopPropagation();if(!confirm(`Delete ${qn}?`))return;delete quests[qn];if(currentFile===qn&&mode==='quest')currentFile=null;renderFileList();renderMain();};
-      const unl=qRow.querySelector('.fi-unlink');if(unl)unl.onclick=e=>{e.stopPropagation();unbindQ(qn);};
       qRow.ondragstart=e=>{isDragging=true;draggedQuest=qn;e.dataTransfer.effectAllowed='move';};
       qRow.ondragend=()=>{isDragging=false;draggedQuest=null;$$('.drop-target').forEach(el=>el.classList.remove('drop-target'));$$('.drop-zone-active').forEach(el=>el.classList.remove('drop-zone-active'));renderFileList();};
       kids.appendChild(qRow);
@@ -222,10 +476,9 @@ function renderFileList(){
   unbound.forEach(qn=>{
     const qRow=makeFiRow(qn,'Q',qn===currentFile&&mode==='quest');
     qRow.draggable=true;
-    qRow.querySelector('.fi-name').onclick=()=>selectFile(qn,'quest');
+    bindFileNameRename(qRow,qn,'quest');
     qRow.oncontextmenu=e=>showCtxMenu(e,qn,'quest');
     qRow.querySelector('.fi-tag').onclick=()=>selectFile(qn,'quest');
-    qRow.querySelector('.fi-del').onclick=e=>{e.stopPropagation();if(!confirm(`Delete ${qn}?`))return;delete quests[qn];if(currentFile===qn&&mode==='quest')currentFile=null;renderFileList();renderMain();};
     qRow.ondragstart=e=>{isDragging=true;draggedQuest=qn;e.dataTransfer.effectAllowed='move';};
     qRow.ondragend=()=>{isDragging=false;draggedQuest=null;$$('.drop-target').forEach(el=>el.classList.remove('drop-target'));$$('.drop-zone-active').forEach(el=>el.classList.remove('drop-zone-active'));renderFileList();};
     uz.appendChild(qRow);
@@ -236,8 +489,10 @@ function renderFileList(){
 function makeFiRow(name,tag,active,hasUnlink){
   const row=document.createElement('div');
   row.className='fi'+(active?' active':'');
+  row.dataset.fileName=name;
+  row.dataset.kind=tag==='C'?'chapter':'quest';
   const dispName=name.replace(/\.json$/i,'');
-  row.innerHTML=`<span class="fi-tag">${tag}</span><span class="fi-name" title="Double-click to rename">${esc(dispName)}</span>${hasUnlink?'<button class="fi-unlink" title="Unbind">↑</button>':''}<button class="fi-del" title="Delete">✕</button>`;
+  row.innerHTML=`<span class="fi-tag">${tag}</span><span class="fi-name" title="Double-click to rename">${esc(dispName)}</span>`;
   return row;
 }
 
@@ -249,7 +504,7 @@ function nob(o){if(!o||typeof o!=='object')return;if(o.type==='questlog:visit_po
 function not2(o){if(!o||typeof o!=='object')return;if(o.total!==undefined&&o.required_amount===undefined){o.required_amount=o.total;delete o.total;}if(o.type==='questlog:or'&&Array.isArray(o.objectives))o.objectives.forEach(not2);if(o.type==='questlog:not'&&o.objective)not2(o.objective);}
 function nqbd(q){if(!q)return;(q.requirements||[]).forEach(o=>{nob(o);not2(o);});(q.objectives||[]).forEach(o=>{nob(o);not2(o);});(q.failures||[]).forEach(o=>{nob(o);not2(o);});}
 function finR(r){if(!r)return;if(r.level===undefined&&r.levels!==undefined)r.level=!!r.levels;delete r.levels;if(r.translatable!==true)delete r.translatable;if(!r.auto_claim)delete r.auto_claim;if(!r.name)delete r.name;if(!r.claim_sound)delete r.claim_sound;if(r.icon===undefined||r.icon===null||r.icon==='')delete r.icon;const t=r.type;if(t==='questlog:item'&&(r.count===1||r.count===undefined))delete r.count;if(t==='questlog:command'&&(r.permission_level===2||r.permission_level===undefined))delete r.permission_level;if(t==='questlog:experience'&&!r.level)delete r.level;}
-function finO(o){if(!o||typeof o!=='object')return;if(o.translatable!==true)delete o.translatable;if(!o.name)delete o.name;if(o.icon===undefined||o.icon===null||o.icon==='')delete o.icon;const t=o.type||'';const noA=t==='questlog:or'||t==='questlog:not'||t==='questlog:read'||t==='questlog:unobtainable';if(!noA&&(o.required_amount===1||o.required_amount===undefined))delete o.required_amount;if(t==='questlog:stat'&&o.retroactive!==false)delete o.retroactive;if(t==='questlog:visit_position'&&o.bounds&&typeof o.bounds==='object'){const b=o.bounds;nvb(b);if(!Object.keys(b).length)delete o.bounds;}if(t==='questlog:or'&&Array.isArray(o.objectives))o.objectives.forEach(finO);if(t==='questlog:not'&&o.objective)finO(o.objective);}
+function finO(o){if(!o||typeof o!=='object')return;if(o.translatable!==true)delete o.translatable;if(!o.name)delete o.name;if(o.icon===undefined||o.icon===null||o.icon==='')delete o.icon;const t=o.type||'';if(!objectiveSupportsAmount(t))delete o.required_amount;else if(o.required_amount===1||o.required_amount===undefined)delete o.required_amount;if(t==='questlog:stat'&&o.retroactive!==false)delete o.retroactive;if(t==='questlog:visit_position'&&o.bounds&&typeof o.bounds==='object'){const b=o.bounds;nvb(b);if(!Object.keys(b).length)delete o.bounds;}if(t==='questlog:or'&&Array.isArray(o.objectives))o.objectives.forEach(finO);if(t==='questlog:not'&&o.objective)finO(o.objective);}
 
 function trimQ(q){
   if(q.description===''||q.description===undefined)delete q.description;if(q.description_completed===undefined||q.description_completed==='')delete q.description_completed;if(q.description_failed===undefined||q.description_failed==='')delete q.description_failed;
@@ -274,39 +529,39 @@ function tpl({cat='Progression',complexity='Simple',tags=[],file,title,icon,desc
   return {cat,complexity,tags,file,title,icon,description,requirements,objectives,rewards,completed_sound,triggered_sound};
 }
 const QUEST_TEMPLATES=[
-  tpl({cat:'Progression',complexity:'Simple',tags:['questlog:block_mine','questlog:item_craft'],file:'first_camp.json',title:'First Camp',icon:{item:'minecraft:campfire'},description:'A quiet start. Break a log, shape a crafting table, and put down the first little proof that this world is yours.\n\n§8§oEvery long run starts with one very suspicious tree.',objectives:[qObj('questlog:block_mine',{name:'Break a Log',block:'minecraft:oak_log',required_amount:1}),qObj('questlog:item_craft',{name:'Craft a Campfire',item:'minecraft:campfire',required_amount:1})],rewards:[qReward('questlog:item',{name:'Trail Snack',item:'minecraft:apple',count:3,claim_sound:'minecraft:entity.item.pickup'})],triggered_sound:'minecraft:block.wood.break',completed_sound:'minecraft:block.campfire.crackle'}),
-  tpl({cat:'Progression',complexity:'Simple',tags:['questlog:item_obtain','questlog:item_craft'],file:'stone_and_sparks.json',title:'Stone and Sparks',icon:{item:'minecraft:furnace'},description:'Stone tools are not glamorous, but glamour does not smelt ore. Gather cobble, craft a furnace, and get ready to turn raw chunks into plans.',requirements:[qObj('questlog:block_mine',{block:'minecraft:oak_log',required_amount:1})],objectives:[qObj('questlog:item_obtain',{name:'Gather Cobblestone',item:'minecraft:cobblestone',required_amount:16}),qObj('questlog:item_craft',{name:'Craft a Furnace',item:'minecraft:furnace',required_amount:1})],rewards:[qReward('questlog:experience',{name:'Warm Start',experience:35,claim_sound:'minecraft:entity.experience_orb.pickup'})],triggered_sound:'minecraft:block.stone.break',completed_sound:'minecraft:block.furnace.fire_crackle'}),
-  tpl({cat:'Progression',complexity:'Intermediate',tags:['questlog:item_obtain','questlog:item_equip'],file:'iron_backbone.json',title:'Iron Backbone',icon:{item:'minecraft:iron_chestplate'},description:'Iron is where panic starts turning into planning. Pull enough from the earth to make armor, then wear the confidence instead of just admiring it.',requirements:[qObj('questlog:item_craft',{item:'minecraft:furnace'})],objectives:[qObj('questlog:item_obtain',{name:'Collect Iron Ingots',item:'minecraft:iron_ingot',required_amount:24}),qObj('questlog:item_equip',{name:'Equip an Iron Chestplate',item:'minecraft:iron_chestplate',slot:'chest',required_amount:1})],rewards:[qReward('questlog:item',{name:'Shield Insurance',item:'minecraft:shield',count:1,claim_sound:'minecraft:item.shield.block'})],triggered_sound:'minecraft:item.armor.equip_iron',completed_sound:'minecraft:ui.toast.challenge_complete'}),
-  tpl({cat:'Progression',complexity:'Advanced',tags:['questlog:item_obtain','questlog:enchant'],file:'diamond_terms.json',title:'Diamond Terms',icon:{item:'minecraft:diamond_pickaxe'},description:'Diamonds are not the finish line. They are the contract. Mine them, shape them, and put enough magic on the tool that the caves start negotiating.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:iron_pickaxe'})],objectives:[qObj('questlog:item_obtain',{name:'Find Diamonds',item:'minecraft:diamond',required_amount:5}),qObj('questlog:enchant',{name:'Enchant a Diamond Pickaxe',item:'minecraft:diamond_pickaxe',enchantment:'minecraft:efficiency',level:3,required_amount:1})],rewards:[qReward('questlog:item',{name:'Repair Fund',item:'minecraft:experience_bottle',count:16,claim_sound:'minecraft:entity.experience_bottle.throw'})],triggered_sound:'minecraft:block.amethyst_block.chime',completed_sound:'minecraft:entity.player.levelup'}),
-  tpl({cat:'Progression',complexity:'Advanced',tags:['questlog:item_obtain','questlog:visit_biome'],file:'netherite_weather.json',title:'Netherite Weather',icon:{item:'minecraft:netherite_ingot'},description:'The Nether does not give gifts. It leaves valuable debris under heat, noise, and bad decisions. Bring back netherite and turn survival into policy.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:diamond_pickaxe'}),qObj('questlog:visit_biome',{biome:'minecraft:nether_wastes'})],objectives:[qObj('questlog:item_obtain',{name:'Recover Ancient Debris',item:'minecraft:ancient_debris',required_amount:4}),qObj('questlog:item_obtain',{name:'Forge a Netherite Ingot',item:'minecraft:netherite_ingot',required_amount:1})],rewards:[qReward('questlog:experience',{name:'Heat Treated',experience:300,claim_sound:'minecraft:entity.experience_orb.pickup'})],triggered_sound:'minecraft:block.portal.travel',completed_sound:'minecraft:item.armor.equip_netherite'}),
-  tpl({cat:'Combat',complexity:'Simple',tags:['questlog:entity_kill','questlog:item_obtain'],file:'night_shift.json',title:'Night Shift',icon:{item:'minecraft:iron_sword'},description:'The sun clocks out and the lawn starts making noises. Clear the usual suspects and bring back proof that the night lost the argument.',objectives:[qObj('questlog:entity_kill',{name:'Defeat Zombies',entity:'minecraft:zombie',required_amount:8}),qObj('questlog:item_obtain',{name:'Collect Rotten Flesh',item:'minecraft:rotten_flesh',required_amount:4})],rewards:[qReward('questlog:item',{name:'More Light, Less Screaming',item:'minecraft:torch',count:32,claim_sound:'minecraft:block.lantern.place'})],triggered_sound:'minecraft:entity.zombie.ambient',completed_sound:'minecraft:entity.player.levelup'}),
-  tpl({cat:'Combat',complexity:'Intermediate',tags:['questlog:entity_kill','questlog:item_drop'],file:'bone_debt.json',title:'Bone Debt',icon:{item:'minecraft:bow'},description:'Skeletons keep firing loans at you with interest. Collect the bones, drop the extras, and turn their whole operation into fertilizer.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:shield'})],objectives:[qObj('questlog:entity_kill',{name:'Defeat Skeletons',entity:'minecraft:skeleton',required_amount:8}),qObj('questlog:item_drop',{name:'Drop a Bone Offering',item:'minecraft:bone',required_amount:1})],rewards:[qReward('questlog:item',{name:'Returned Fire',item:'minecraft:arrow',count:32,claim_sound:'minecraft:entity.arrow.shoot'})],triggered_sound:'minecraft:entity.skeleton.ambient',completed_sound:'minecraft:event.raid.horn'}),
-  tpl({cat:'Combat',complexity:'Advanced',tags:['questlog:entity_death','questlog:not'],file:'hardcore_lesson.json',title:'Not Today',icon:{item:'minecraft:totem_of_undying'},description:'This one is a warning label with boots. Prove you can survive a dangerous run without letting death write the final line.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:iron_chestplate'})],objectives:[qObj('questlog:not',{objective:qObj('questlog:entity_death',{entity:'minecraft:player',required_amount:1})}),qObj('questlog:item_obtain',{name:'Bring Home a Golden Apple',item:'minecraft:golden_apple',required_amount:1})],rewards:[qReward('questlog:item',{name:'Emergency Button',item:'minecraft:totem_of_undying',count:1,claim_sound:'minecraft:item.totem.use'})],triggered_sound:'minecraft:entity.generic.hurt',completed_sound:'minecraft:item.totem.use'}),
-  tpl({cat:'Combat',complexity:'Advanced',tags:['questlog:stat','questlog:quest_complete'],file:'village_defender.json',title:'Bell Weather',icon:{item:'minecraft:bell'},description:'A raid turns a village into a stress test with doors. Ring the bell, win the fight, and make the locals slightly less doomed.',requirements:[qObj('questlog:quest_complete',{quest:'questlog:night_shift'})],objectives:[qObj('questlog:stat',{name:'Win a Raid',stat:'minecraft:raid_win',required_amount:1,retroactive:true}),qObj('questlog:quest_complete',{name:'Finish Night Shift',quest:'questlog:night_shift'})],rewards:[qReward('questlog:item',{name:'Village Thanks',item:'minecraft:emerald',count:16,claim_sound:'minecraft:entity.villager.yes'})],triggered_sound:'minecraft:event.raid.horn',completed_sound:'minecraft:entity.villager.celebrate'}),
-  tpl({cat:'Exploration',complexity:'Simple',tags:['questlog:visit_biome','questlog:item_obtain'],file:'desert_glass.json',title:'Desert Glass Budget',icon:{item:'minecraft:sand'},description:'Find a desert and politely borrow the floor. Windows, bottles, and questionable architecture all begin as sand in your pockets.',objectives:[qObj('questlog:visit_biome',{name:'Visit a Desert',biome:'minecraft:desert'}),qObj('questlog:item_obtain',{name:'Collect Sand',item:'minecraft:sand',required_amount:32})],rewards:[qReward('questlog:item',{name:'Smelting Starter',item:'minecraft:coal',count:8,claim_sound:'minecraft:block.sand.break'})],triggered_sound:'minecraft:music.overworld.desert',completed_sound:'minecraft:block.glass.place'}),
-  tpl({cat:'Exploration',complexity:'Intermediate',tags:['questlog:visit_structure','questlog:block_interact'],file:'village_guest.json',title:'Village Guest Pass',icon:{item:'minecraft:emerald'},description:'Find a village, touch the bell, and act normal about the free bed situation. Civilization is just storage with witnesses.',objectives:[qObj('questlog:visit_structure',{name:'Find a Village',structure:'minecraft:village'}),qObj('questlog:block_interact',{name:'Ring the Bell',block:'minecraft:bell',required_amount:1})],rewards:[qReward('questlog:item',{name:'Welcome Bread',item:'minecraft:bread',count:12,claim_sound:'minecraft:entity.villager.trade'})],triggered_sound:'minecraft:entity.villager.ambient',completed_sound:'minecraft:block.bell.use'}),
-  tpl({cat:'Exploration',complexity:'Intermediate',tags:['questlog:visit_dimension','questlog:item_use'],file:'portal_breath.json',title:'Portal Breath',icon:{item:'minecraft:flint_and_steel'},description:'Light the frame and step through. The first Nether trip always feels like opening an oven that hates you personally.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:obsidian',required_amount:10})],objectives:[qObj('questlog:item_use',{name:'Light the Portal',item:'minecraft:flint_and_steel',required_amount:1}),qObj('questlog:visit_dimension',{name:'Enter the Nether',dimension:'minecraft:the_nether'})],rewards:[qReward('questlog:item',{name:'Return Snacks',item:'minecraft:cooked_porkchop',count:8,claim_sound:'minecraft:entity.piglin.admiring_item'})],triggered_sound:'minecraft:block.portal.trigger',completed_sound:'minecraft:block.portal.travel'}),
-  tpl({cat:'Exploration',complexity:'Advanced',tags:['questlog:visit_position','questlog:effect_added'],file:'skyline_dare.json',title:'Skyline Dare',icon:{item:'minecraft:elytra'},description:'Climb high enough that the clouds start checking your paperwork. Drink slow falling, reach the sky, and do not invent a crater.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:phantom_membrane',required_amount:1})],objectives:[qObj('questlog:effect_added',{name:'Gain Slow Falling',effect:'minecraft:slow_falling',required_amount:1}),qObj('questlog:visit_position',{name:'Reach Y 180',bounds:{minY:180}})],rewards:[qReward('questlog:item',{name:'Feather Tax Refund',item:'minecraft:feather',count:16,claim_sound:'minecraft:entity.chicken.egg'})],triggered_sound:'minecraft:entity.phantom.flap',completed_sound:'minecraft:item.elytra.flying'}),
-  tpl({cat:'Exploration',complexity:'Advanced',tags:['questlog:visit_structure','questlog:advancement'],file:'stronghold_receipt.json',title:'Stronghold Receipt',icon:{item:'minecraft:ender_eye'},description:'The eyes point somewhere old and buried. Follow them, find the stronghold, and get the official receipt for bad End-related choices.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:ender_eye',required_amount:8})],objectives:[qObj('questlog:visit_structure',{name:'Find a Stronghold',structure:'minecraft:stronghold'}),qObj('questlog:advancement',{name:'Enter the End Portal Room Path',advancement:'minecraft:story/follow_ender_eye'})],rewards:[qReward('questlog:experience',{name:'Stronghold Nerves',experience:250,claim_sound:'minecraft:entity.ender_eye.launch'})],triggered_sound:'minecraft:entity.ender_eye.launch',completed_sound:'minecraft:ui.toast.challenge_complete'}),
-  tpl({cat:'Building',complexity:'Simple',tags:['questlog:block_place','questlog:item_craft'],file:'light_the_path.json',title:'Light the Path',icon:{item:'minecraft:lantern'},description:'Dark corners are just future problems wearing shadows. Craft lanterns and place enough light that mobs start filing complaints.',objectives:[qObj('questlog:item_craft',{name:'Craft Lanterns',item:'minecraft:lantern',required_amount:4}),qObj('questlog:block_place',{name:'Place Lanterns',block:'minecraft:lantern',required_amount:4})],rewards:[qReward('questlog:item',{name:'Extra Chain',item:'minecraft:chain',count:4,claim_sound:'minecraft:block.lantern.place'})],triggered_sound:'minecraft:block.lantern.place',completed_sound:'minecraft:block.beacon.activate'}),
-  tpl({cat:'Building',complexity:'Intermediate',tags:['questlog:block_place','questlog:block_mine'],file:'copper_roof_problem.json',title:'Copper Roof Problem',icon:{item:'minecraft:copper_block'},description:'A copper roof starts shiny and slowly gets dramatic. Mine the metal, place the blocks, and let time do the decorating.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:copper_ingot',required_amount:32})],objectives:[qObj('questlog:block_mine',{name:'Mine Copper Ore',block:'minecraft:copper_ore',required_amount:12}),qObj('questlog:block_place',{name:'Place Copper Blocks',block:'minecraft:copper_block',required_amount:8})],rewards:[qReward('questlog:item',{name:'Lightning Advice',item:'minecraft:lightning_rod',count:2,claim_sound:'minecraft:item.axe.scrape'})],triggered_sound:'minecraft:block.copper.place',completed_sound:'minecraft:block.copper.break'}),
-  tpl({cat:'Building',complexity:'Intermediate',tags:['questlog:block_interact','questlog:item_craft'],file:'anvil_decisions.json',title:'Expensive Decisions',icon:{item:'minecraft:anvil'},description:'An anvil is where good tools go to become financially concerning. Craft one, use it, and accept that repairs now have a personality.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:iron_ingot',required_amount:31})],objectives:[qObj('questlog:item_craft',{name:'Craft an Anvil',item:'minecraft:anvil',required_amount:1}),qObj('questlog:block_interact',{name:'Use the Anvil',block:'minecraft:anvil',required_amount:1})],rewards:[qReward('questlog:item',{name:'Experience Cushion',item:'minecraft:experience_bottle',count:8,claim_sound:'minecraft:block.anvil.use'})],triggered_sound:'minecraft:block.anvil.place',completed_sound:'minecraft:block.anvil.use'}),
-  tpl({cat:'Farming',complexity:'Simple',tags:['questlog:entity_breed','questlog:item_obtain'],file:'cow_department.json',title:'Cow Department',icon:{item:'minecraft:wheat'},description:'The farm expands one confused cow at a time. Breed them, gather wheat, and pretend this is a business plan.',objectives:[qObj('questlog:item_obtain',{name:'Harvest Wheat',item:'minecraft:wheat',required_amount:16}),qObj('questlog:entity_breed',{name:'Breed Cows',entity:'minecraft:cow',required_amount:2})],rewards:[qReward('questlog:item',{name:'Leather Starter',item:'minecraft:leather',count:4,claim_sound:'minecraft:entity.cow.ambient'})],triggered_sound:'minecraft:entity.cow.ambient',completed_sound:'minecraft:entity.player.levelup'}),
-  tpl({cat:'Farming',complexity:'Intermediate',tags:['questlog:entity_breed','questlog:item_use'],file:'bee_courier.json',title:'Bee Courier',icon:{item:'minecraft:honeycomb'},description:'Flowers are logistics. Bees are employees with wings. Use a flower, breed bees, and keep the honey economy polite.',requirements:[qObj('questlog:visit_biome',{biome:'minecraft:flower_forest'})],objectives:[qObj('questlog:item_use',{name:'Use a Flower',item:'minecraft:dandelion',required_amount:1}),qObj('questlog:entity_breed',{name:'Breed Bees',entity:'minecraft:bee',required_amount:2})],rewards:[qReward('questlog:item',{name:'Comb Bonus',item:'minecraft:honeycomb',count:3,claim_sound:'minecraft:block.beehive.shear'})],triggered_sound:'minecraft:entity.bee.loop',completed_sound:'minecraft:block.beehive.work'}),
-  tpl({cat:'Farming',complexity:'Simple',tags:['questlog:entity_tame','questlog:entity_approach'],file:'wolf_interview.json',title:'Wolf Interview',icon:{item:'minecraft:bone'},description:'Approach the wolf with bones and confidence. One of those is required. The other is mostly for you.',objectives:[qObj('questlog:entity_approach',{name:'Approach a Wolf',entity:'minecraft:wolf',range:8}),qObj('questlog:entity_tame',{name:'Tame a Wolf',entity:'minecraft:wolf',required_amount:1})],rewards:[qReward('questlog:item',{name:'Dog Snacks',item:'minecraft:cooked_beef',count:6,claim_sound:'minecraft:entity.wolf.ambient'})],triggered_sound:'minecraft:entity.wolf.ambient',completed_sound:'minecraft:entity.wolf.howl'}),
-  tpl({cat:'Farming',complexity:'Intermediate',tags:['questlog:entity_tame','questlog:entity_approach'],file:'saddle_argument.json',title:'Saddle Argument',icon:{item:'minecraft:saddle'},description:'Horses are travel with opinions. Get close, tame one, and begin the ancient ritual of finding out which direction it refuses to face.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:saddle',required_amount:1})],objectives:[qObj('questlog:entity_approach',{name:'Approach a Horse',entity:'minecraft:horse',range:8}),qObj('questlog:entity_tame',{name:'Tame a Horse',entity:'minecraft:horse',required_amount:1})],rewards:[qReward('questlog:item',{name:'Stable Snacks',item:'minecraft:golden_carrot',count:4,claim_sound:'minecraft:entity.horse.ambient'})],triggered_sound:'minecraft:entity.horse.ambient',completed_sound:'minecraft:entity.horse.saddle'}),
-  tpl({cat:'Magic',complexity:'Intermediate',tags:['questlog:enchant','questlog:block_interact'],file:'library_noise.json',title:'Library Noise',icon:{item:'minecraft:enchanted_book'},description:'The table whispers, the books stare, and your sword becomes slightly less reasonable. Use the setup and bottle the glow.',requirements:[qObj('questlog:item_craft',{item:'minecraft:enchanting_table',required_amount:1})],objectives:[qObj('questlog:block_interact',{name:'Use an Enchanting Table',block:'minecraft:enchanting_table',required_amount:1}),qObj('questlog:enchant',{name:'Enchant Any Book',item:'minecraft:book',required_amount:1})],rewards:[qReward('questlog:experience',{name:'Borrowed Glow',experience:120,claim_sound:'minecraft:block.enchantment_table.use'})],triggered_sound:'minecraft:block.enchantment_table.use',completed_sound:'minecraft:entity.player.levelup'}),
-  tpl({cat:'Magic',complexity:'Advanced',tags:['questlog:effect_added','questlog:item_use'],file:'potion_panic.json',title:'Potion Panic Button',icon:{item:'minecraft:potion'},description:'A potion is a tiny plan in a bottle. Drink one when the cave turns rude and let chemistry carry the conversation.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:brewing_stand',required_amount:1})],objectives:[qObj('questlog:item_use',{name:'Drink a Potion',item:'minecraft:potion',required_amount:1}),qObj('questlog:effect_added',{name:'Gain Regeneration',effect:'minecraft:regeneration',required_amount:1})],rewards:[qReward('questlog:item',{name:'Emergency Glow',item:'minecraft:glowstone_dust',count:6,claim_sound:'minecraft:entity.generic.drink'})],triggered_sound:'minecraft:block.brewing_stand.brew',completed_sound:'minecraft:entity.generic.drink'}),
-  tpl({cat:'Silly',complexity:'Simple',tags:['questlog:trample','questlog:stat'],file:'crop_crimes.json',title:'Crop Crimes Division',icon:{item:'minecraft:farmland'},description:'Step carefully. Or do not. Either way, the farmland will remember. This is a silly quest for packs that enjoy tiny consequences.',objectives:[qObj('questlog:trample',{name:'Trample Farmland',required_amount:1}),qObj('questlog:stat',{name:'Jump Once',stat:'minecraft:jump',required_amount:1,retroactive:true})],rewards:[qReward('questlog:item',{name:'Apology Seeds',item:'minecraft:wheat_seeds',count:16,claim_sound:'minecraft:item.crop.plant'})],triggered_sound:'minecraft:block.grass.step',completed_sound:'minecraft:item.crop.plant'}),
-  tpl({cat:'Silly',complexity:'Simple',tags:['questlog:item_drop','questlog:read'],file:'throw_the_rock.json',title:'Throw the Rock',icon:{item:'minecraft:cobblestone'},description:'Sometimes progress is letting go. Read the note, drop a rock, and watch the editor prove it can support nonsense with dignity.',requirements:[qObj('questlog:read',{quest:'questlog:first_camp'})],objectives:[qObj('questlog:read',{name:'Read the Quest Note',quest:'questlog:first_camp'}),qObj('questlog:item_drop',{name:'Drop Cobblestone',item:'minecraft:cobblestone',required_amount:1})],rewards:[qReward('questlog:item',{name:'Rock Refund',item:'minecraft:cobblestone',count:2,claim_sound:'minecraft:entity.item.pickup'})],triggered_sound:'minecraft:entity.item.pickup',completed_sound:'minecraft:block.note_block.hat'}),
-  tpl({cat:'Examples',complexity:'Advanced',tags:['questlog:or','questlog:not'],file:'plan_b_or_no_plan.json',title:'Plan B, Or No Plan',icon:{item:'minecraft:compass'},description:'Two routes, one answer. Either make a compass or find redstone the honest way. Just do not die while pretending this was organized.',requirements:[qObj('questlog:not',{objective:qObj('questlog:entity_death',{entity:'minecraft:player',required_amount:1})})],objectives:[qObj('questlog:or',{objectives:[qObj('questlog:item_craft',{name:'Craft a Compass',item:'minecraft:compass',required_amount:1}),qObj('questlog:item_obtain',{name:'Find Redstone',item:'minecraft:redstone',required_amount:16})]})],rewards:[qReward('questlog:item',{name:'Map Desk Starter',item:'minecraft:cartography_table',count:1,claim_sound:'minecraft:ui.cartography_table.take_result'})],triggered_sound:'minecraft:ui.button.click',completed_sound:'minecraft:ui.toast.challenge_complete'}),
-  tpl({cat:'Examples',complexity:'Advanced',tags:['questlog:command','questlog:loot_table','questlog:unobtainable'],file:'admin_chest_example.json',title:'Admin Chest Example',icon:{item:'minecraft:chest'},description:'A practical example for pack makers: impossible until granted, then pays out from a loot table and runs a command. Useful for events, shops, or secret unlocks.',requirements:[qObj('questlog:unobtainable',{name:'Locked by Pack Logic'})],objectives:[qObj('questlog:block_interact',{name:'Open a Chest',block:'minecraft:chest',required_amount:1})],rewards:[qReward('questlog:loot_table',{name:'Example Loot Table',loot_table:'minecraft:chests/simple_dungeon',claim_sound:'minecraft:block.chest.open'}),qReward('questlog:command',{name:'Announce Completion',command:'tellraw @s {"text":"Quest complete.","color":"gold"}',permission_level:2})],triggered_sound:'minecraft:block.chest.open',completed_sound:'minecraft:ui.toast.challenge_complete'}),
-  tpl({cat:'Examples',complexity:'Intermediate',tags:['questlog:advancement','questlog:quest_complete'],file:'story_checkpoint.json',title:'Story Checkpoint',icon:{item:'minecraft:knowledge_book'},description:'A clean chain example. Finish an earlier quest, earn a vanilla advancement, and let this become the hinge between chapters.',requirements:[qObj('questlog:quest_complete',{quest:'questlog:stone_and_sparks'})],objectives:[qObj('questlog:quest_complete',{name:'Complete Stone and Sparks',quest:'questlog:stone_and_sparks'}),qObj('questlog:advancement',{name:'Stone Age Advancement',advancement:'minecraft:story/mine_stone'})],rewards:[qReward('questlog:experience',{name:'Checkpoint XP',experience:75,claim_sound:'minecraft:entity.experience_orb.pickup'})],triggered_sound:'minecraft:ui.toast.in',completed_sound:'minecraft:ui.toast.out'}),
-  tpl({cat:'Examples',complexity:'Simple',tags:['questlog:read','questlog:unobtainable'],file:'quest_noticeboard.json',title:'Quest Noticeboard',icon:{item:'minecraft:lectern'},description:'A pure information quest. It can be read, used as a tutorial card, or left unobtainable until a server event unlocks it.',objectives:[qObj('questlog:read',{name:'Read This Notice',quest:'questlog:quest_noticeboard'}),qObj('questlog:unobtainable',{name:'Manual Unlock Placeholder'})],rewards:[qReward('questlog:item',{name:'Bookmark',item:'minecraft:paper',count:1,claim_sound:'minecraft:item.book.page_turn'})],triggered_sound:'minecraft:item.book.page_turn',completed_sound:'minecraft:ui.toast.out'}),
-  tpl({cat:'Examples',complexity:'Intermediate',tags:['questlog:block_mine','questlog:block_place'],file:'quarry_marker.json',title:'Quarry Marker',icon:{item:'minecraft:stonecutter'},description:'Mine the stone, place a marker, and turn a messy hole into a declared project. It is not chaos if it has signage.',objectives:[qObj('questlog:block_mine',{name:'Mine Stone',block:'minecraft:stone',required_amount:64}),qObj('questlog:block_place',{name:'Place a Stonecutter',block:'minecraft:stonecutter',required_amount:1})],rewards:[qReward('questlog:item',{name:'Work Lights',item:'minecraft:torch',count:48,claim_sound:'minecraft:block.stonecutter.take_result'})],triggered_sound:'minecraft:block.stone.break',completed_sound:'minecraft:ui.stonecutter.take_result'}),
-  tpl({cat:'Progression',complexity:'Advanced',tags:['questlog:item_equip','questlog:visit_dimension'],file:'end_ready_uniform.json',title:'End-Ready Uniform',icon:{item:'minecraft:diamond_boots'},description:'Before the End gets a vote, dress like gravity has been subpoenaed. Equip diamond boots, step into the End, and try not to look edible.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:ender_eye',required_amount:12})],objectives:[qObj('questlog:item_equip',{name:'Equip Diamond Boots',item:'minecraft:diamond_boots',slot:'feet',required_amount:1}),qObj('questlog:visit_dimension',{name:'Enter the End',dimension:'minecraft:the_end'})],rewards:[qReward('questlog:item',{name:'Soft Landing Maybe',item:'minecraft:ender_pearl',count:4,claim_sound:'minecraft:entity.ender_pearl.throw'})],triggered_sound:'minecraft:block.end_portal.spawn',completed_sound:'minecraft:music.end'}),
-  tpl({cat:'Exploration',complexity:'Advanced',tags:['questlog:visit_position','questlog:or'],file:'borderline_cartographer.json',title:'Borderline Cartographer',icon:{item:'minecraft:map'},description:'Maps make the world look obedient. It is not. Reach a far coordinate or climb high enough to prove the paper is trying its best.',requirements:[qObj('questlog:item_craft',{item:'minecraft:map',required_amount:1})],objectives:[qObj('questlog:or',{objectives:[qObj('questlog:visit_position',{name:'Reach X 1000+',bounds:{minX:1000}}),qObj('questlog:visit_position',{name:'Reach Y 200+',bounds:{minY:200}})]})],rewards:[qReward('questlog:item',{name:'Cartographer Snack',item:'minecraft:cookie',count:8,claim_sound:'minecraft:ui.cartography_table.take_result'})],triggered_sound:'minecraft:ui.cartography_table.take_result',completed_sound:'minecraft:item.elytra.flying'}),
-  tpl({cat:'Silly',complexity:'Intermediate',tags:['questlog:trample','questlog:entity_death'],file:'garden_insurance.json',title:'Garden Insurance',icon:{item:'minecraft:golden_carrot'},description:'The garden has rules. The garden also has evidence. Try the bad step, survive the lesson, and do not let the creepers become witnesses.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:wheat_seeds',required_amount:8})],objectives:[qObj('questlog:trample',{name:'Trample One Farmland',required_amount:1}),qObj('questlog:not',{objective:qObj('questlog:entity_death',{name:'Do Not Die During the Incident',entity:'minecraft:player',required_amount:1})})],rewards:[qReward('questlog:item',{name:'Hush Carrots',item:'minecraft:golden_carrot',count:3,claim_sound:'minecraft:entity.villager.no'})],triggered_sound:'minecraft:block.grass.step',completed_sound:'minecraft:entity.villager.yes'})
+  tpl({cat:'Progression',complexity:'Simple',tags:['questlog:block_mine','questlog:item_craft'],file:'first_camp.json',title:'First Camp',icon:{item:'minecraft:campfire'},description:'Punch one tree, make the first table, and light a small camp before the dark starts asking questions.\n\n§8§oNothing about this place knows your name yet. Good. Start quiet.',objectives:[qObj('questlog:block_mine',{name:'Break a Log',block:'minecraft:oak_log',required_amount:1}),qObj('questlog:item_craft',{name:'Craft a Campfire',item:'minecraft:campfire',required_amount:1})],rewards:[qReward('questlog:item',{name:'Trail Snack',item:'minecraft:apple',count:3,claim_sound:'minecraft:entity.item.pickup'})],triggered_sound:'minecraft:block.wood.break',completed_sound:'minecraft:block.campfire.crackle'}),
+  tpl({cat:'Progression',complexity:'Simple',tags:['questlog:item_obtain','questlog:item_craft'],file:'stone_and_sparks.json',title:'Stone and Sparks',icon:{item:'minecraft:furnace'},description:'Cobblestone is ugly until it starts solving problems. Gather enough, build a furnace, and give the cave a reason to warm up.\n\n§8§oThe first smoke trail usually means someone plans to stay.',requirements:[qObj('questlog:block_mine',{block:'minecraft:oak_log',required_amount:1})],objectives:[qObj('questlog:item_obtain',{name:'Gather Cobblestone',item:'minecraft:cobblestone',required_amount:16}),qObj('questlog:item_craft',{name:'Craft a Furnace',item:'minecraft:furnace',required_amount:1})],rewards:[qReward('questlog:experience',{name:'Warm Start',experience:35,claim_sound:'minecraft:entity.experience_orb.pickup'})],triggered_sound:'minecraft:block.stone.break',completed_sound:'minecraft:block.furnace.fire_crackle'}),
+  tpl({cat:'Progression',complexity:'Intermediate',tags:['questlog:item_obtain','questlog:item_equip'],file:'iron_backbone.json',title:'Iron Backbone',icon:{item:'minecraft:iron_chestplate'},description:'The ground has teeth, so wear better bones. Smelt enough iron for real armor and put the chestplate on before the night gets clever.\n\n§8§oA shield is confidence with a handle.',requirements:[qObj('questlog:item_craft',{item:'minecraft:furnace'})],objectives:[qObj('questlog:item_obtain',{name:'Collect Iron Ingots',item:'minecraft:iron_ingot',required_amount:24}),qObj('questlog:item_equip',{name:'Equip an Iron Chestplate',item:'minecraft:iron_chestplate',slot:'chest',required_amount:1})],rewards:[qReward('questlog:item',{name:'Shield Insurance',item:'minecraft:shield',count:1,claim_sound:'minecraft:item.shield.block'})],triggered_sound:'minecraft:item.armor.equip_iron',completed_sound:'minecraft:ui.toast.challenge_complete'}),
+  tpl({cat:'Progression',complexity:'Advanced',tags:['questlog:item_obtain','questlog:enchant'],file:'diamond_terms.json',title:'Diamond Terms',icon:{item:'minecraft:diamond_pickaxe'},description:'There is a blue glint under the stone, and it never shows up by accident. Find diamonds, make the pickaxe worth keeping, and let the caves know you came prepared.\n\n§8§oGood tools remember who made them.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:iron_pickaxe'})],objectives:[qObj('questlog:item_obtain',{name:'Find Diamonds',item:'minecraft:diamond',required_amount:5}),qObj('questlog:enchant',{name:'Enchant a Diamond Pickaxe',item:'minecraft:diamond_pickaxe',enchantment:'minecraft:efficiency',level:3,required_amount:1})],rewards:[qReward('questlog:item',{name:'Repair Fund',item:'minecraft:experience_bottle',count:16,claim_sound:'minecraft:entity.experience_bottle.throw'})],triggered_sound:'minecraft:block.amethyst_block.chime',completed_sound:'minecraft:entity.player.levelup'}),
+  tpl({cat:'Progression',complexity:'Advanced',tags:['questlog:item_obtain','questlog:visit_biome'],file:'netherite_weather.json',title:'Netherite Weather',icon:{item:'minecraft:netherite_ingot'},description:'Ancient debris does not sit near the lava because it is friendly. Bring it home, fold it into netherite, and turn one bad trip into permanent leverage.\n\n§8§oThe Nether charges interest in fire.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:diamond_pickaxe'}),qObj('questlog:visit_biome',{biome:'minecraft:nether_wastes'})],objectives:[qObj('questlog:item_obtain',{name:'Recover Ancient Debris',item:'minecraft:ancient_debris',required_amount:4}),qObj('questlog:item_obtain',{name:'Forge a Netherite Ingot',item:'minecraft:netherite_ingot',required_amount:1})],rewards:[qReward('questlog:experience',{name:'Heat Treated',experience:300,claim_sound:'minecraft:entity.experience_orb.pickup'})],triggered_sound:'minecraft:block.portal.travel',completed_sound:'minecraft:item.armor.equip_netherite'}),
+  tpl({cat:'Combat',complexity:'Simple',tags:['questlog:entity_kill','questlog:item_obtain'],file:'night_shift.json',title:'Night Shift',icon:{item:'minecraft:iron_sword'},description:'When the sun drops, the world starts testing the fences. Clear out the dead, gather what they leave behind, and make the dark feel a little less crowded.\n\n§8§oSome nights need proof.',objectives:[qObj('questlog:entity_kill',{name:'Defeat Zombies',entity:'minecraft:zombie',required_amount:8}),qObj('questlog:item_obtain',{name:'Collect Rotten Flesh',item:'minecraft:rotten_flesh',required_amount:4})],rewards:[qReward('questlog:item',{name:'More Light, Less Screaming',item:'minecraft:torch',count:32,claim_sound:'minecraft:block.lantern.place'})],triggered_sound:'minecraft:entity.zombie.ambient',completed_sound:'minecraft:entity.player.levelup'}),
+  tpl({cat:'Combat',complexity:'Intermediate',tags:['questlog:entity_kill','questlog:item_drop'],file:'bone_debt.json',title:'Bone Debt',icon:{item:'minecraft:bow'},description:'The skeletons have been sending arrows like invoices. Break the line, take the bones, and leave one behind so the others understand the terms.\n\n§8§oFertilizer has a strange origin story.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:shield'})],objectives:[qObj('questlog:entity_kill',{name:'Defeat Skeletons',entity:'minecraft:skeleton',required_amount:8}),qObj('questlog:item_drop',{name:'Drop a Bone Offering',item:'minecraft:bone',required_amount:1})],rewards:[qReward('questlog:item',{name:'Returned Fire',item:'minecraft:arrow',count:32,claim_sound:'minecraft:entity.arrow.shoot'})],triggered_sound:'minecraft:entity.skeleton.ambient',completed_sound:'minecraft:event.raid.horn'}),
+  tpl({cat:'Combat',complexity:'Advanced',tags:['questlog:entity_death','questlog:not'],file:'hardcore_lesson.json',title:'Not Today',icon:{item:'minecraft:totem_of_undying'},description:'Bring something useful back without letting the death screen have the last word. Simple on paper, louder in the cave.\n\n§8§oThe best escape is the one nobody gets to witness.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:iron_chestplate'})],objectives:[qObj('questlog:not',{objective:qObj('questlog:entity_death',{entity:'minecraft:player',required_amount:1})}),qObj('questlog:item_obtain',{name:'Bring Home a Golden Apple',item:'minecraft:golden_apple',required_amount:1})],rewards:[qReward('questlog:item',{name:'Emergency Button',item:'minecraft:totem_of_undying',count:1,claim_sound:'minecraft:item.totem.use'})],triggered_sound:'minecraft:entity.generic.hurt',completed_sound:'minecraft:item.totem.use'}),
+  tpl({cat:'Combat',complexity:'Advanced',tags:['questlog:stat','questlog:quest_complete'],file:'village_defender.json',title:'Bell Weather',icon:{item:'minecraft:bell'},description:'The bell rings different when the raid horn answers. Stand with the village, win the fight, and let the doors open without fear for once.\n\n§8§oSmall towns keep big grudges.',requirements:[qObj('questlog:quest_complete',{quest:'questlog:night_shift'})],objectives:[qObj('questlog:stat',{name:'Win a Raid',stat:'minecraft:raid_win',required_amount:1,retroactive:true}),qObj('questlog:quest_complete',{name:'Finish Night Shift',quest:'questlog:night_shift'})],rewards:[qReward('questlog:item',{name:'Village Thanks',item:'minecraft:emerald',count:16,claim_sound:'minecraft:entity.villager.yes'})],triggered_sound:'minecraft:event.raid.horn',completed_sound:'minecraft:entity.villager.celebrate'}),
+  tpl({cat:'Exploration',complexity:'Simple',tags:['questlog:visit_biome','questlog:item_obtain'],file:'desert_glass.json',title:'Desert Glass Budget',icon:{item:'minecraft:sand'},description:'Find the heat shimmer, scoop up the sand, and imagine what it becomes after fire gets involved.\n\n§8§oEvery window starts as a desert that lost its argument.',objectives:[qObj('questlog:visit_biome',{name:'Visit a Desert',biome:'minecraft:desert'}),qObj('questlog:item_obtain',{name:'Collect Sand',item:'minecraft:sand',required_amount:32})],rewards:[qReward('questlog:item',{name:'Smelting Starter',item:'minecraft:coal',count:8,claim_sound:'minecraft:block.sand.break'})],triggered_sound:'minecraft:music.overworld.desert',completed_sound:'minecraft:block.glass.place'}),
+  tpl({cat:'Exploration',complexity:'Intermediate',tags:['questlog:visit_structure','questlog:block_interact'],file:'village_guest.json',title:'Village Guest Pass',icon:{item:'minecraft:emerald'},description:'Find a village and ring the bell like you belong there. The villagers may not trust you yet, but bread has started worse friendships.\n\n§8§oDo not steal the bed. Probably.',objectives:[qObj('questlog:visit_structure',{name:'Find a Village',structure:'minecraft:village'}),qObj('questlog:block_interact',{name:'Ring the Bell',block:'minecraft:bell',required_amount:1})],rewards:[qReward('questlog:item',{name:'Welcome Bread',item:'minecraft:bread',count:12,claim_sound:'minecraft:entity.villager.trade'})],triggered_sound:'minecraft:entity.villager.ambient',completed_sound:'minecraft:block.bell.use'}),
+  tpl({cat:'Exploration',complexity:'Intermediate',tags:['questlog:visit_dimension','questlog:item_use'],file:'portal_breath.json',title:'Portal Breath',icon:{item:'minecraft:flint_and_steel'},description:'Build the frame, strike the spark, and step through before you think too hard about the sound it makes.\n\n§8§oThe Nether always answers the door hot.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:obsidian',required_amount:10})],objectives:[qObj('questlog:item_use',{name:'Light the Portal',item:'minecraft:flint_and_steel',required_amount:1}),qObj('questlog:visit_dimension',{name:'Enter the Nether',dimension:'minecraft:the_nether'})],rewards:[qReward('questlog:item',{name:'Return Snacks',item:'minecraft:cooked_porkchop',count:8,claim_sound:'minecraft:entity.piglin.admiring_item'})],triggered_sound:'minecraft:block.portal.trigger',completed_sound:'minecraft:block.portal.travel'}),
+  tpl({cat:'Exploration',complexity:'Advanced',tags:['questlog:visit_position','questlog:effect_added'],file:'skyline_dare.json',title:'Skyline Dare',icon:{item:'minecraft:elytra'},description:'Climb until the ground looks like a suggestion, then drink the thing that makes falling negotiable.\n\n§8§oDo not look down unless you brought a plan.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:phantom_membrane',required_amount:1})],objectives:[qObj('questlog:effect_added',{name:'Gain Slow Falling',effect:'minecraft:slow_falling',required_amount:1}),qObj('questlog:visit_position',{name:'Reach Y 180',bounds:{minY:180}})],rewards:[qReward('questlog:item',{name:'Feather Tax Refund',item:'minecraft:feather',count:16,claim_sound:'minecraft:entity.chicken.egg'})],triggered_sound:'minecraft:entity.phantom.flap',completed_sound:'minecraft:item.elytra.flying'}),
+  tpl({cat:'Exploration',complexity:'Advanced',tags:['questlog:visit_structure','questlog:advancement'],file:'stronghold_receipt.json',title:'Stronghold Receipt',icon:{item:'minecraft:ender_eye'},description:'Follow the eyes until stone starts hiding old work. Find the stronghold and bring back proof that the map was not lying.\n\n§8§oSome doors are buried because they still work.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:ender_eye',required_amount:8})],objectives:[qObj('questlog:visit_structure',{name:'Find a Stronghold',structure:'minecraft:stronghold'}),qObj('questlog:advancement',{name:'Enter the End Portal Room Path',advancement:'minecraft:story/follow_ender_eye'})],rewards:[qReward('questlog:experience',{name:'Stronghold Nerves',experience:250,claim_sound:'minecraft:entity.ender_eye.launch'})],triggered_sound:'minecraft:entity.ender_eye.launch',completed_sound:'minecraft:ui.toast.challenge_complete'}),
+  tpl({cat:'Building',complexity:'Simple',tags:['questlog:block_place','questlog:item_craft'],file:'light_the_path.json',title:'Light the Path',icon:{item:'minecraft:lantern'},description:'Make lanterns and hang them where the shadows keep collecting. A base feels different once the corners stop whispering.\n\n§8§oLight is cheap. Panic is not.',objectives:[qObj('questlog:item_craft',{name:'Craft Lanterns',item:'minecraft:lantern',required_amount:4}),qObj('questlog:block_place',{name:'Place Lanterns',block:'minecraft:lantern',required_amount:4})],rewards:[qReward('questlog:item',{name:'Extra Chain',item:'minecraft:chain',count:4,claim_sound:'minecraft:block.lantern.place'})],triggered_sound:'minecraft:block.lantern.place',completed_sound:'minecraft:block.beacon.activate'}),
+  tpl({cat:'Building',complexity:'Intermediate',tags:['questlog:block_place','questlog:block_mine'],file:'copper_roof_problem.json',title:'Copper Roof Problem',icon:{item:'minecraft:copper_block'},description:'Mine the copper, place the roof, and let time do its slow green handwriting.\n\n§8§oSome builds are finished only after the weather signs them.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:copper_ingot',required_amount:32})],objectives:[qObj('questlog:block_mine',{name:'Mine Copper Ore',block:'minecraft:copper_ore',required_amount:12}),qObj('questlog:block_place',{name:'Place Copper Blocks',block:'minecraft:copper_block',required_amount:8})],rewards:[qReward('questlog:item',{name:'Lightning Advice',item:'minecraft:lightning_rod',count:2,claim_sound:'minecraft:item.axe.scrape'})],triggered_sound:'minecraft:block.copper.place',completed_sound:'minecraft:block.copper.break'}),
+  tpl({cat:'Building',complexity:'Intermediate',tags:['questlog:block_interact','questlog:item_craft'],file:'anvil_decisions.json',title:'Expensive Decisions',icon:{item:'minecraft:anvil'},description:'Craft the anvil and make one serious repair choice. It is heavy, expensive, and exactly the sort of thing a good tool deserves.\n\n§8§oThe first clang always sounds like commitment.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:iron_ingot',required_amount:31})],objectives:[qObj('questlog:item_craft',{name:'Craft an Anvil',item:'minecraft:anvil',required_amount:1}),qObj('questlog:block_interact',{name:'Use the Anvil',block:'minecraft:anvil',required_amount:1})],rewards:[qReward('questlog:item',{name:'Experience Cushion',item:'minecraft:experience_bottle',count:8,claim_sound:'minecraft:block.anvil.use'})],triggered_sound:'minecraft:block.anvil.place',completed_sound:'minecraft:block.anvil.use'}),
+  tpl({cat:'Farming',complexity:'Simple',tags:['questlog:entity_breed','questlog:item_obtain'],file:'cow_department.json',title:'Cow Department',icon:{item:'minecraft:wheat'},description:'Set up the wheat, bring the cows together, and pretend this is agriculture instead of negotiations with square animals.\n\n§8§oThe farm grows louder before it grows useful.',objectives:[qObj('questlog:item_obtain',{name:'Harvest Wheat',item:'minecraft:wheat',required_amount:16}),qObj('questlog:entity_breed',{name:'Breed Cows',entity:'minecraft:cow',required_amount:2})],rewards:[qReward('questlog:item',{name:'Leather Starter',item:'minecraft:leather',count:4,claim_sound:'minecraft:entity.cow.ambient'})],triggered_sound:'minecraft:entity.cow.ambient',completed_sound:'minecraft:entity.player.levelup'}),
+  tpl({cat:'Farming',complexity:'Intermediate',tags:['questlog:entity_breed','questlog:item_use'],file:'bee_courier.json',title:'Bee Courier',icon:{item:'minecraft:honeycomb'},description:'Flowers make promises, and bees deliver them in circles. Breed a pair and collect honey without turning the whole field against you.\n\n§8§oTiny wings run a surprisingly strict schedule.',requirements:[qObj('questlog:visit_biome',{biome:'minecraft:flower_forest'})],objectives:[qObj('questlog:item_use',{name:'Use a Flower',item:'minecraft:dandelion',required_amount:1}),qObj('questlog:entity_breed',{name:'Breed Bees',entity:'minecraft:bee',required_amount:2})],rewards:[qReward('questlog:item',{name:'Comb Bonus',item:'minecraft:honeycomb',count:3,claim_sound:'minecraft:block.beehive.shear'})],triggered_sound:'minecraft:entity.bee.loop',completed_sound:'minecraft:block.beehive.work'}),
+  tpl({cat:'Farming',complexity:'Simple',tags:['questlog:entity_tame','questlog:entity_approach'],file:'wolf_interview.json',title:'Wolf Interview',icon:{item:'minecraft:bone'},description:'Walk up with bones and a steady hand. If the wolf accepts, you get more than a pet. You get a second heartbeat on the trail.\n\n§8§oSome friends arrive with teeth.',objectives:[qObj('questlog:entity_approach',{name:'Approach a Wolf',entity:'minecraft:wolf',range:8}),qObj('questlog:entity_tame',{name:'Tame a Wolf',entity:'minecraft:wolf',required_amount:1})],rewards:[qReward('questlog:item',{name:'Dog Snacks',item:'minecraft:cooked_beef',count:6,claim_sound:'minecraft:entity.wolf.ambient'})],triggered_sound:'minecraft:entity.wolf.ambient',completed_sound:'minecraft:entity.wolf.howl'}),
+  tpl({cat:'Farming',complexity:'Intermediate',tags:['questlog:entity_tame','questlog:entity_approach'],file:'saddle_argument.json',title:'Saddle Argument',icon:{item:'minecraft:saddle'},description:'Find a horse, earn its patience, and try the saddle before it decides your posture is offensive.\n\n§8§oFast travel sometimes has opinions.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:saddle',required_amount:1})],objectives:[qObj('questlog:entity_approach',{name:'Approach a Horse',entity:'minecraft:horse',range:8}),qObj('questlog:entity_tame',{name:'Tame a Horse',entity:'minecraft:horse',required_amount:1})],rewards:[qReward('questlog:item',{name:'Stable Snacks',item:'minecraft:golden_carrot',count:4,claim_sound:'minecraft:entity.horse.ambient'})],triggered_sound:'minecraft:entity.horse.ambient',completed_sound:'minecraft:entity.horse.saddle'}),
+  tpl({cat:'Magic',complexity:'Intermediate',tags:['questlog:enchant','questlog:block_interact'],file:'library_noise.json',title:'Library Noise',icon:{item:'minecraft:enchanted_book'},description:'Build the table, open the book, and let the letters crawl over something useful. Magic is mostly paperwork with better lighting.\n\n§8§oThe shelves are listening.',requirements:[qObj('questlog:item_craft',{item:'minecraft:enchanting_table',required_amount:1})],objectives:[qObj('questlog:block_interact',{name:'Use an Enchanting Table',block:'minecraft:enchanting_table',required_amount:1}),qObj('questlog:enchant',{name:'Enchant Any Book',item:'minecraft:book',required_amount:1})],rewards:[qReward('questlog:experience',{name:'Borrowed Glow',experience:120,claim_sound:'minecraft:block.enchantment_table.use'})],triggered_sound:'minecraft:block.enchantment_table.use',completed_sound:'minecraft:entity.player.levelup'}),
+  tpl({cat:'Magic',complexity:'Advanced',tags:['questlog:effect_added','questlog:item_use'],file:'potion_panic.json',title:'Potion Panic Button',icon:{item:'minecraft:potion'},description:'Brew the backup plan before the cave becomes a problem. Drink when needed, breathe after.\n\n§8§oGlass bottles hold very small second chances.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:brewing_stand',required_amount:1})],objectives:[qObj('questlog:item_use',{name:'Drink a Potion',item:'minecraft:potion',required_amount:1}),qObj('questlog:effect_added',{name:'Gain Regeneration',effect:'minecraft:regeneration',required_amount:1})],rewards:[qReward('questlog:item',{name:'Emergency Glow',item:'minecraft:glowstone_dust',count:6,claim_sound:'minecraft:entity.generic.drink'})],triggered_sound:'minecraft:block.brewing_stand.brew',completed_sound:'minecraft:entity.generic.drink'}),
+  tpl({cat:'Silly',complexity:'Simple',tags:['questlog:trample','questlog:stat'],file:'crop_crimes.json',title:'Crop Crimes Division',icon:{item:'minecraft:farmland'},description:'Step where you should not, hear the soil complain, then jump once like this was research.\n\n§8§oThe farm will remember. The farm is dramatic.',objectives:[qObj('questlog:trample',{name:'Trample Farmland',required_amount:1}),qObj('questlog:stat',{name:'Jump Once',stat:'minecraft:jump',required_amount:1,retroactive:true})],rewards:[qReward('questlog:item',{name:'Apology Seeds',item:'minecraft:wheat_seeds',count:16,claim_sound:'minecraft:item.crop.plant'})],triggered_sound:'minecraft:block.grass.step',completed_sound:'minecraft:item.crop.plant'}),
+  tpl({cat:'Silly',complexity:'Simple',tags:['questlog:item_drop','questlog:read'],file:'throw_the_rock.json',title:'Throw the Rock',icon:{item:'minecraft:cobblestone'},description:'Read the note, drop the cobblestone, and accept that not every quest has to be heroic. Some of them just need to test the wires.\n\n§8§oThe rock returns changed. Slightly.',requirements:[qObj('questlog:read',{quest:'questlog:first_camp'})],objectives:[qObj('questlog:read',{name:'Read the Quest Note',quest:'questlog:first_camp'}),qObj('questlog:item_drop',{name:'Drop Cobblestone',item:'minecraft:cobblestone',required_amount:1})],rewards:[qReward('questlog:item',{name:'Rock Refund',item:'minecraft:cobblestone',count:2,claim_sound:'minecraft:entity.item.pickup'})],triggered_sound:'minecraft:entity.item.pickup',completed_sound:'minecraft:block.note_block.hat'}),
+  tpl({cat:'Examples',complexity:'Advanced',tags:['questlog:or','questlog:not'],file:'plan_b_or_no_plan.json',title:'Plan B, Or No Plan',icon:{item:'minecraft:compass'},description:'Choose the clean route or the cave route. Make a compass, or drag enough redstone out of the dark. Just keep breathing while you improvise.\n\n§8§oPlans are nicer after they survive contact with stone.',requirements:[qObj('questlog:not',{objective:qObj('questlog:entity_death',{entity:'minecraft:player',required_amount:1})})],objectives:[qObj('questlog:or',{objectives:[qObj('questlog:item_craft',{name:'Craft a Compass',item:'minecraft:compass',required_amount:1}),qObj('questlog:item_obtain',{name:'Find Redstone',item:'minecraft:redstone',required_amount:16})]})],rewards:[qReward('questlog:item',{name:'Map Desk Starter',item:'minecraft:cartography_table',count:1,claim_sound:'minecraft:ui.cartography_table.take_result'})],triggered_sound:'minecraft:ui.button.click',completed_sound:'minecraft:ui.toast.challenge_complete'}),
+  tpl({cat:'Examples',complexity:'Advanced',tags:['questlog:command','questlog:loot_table','questlog:unobtainable'],file:'admin_chest_example.json',title:'Admin Chest Example',icon:{item:'minecraft:chest'},description:'A pack-maker example with a locked trigger, a chest interaction, loot payout, and command reward. Use it for events, shops, secrets, or anything that needs a velvet rope.\n\n§8§oNot every quest is meant to open itself.',requirements:[qObj('questlog:unobtainable',{name:'Locked by Pack Logic'})],objectives:[qObj('questlog:block_interact',{name:'Open a Chest',block:'minecraft:chest',required_amount:1})],rewards:[qReward('questlog:loot_table',{name:'Example Loot Table',loot_table:'minecraft:chests/simple_dungeon',claim_sound:'minecraft:block.chest.open'}),qReward('questlog:command',{name:'Announce Completion',command:'tellraw @s {"text":"Quest complete.","color":"gold"}',permission_level:2})],triggered_sound:'minecraft:block.chest.open',completed_sound:'minecraft:ui.toast.challenge_complete'}),
+  tpl({cat:'Examples',complexity:'Intermediate',tags:['questlog:advancement','questlog:quest_complete'],file:'story_checkpoint.json',title:'Story Checkpoint',icon:{item:'minecraft:knowledge_book'},description:'Finish the earlier work, claim the advancement, and let this mark the point where the path starts branching.\n\n§8§oGood chapters need hinges.',requirements:[qObj('questlog:quest_complete',{quest:'questlog:stone_and_sparks'})],objectives:[qObj('questlog:quest_complete',{name:'Complete Stone and Sparks',quest:'questlog:stone_and_sparks'}),qObj('questlog:advancement',{name:'Stone Age Advancement',advancement:'minecraft:story/mine_stone'})],rewards:[qReward('questlog:experience',{name:'Checkpoint XP',experience:75,claim_sound:'minecraft:entity.experience_orb.pickup'})],triggered_sound:'minecraft:ui.toast.in',completed_sound:'minecraft:ui.toast.out'}),
+  tpl({cat:'Examples',complexity:'Simple',tags:['questlog:read','questlog:unobtainable'],file:'quest_noticeboard.json',title:'Quest Noticeboard',icon:{item:'minecraft:lectern'},description:'A noticeboard quest for instructions, rumors, server rules, or locked story beats. Read it, file it away, and let the world feel a little more intentional.\n\n§8§oSome quests are signs pretending to be doors.',objectives:[qObj('questlog:read',{name:'Read This Notice',quest:'questlog:quest_noticeboard'}),qObj('questlog:unobtainable',{name:'Manual Unlock Placeholder'})],rewards:[qReward('questlog:item',{name:'Bookmark',item:'minecraft:paper',count:1,claim_sound:'minecraft:item.book.page_turn'})],triggered_sound:'minecraft:item.book.page_turn',completed_sound:'minecraft:ui.toast.out'}),
+  tpl({cat:'Examples',complexity:'Intermediate',tags:['questlog:block_mine','questlog:block_place'],file:'quarry_marker.json',title:'Quarry Marker',icon:{item:'minecraft:stonecutter'},description:'Mine enough stone to make the hole official, then place a stonecutter like a little flag in the dust.\n\n§8§oA quarry is just a mess with a title.',objectives:[qObj('questlog:block_mine',{name:'Mine Stone',block:'minecraft:stone',required_amount:64}),qObj('questlog:block_place',{name:'Place a Stonecutter',block:'minecraft:stonecutter',required_amount:1})],rewards:[qReward('questlog:item',{name:'Work Lights',item:'minecraft:torch',count:48,claim_sound:'minecraft:ui.stonecutter.take_result'})],triggered_sound:'minecraft:block.stone.break',completed_sound:'minecraft:ui.stonecutter.take_result'}),
+  tpl({cat:'Progression',complexity:'Advanced',tags:['questlog:item_equip','questlog:visit_dimension'],file:'end_ready_uniform.json',title:'End-Ready Uniform',icon:{item:'minecraft:diamond_boots'},description:'Put on the boots, carry the eyes, and step into the End dressed like gravity is about to get personal.\n\n§8§oThe void notices loose footing.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:ender_eye',required_amount:12})],objectives:[qObj('questlog:item_equip',{name:'Equip Diamond Boots',item:'minecraft:diamond_boots',slot:'feet',required_amount:1}),qObj('questlog:visit_dimension',{name:'Enter the End',dimension:'minecraft:the_end'})],rewards:[qReward('questlog:item',{name:'Soft Landing Maybe',item:'minecraft:ender_pearl',count:4,claim_sound:'minecraft:entity.ender_pearl.throw'})],triggered_sound:'minecraft:block.end_portal.spawn',completed_sound:'minecraft:music.end'}),
+  tpl({cat:'Exploration',complexity:'Advanced',tags:['questlog:visit_position','questlog:or'],file:'borderline_cartographer.json',title:'Borderline Cartographer',icon:{item:'minecraft:map'},description:'Make a map and push past the comfortable edges. Go far, climb high, and prove the paper still knows where you are.\n\n§8§oThe world is bigger than the first safe hill.',requirements:[qObj('questlog:item_craft',{item:'minecraft:map',required_amount:1})],objectives:[qObj('questlog:or',{objectives:[qObj('questlog:visit_position',{name:'Reach X 1000+',bounds:{minX:1000}}),qObj('questlog:visit_position',{name:'Reach Y 200+',bounds:{minY:200}})]})],rewards:[qReward('questlog:item',{name:'Cartographer Snack',item:'minecraft:cookie',count:8,claim_sound:'minecraft:ui.cartography_table.take_result'})],triggered_sound:'minecraft:ui.cartography_table.take_result',completed_sound:'minecraft:item.elytra.flying'}),
+  tpl({cat:'Silly',complexity:'Intermediate',tags:['questlog:trample','questlog:entity_death'],file:'garden_insurance.json',title:'Garden Insurance',icon:{item:'minecraft:golden_carrot'},description:'The garden has rules. Break one carefully, stay alive, and bring back carrots as hush money.\n\n§8§oIf anyone asks, it was soil testing.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:wheat_seeds',required_amount:8})],objectives:[qObj('questlog:trample',{name:'Trample One Farmland',required_amount:1}),qObj('questlog:not',{objective:qObj('questlog:entity_death',{name:'Do Not Die During the Incident',entity:'minecraft:player',required_amount:1})})],rewards:[qReward('questlog:item',{name:'Hush Carrots',item:'minecraft:golden_carrot',count:3,claim_sound:'minecraft:entity.villager.no'})],triggered_sound:'minecraft:block.grass.step',completed_sound:'minecraft:entity.villager.yes'})
 ];
 function templateCategories(){return [...new Set(QUEST_TEMPLATES.map(t=>t.cat))].sort();}
 function templateComplexities(){return ['Simple','Intermediate','Advanced'];}
@@ -452,7 +707,7 @@ function renderQForm(q){
   <summary>Display &amp; Text</summary>
   <div class="sec-body">
     <div class="g2"><div class="field"><label>Title</label><input type="text" id="qf_title" value="${esc(q.title||'')}" /></div><div class="field"><label>Sort order</label><input type="number" id="qf_sort_order" value="${d('sort_order',0)}" /></div><div class="field"><label>Chapter ID</label><input type="text" id="qf_chapter" value="${esc(ch)}" placeholder="questlog:main" /></div></div>
-    <div style="display:flex;flex-wrap:wrap;gap:12px;margin:10px 0;"><label class="toggle-label"><input type="checkbox" id="qf_translatable" ${d('translatable',false)?'checked':''} /> Translatable</label><label class="toggle-label"><input type="checkbox" id="qf_include_in_main" ${incMain?'checked':''} /> Include in main</label><label class="toggle-label"><input type="checkbox" id="qf_hidden" ${d('hidden',false)?'checked':''} /> Hidden permanently</label></div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin:10px 0;"><label class="toggle-label" data-tip="Mark the quest text as translatable for language files."><input type="checkbox" id="qf_translatable" ${d('translatable',false)?'checked':''} /> Translatable</label><label class="toggle-label" data-tip="Show this quest in the main Questlog view when appropriate."><input type="checkbox" id="qf_include_in_main" ${incMain?'checked':''} /> Include in main</label><label class="toggle-label" data-tip="Hide even after requirements are met. Usually requirements are enough for normal gating."><input type="checkbox" id="qf_hidden" ${d('hidden',false)?'checked':''} /> Hidden permanently</label></div>
     <div class="hint" style="margin-bottom:10px;">⚠ <strong>Hidden</strong> suppresses even after requirements are met. Requirements auto-gate — no need for hidden.</div>
     <div class="field"><label>Description</label>${descToolbar('qf_description')}<textarea id="qf_description">${esc(typeof q.description==='string'?q.description:q.description!=null?JSON.stringify(q.description):'')}</textarea></div>
     <div class="hint" style="margin-bottom:8px;">Supports <span class="kbd">[text](quest:ns:id)</span>, <span class="kbd">[text](image:ns:path)</span></div>
@@ -465,10 +720,10 @@ function renderQForm(q){
 <details class="section" data-panel-key="progress" open>
   <summary>Requirements, Objectives &amp; Rewards</summary>
   <div class="sec-body">
-    <div class="sub-h">Requirements (unlock)</div><div id="reqList"></div><button type="button" class="btn btn-dashed" id="addReq">+ Add requirement</button>
-    <div class="sub-h" style="margin-top:14px;">Objectives</div><div id="objList"></div><button type="button" class="btn btn-dashed" id="addObj">+ Add objective</button>
-    <div class="sub-h" style="margin-top:14px;">Failures — optional</div><div id="failList"></div><button type="button" class="btn btn-dashed" id="addFail">+ Add failure</button>
-    <div class="sub-h" style="margin-top:14px;">Rewards</div><div id="rewList"></div><button type="button" class="btn btn-dashed" id="addRew">+ Add reward</button>
+    <div class="sub-h">Requirements (unlock)</div><div id="reqList"></div><button type="button" class="btn btn-dashed" id="addReq" data-tip="Add a requirement that unlocks or gates this quest.">+ Add requirement</button>
+    <div class="sub-h" style="margin-top:14px;">Objectives</div><div id="objList"></div><button type="button" class="btn btn-dashed" id="addObj" data-tip="Add a player task needed to complete this quest.">+ Add objective</button>
+    <div class="sub-h" style="margin-top:14px;">Failures — optional</div><div id="failList"></div><button type="button" class="btn btn-dashed" id="addFail" data-tip="Add an optional failure condition.">+ Add failure</button>
+    <div class="sub-h" style="margin-top:14px;">Rewards</div><div id="rewList"></div><button type="button" class="btn btn-dashed" id="addRew" data-tip="Add a completion reward.">+ Add reward</button>
   </div>
 </details>
 
@@ -562,7 +817,7 @@ function renderOF(o){
     case'questlog:enchant':e=`<div class="field"><label>Enchantment — optional</label><input type="text" class="obj-ench" value="${esc(o.enchantment||'')}" /></div><div class="field"><label>Level — optional</label><input type="number" class="obj-elvl" value="${o.level??''}" /></div><div class="field"><label>Item — optional</label><input type="text" class="obj-item" value="${esc(o.item||'')}" /></div>${amt(true)}`;break;
     case'questlog:effect_added':e=`<div class="field"><label>Effect ID</label><input type="text" class="obj-effect" value="${esc(o.effect||'')}" /></div>${amt(true)}`;break;
     case'questlog:trample':e=amt(true);break;
-    case'questlog:quest_complete':e=`<div class="field"><label>Quest ID</label><input type="text" class="obj-quest" value="${esc(o.quest||'')}" /></div>${amt(true)}`;break;
+    case'questlog:quest_complete':e=`<div class="field"><label>Quest ID</label><input type="text" class="obj-quest" value="${esc(o.quest||'')}" /></div>`;break;
     case'questlog:advancement':e=`<div class="field"><label>Advancement ID</label><input type="text" class="obj-adv" value="${esc(o.advancement||'')}" /></div>${amt(true)}`;break;
     default:e=`<div class="field"><label>Extra JSON</label><textarea class="obj-raw">${esc(JSON.stringify(o,null,2))}</textarea></div>`;
   }
@@ -593,7 +848,7 @@ function readOC(card){
   if(type==='questlog:or'){const ob=card.querySelector(':scope > .obj-fields > .nested.or-kids')||card.querySelector('.obj-fields .nested.or-kids');o.objectives=ob?[...ob.querySelectorAll(':scope > .obj-card')].map(c=>readOC(c)):[];return o;}
   if(type==='questlog:not'){const inner=card.querySelector(':scope > .obj-fields > .nested.not-child > .obj-card');o.objective=inner?readOC(inner):{type:'questlog:read'};return o;}
   if(type==='questlog:read'||type==='questlog:unobtainable'){if(type==='questlog:read'){const rq=qIC(card,'.obj-read-quest')?.value?.trim();if(rq)o.quest=rq;}return o;}
-  sA();
+  if(objectiveSupportsAmount(type))sA();
   switch(type){
     case'questlog:stat':{const s=qIC(card,'.obj-stat')?.value;const cu=qIC(card,'.obj-stat-custom')?.value?.trim();o.stat=cu||s||'minecraft:walk_one_cm';o.retroactive=!!qIC(card,'.obj-retro')?.checked;break;}
     case'questlog:block_mine':case'questlog:block_place':case'questlog:block_interact':o.block=qIC(card,'.obj-block')?.value?.trim()||'minecraft:stone';if(type==='questlog:block_interact'){const it=qIC(card,'.obj-bitem')?.value?.trim();if(it)o.item=it;}break;
@@ -622,7 +877,7 @@ function renderRC(r,i){
   else if(t==='questlog:command')body=`<div class="field"><label>Command</label><input type="text" class="rw-cmd" value="${esc(r.command||'')}" /></div><div class="field"><label>Permission level</label><input type="number" class="rw-plvl" value="${r.permission_level??2}" /></div>`;
   else if(t==='questlog:experience')body=`<div class="field"><label>Amount</label><input type="number" class="rw-xp" value="${r.experience??0}" /></div><label class="toggle-label"><input type="checkbox" class="rw-levels" ${(r.level??r.levels)?'checked':''} /> Grant as levels</label>`;
   else if(t==='questlog:loot_table')body=`<div class="field"><label>Loot table</label><input type="text" class="rw-loot" value="${esc(r.loot_table||'')}" /></div>`;
-  return`<div class="rew-card" data-ri="${i}"><div class="card-head"><span class="card-title">Reward #${i+1}</span><div class="card-actions">${rSel(t)}</div></div><div class="field"><label>Name — optional</label><input type="text" class="rw-name" value="${esc(r.name||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-trans" ${r.translatable?'checked':''} /> Translation key</label><div class="field"><label>Icon</label><input type="text" class="rw-icon" value="${esc(r.icon!=null?(typeof r.icon==='string'?r.icon:JSON.stringify(r.icon)):'')}" /></div><div class="field"><label>Claim sound</label><input type="text" class="rw-sound" value="${esc(r.claim_sound||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-autoclaim" ${r.auto_claim?'checked':''} /> Auto-claim</label>${body}<button type="button" class="btn btn-danger btn-sm rew-remove" style="margin-top:8px;width:100%;">Remove reward</button></div>`;
+  return`<div class="rew-card" data-ri="${i}"><div class="card-head"><span class="card-title">Reward #${i+1}</span><div class="card-actions">${rSel(t)}<button type="button" class="btn btn-sm btn-danger small-rm rew-remove">✕</button></div></div><div class="field"><label>Name — optional</label><input type="text" class="rw-name" value="${esc(r.name||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-trans" ${r.translatable?'checked':''} /> Translation key</label><div class="field"><label>Icon</label><input type="text" class="rw-icon" value="${esc(r.icon!=null?(typeof r.icon==='string'?r.icon:JSON.stringify(r.icon)):'')}" /></div><div class="field"><label>Claim sound</label><input type="text" class="rw-sound" value="${esc(r.claim_sound||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-autoclaim" ${r.auto_claim?'checked':''} /> Auto-claim</label>${body}</div>`;
 }
 
 // ── Bind dropdowns (insert + format) ─────────────────────────────
@@ -856,7 +1111,8 @@ function validateObjective(o,out,file,kind,path,questIds,depth=0){
   else if(!OBJ_TYPES.includes(t))addIssue(out,'error',file,kind,path+'.type',`Unknown objective type: ${t}`);
   if(depth>8)addIssue(out,'error',file,kind,path,'Nested objective depth is very high. This may break editing or loading.');
   const amt=o.required_amount;
-  if(amt!==undefined&&(!Number.isFinite(Number(amt))||Number(amt)<1))addIssue(out,'error',file,kind,path+'.required_amount','Required amount must be 1 or higher.');
+  if(amt!==undefined&&!objectiveSupportsAmount(t))addIssue(out,'warn',file,kind,path+'.required_amount',`${t} does not use required_amount; export will remove it.`);
+  else if(amt!==undefined&&(!Number.isFinite(Number(amt))||Number(amt)<1))addIssue(out,'error',file,kind,path+'.required_amount','Required amount must be 1 or higher.');
 
   if(t==='questlog:or'){
     if(!Array.isArray(o.objectives)||!o.objectives.length)addMissing(out,file,kind,path+'.objectives','Add at least one option inside this OR group.');
@@ -984,10 +1240,55 @@ function renderValidation(){
 const dValidate=debounce(renderValidation,220);
 
 // ── Events ────────────────────────────────────────────────────────
-$('#btnNewQuest').onclick=()=>{let b='new_quest',n=`${b}.json`,i=1;while(quests[n])n=`${b}_${i++}.json`;quests[n]=defQ();selectFile(n,'quest');};
-$('#btnNewChapter').onclick=()=>{let b='new_chapter',n=`${b}.json`,i=1;while(chapters[n])n=`${b}_${i++}.json`;chapters[n]=defC();selectFile(n,'chapter');};
-$('#btnPickImport').onclick=()=>$('#fileImport').click();
-$('#fileImport').onchange=async e=>{
+function closeSidebarMenus(except=null){
+  $$('.sidebar-menu.open').forEach(m=>{if(m!==except)m.classList.remove('open');});
+}
+function toggleSidebarMenu(buttonId,menuId){
+  const btn=$(buttonId),menu=$(menuId);
+  if(!btn||!menu)return;
+  btn.onclick=e=>{
+    e.stopPropagation();
+    closeSettingsMenu();
+    const open=!menu.classList.contains('open');
+    closeSidebarMenus(menu);
+    menu.classList.toggle('open',open);
+  };
+  menu.addEventListener('click',e=>{
+    if(e.target.closest('button'))closeSidebarMenus();
+  });
+}
+toggleSidebarMenu('#btnAddMenu','#addMenu');
+toggleSidebarMenu('#btnImportExportMenu','#importExportMenu');
+document.addEventListener('click',()=>closeSidebarMenus());
+function closeSettingsMenu(){
+  $('#settingsMenu')?.classList.remove('open');
+}
+function setupSettingsMenu(){
+  const btn=$('#btnSettings'),menu=$('#settingsMenu');
+  if(!btn||!menu)return;
+  const versionPill=$('#versionPill');
+  if(versionPill)versionPill.textContent=`v${APP_VERSION}`;
+  const autosaveBox=$('#autosaveToggle');
+  if(autosaveBox)autosaveBox.checked=autosaveEnabled;
+  const tooltipBox=$('#tooltipsToggle');
+  if(tooltipBox)tooltipBox.checked=tooltipsEnabled;
+  btn.onclick=e=>{
+    e.stopPropagation();
+    closeSidebarMenus();
+    menu.classList.toggle('open');
+  };
+  menu.addEventListener('click',e=>e.stopPropagation());
+  document.addEventListener('click',closeSettingsMenu);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSettingsMenu();});
+}
+setupSettingsMenu();
+setupHelpInteractions();
+
+onClick('#btnNewQuest',()=>{let b='new_quest',n=`${b}.json`,i=1;while(quests[n])n=`${b}_${i++}.json`;quests[n]=defQ();selectFile(n,'quest');});
+onClick('#btnNewChapter',()=>{let b='new_chapter',n=`${b}.json`,i=1;while(chapters[n])n=`${b}_${i++}.json`;chapters[n]=defC();selectFile(n,'chapter');});
+onClick('#btnPickImport',()=>$('#fileImport')?.click());
+const fileImportEl=$('#fileImport');
+if(fileImportEl)fileImportEl.onchange=async e=>{
   const files=e.target.files;if(!files?.length)return;const arr=Array.from(files);let first=null,ok=0;
   for(const file of arr){
     try{
@@ -997,34 +1298,70 @@ $('#fileImport').onchange=async e=>{
   }
   renderFileList();if(first)selectFile(first.file,first.kind);else renderMain();renderValidation();scheduleAutosave();if(ok)showMsg(`Imported ${ok} file${ok===1?'':'s'}.`,true);e.target.value='';
 };
-$('#btnTemplates').onclick=openTemplateModal;
-$('#templateCloseBtn').onclick=closeTemplateModal;
-$('#templateCreatePack').onclick=createStarterPack;
-$('#templateSearch').addEventListener('input',renderTemplateModal);
-$('#templateCategory').addEventListener('change',renderTemplateModal);
+onClick('#btnTemplates',openTemplateModal);
+onClick('#templateCloseBtn',closeTemplateModal);
+onClick('#templateCreatePack',createStarterPack);
+onEvent('#templateSearch','input',renderTemplateModal);
+onEvent('#templateCategory','change',renderTemplateModal);
 $('#templateComplexity')?.addEventListener('change',renderTemplateModal);
 $('#templateTag')?.addEventListener('change',renderTemplateModal);
-$('#templateModal').onclick=e=>{if(e.target===$('#templateModal'))closeTemplateModal();};
+onClick('#templateModal',e=>{if(e.target===$('#templateModal'))closeTemplateModal();});
 $('#compactJson')?.addEventListener('change',()=>{refreshJson();scheduleAutosave();});
 if($('#viewRaw'))$('#viewRaw').onchange=()=>{rawMode=!!$('#viewRaw')?.checked;renderMain();};
+$('#autosaveToggle')?.addEventListener('change',e=>setAutosaveEnabled(e.target.checked));
+$('#tooltipsToggle')?.addEventListener('change',e=>setTooltipsEnabled(e.target.checked));
+$('#defaultNs')?.addEventListener('input',()=>{renderFileList();renderValidation();refreshJson();scheduleAutosave();});
 const lj=$('#liveJson');
 const applyLJ=debounce(()=>{if(!currentFile||!getCD())return;try{const p=JSON.parse(lj.value);if(mode==='quest'){fixQA(p);nqbd(p);trimQ(p);quests[currentFile]=p;}else{trimCh(p);chapters[currentFile]=p;}lj.value=mode==='quest'?stringifyJson(buildQOut(p)):stringifyJson(p);showMsg('JSON applied.',true);renderMain();}catch(err){showMsg(err.message||String(err),false);}},420);
 lj.addEventListener('focusin',()=>{jsonFocused=true;});
 lj.addEventListener('focusout',()=>{jsonFocused=false;refreshJson();});
 lj.addEventListener('input',()=>{if(!currentFile)return;applyLJ();});
-$('#btnDownload').onclick=()=>{if(!currentFile)return;if(mode==='chapter'&&$('#cf_name'))$('#cf_name').oninput?.();else syncQ();const data=getCD();if(!data)return;let out;if(mode==='quest')out=buildQOut(data);else{out=JSON.parse(JSON.stringify(data));trimCh(out);}downloadBlob(new Blob([stringifyJson(out)],{type:'application/json'}),currentFile);showMsg('Downloaded.',true);};
-$('#btnDownloadAll').onclick=async()=>{if(typeof JSZip==='undefined'){showMsg('JSZip failed.',false);return;}if(mode==='quest')syncQ();else if($('#cf_name'))$('#cf_name').oninput?.();const zip=new JSZip();Object.entries(quests).forEach(([n,o])=>zip.file(`quests/${n}`,stringifyJson(buildQOut(o))));Object.entries(chapters).forEach(([n,c])=>{const cp=JSON.parse(JSON.stringify(c));trimCh(cp);zip.file(`chapters/${n}`,stringifyJson(cp));});const blob=await zip.generateAsync({type:'blob'});downloadBlob(blob,'questlog_export.zip');showMsg($('#compactJson')?.checked?'Compact ZIP exported.':'Pretty ZIP exported.',true);};
+onClick('#btnDownload',()=>{if(!currentFile)return;if(mode==='chapter'&&$('#cf_name'))$('#cf_name').oninput?.();else syncQ();const data=getCD();if(!data)return;let out;if(mode==='quest')out=buildQOut(data);else{out=JSON.parse(JSON.stringify(data));trimCh(out);}downloadBlob(new Blob([stringifyJson(out)],{type:'application/json'}),currentFile);showMsg('Downloaded.',true);});
+onClick('#btnDownloadAll',async()=>{if(typeof JSZip==='undefined'){showMsg('JSZip failed.',false);return;}if(mode==='quest')syncQ();else if($('#cf_name'))$('#cf_name').oninput?.();const zip=new JSZip();Object.entries(quests).forEach(([n,o])=>zip.file(`quests/${n}`,stringifyJson(buildQOut(o))));Object.entries(chapters).forEach(([n,c])=>{const cp=JSON.parse(JSON.stringify(c));trimCh(cp);zip.file(`chapters/${n}`,stringifyJson(cp));});const blob=await zip.generateAsync({type:'blob'});downloadBlob(blob,'questlog_export.zip');showMsg($('#compactJson')?.checked?'Compact ZIP exported.':'Pretty ZIP exported.',true);});
+function shouldRecordHistory(e){
+  if(historyRestoring)return false;
+  const t=e.target;if(!t||!t.closest)return false;
+  const ignored=[
+    '#btnUndo','#btnRedo','#btnDownload','#btnDownloadAll','#btnValidate',
+    '#themeToggle','#btnPickImport','#btnAddMenu','#btnImportExportMenu',
+    '#ctxEditName','#templateCloseBtn',
+    '#renameCancelBtn','#resetCancelBtn','#resetBackBtn'
+  ].join(',');
+  if(t.closest(ignored))return false;
+  if(e.type==='input'||e.type==='change')return false;
+  if(e.type==='click'){
+    const mutatingClicks=[
+      '#btnNewQuest','#btnNewChapter','#addReq','#addObj','#addFail','#addRew',
+      '.small-rm','.rew-remove','#renameConfirmBtn',
+      '#ctxDuplicate','#ctxUnlink','#ctxDelete','#resetDeleteBtn','.template-create',
+      '#templateCreatePack','[data-fmt-template]','[data-fmt-code]','.mc-ac-row'
+    ].join(',');
+    return !!t.closest(mutatingClicks);
+  }
+  return false;
+}
+function maybeRecordHistory(e){if(shouldRecordHistory(e))pushHistorySnapshot();}
+function maybeRecordFocusHistory(e){
+  const t=e.target;
+  if(!historyRestoring&&t?.closest?.('input,textarea,select'))pushHistorySnapshot();
+}
+document.body.addEventListener('focusin',maybeRecordFocusHistory,true);
+document.body.addEventListener('input',maybeRecordHistory,true);
+document.body.addEventListener('change',maybeRecordHistory,true);
+document.body.addEventListener('click',maybeRecordHistory,true);
+$('#btnUndo')?.addEventListener('click',undoProject);
+$('#btnRedo')?.addEventListener('click',redoProject);
 function onFC(e){if(e&&(e.target===lj||e.target.closest?.('#liveJson')||e.target.id==='viewRaw'))return;if(rawMode)return;if(mode==='quest'){syncQ();dRefresh();}else if($('#cf_name'))$('#cf_name').oninput?.();}
 document.body.addEventListener('input',onFC);document.body.addEventListener('change',onFC);
 document.body.addEventListener('input',scheduleAutosave);document.body.addEventListener('change',scheduleAutosave);document.body.addEventListener('click',()=>setTimeout(scheduleAutosave,0));
-$('#btnValidate').onclick=()=>{if(mode==='quest')syncQ();else if($('#cf_name'))$('#cf_name').oninput?.();renderValidation();showMsg('Validation refreshed.',true);};
-$('#validateProject').onchange=()=>renderValidation();
-$('#btnResetProgress').onclick=openResetModal;
-$('#resetCancelBtn').onclick=closeResetModal;
-$('#resetContinueBtn').onclick=()=>$('#resetModalDanger')?.classList.add('open');
-$('#resetBackBtn').onclick=()=>$('#resetModalDanger')?.classList.remove('open');
-$('#resetDeleteBtn').onclick=performFullReset;
-$('#resetModal').onclick=e=>{if(e.target===$('#resetModal'))closeResetModal();};
+onClick('#btnValidate',()=>{if(mode==='quest')syncQ();else if($('#cf_name'))$('#cf_name').oninput?.();renderValidation();showMsg('Validation refreshed.',true);});
+onEvent('#validateProject','change',()=>renderValidation());
+onClick('#btnResetProgress',()=>{closeSettingsMenu();openResetModal();});
+onClick('#resetCancelBtn',closeResetModal);
+onClick('#resetContinueBtn',()=>$('#resetModalDanger')?.classList.add('open'));
+onClick('#resetBackBtn',()=>$('#resetModalDanger')?.classList.remove('open'));
+onClick('#resetDeleteBtn',performFullReset);
+onClick('#resetModal',e=>{if(e.target===$('#resetModal'))closeResetModal();});
 
 // ── Context menu + rename modal ───────────────────────────────────
 let ctxTarget=null;
@@ -1033,28 +1370,40 @@ function showCtxMenu(e,name,kind){
   e.preventDefault();e.stopPropagation();
   ctxTarget={name,kind};
   const menu=$('#ctxMenu');
+  const unlink=$('#ctxUnlink');
+  if(unlink)unlink.style.display=kind==='quest'&&questBoundCh(name)?'flex':'none';
   menu.classList.add('open');
   const x=Math.min(e.clientX,window.innerWidth-170);
   const y=Math.min(e.clientY,window.innerHeight-130);
   menu.style.left=x+'px';menu.style.top=y+'px';
 }
-function hideCtxMenu(){$('#ctxMenu').classList.remove('open');ctxTarget=null;}
+function hideCtxMenu(){$('#ctxMenu')?.classList.remove('open');ctxTarget=null;}
 
 function showRenameModal(name,kind){
   hideCtxMenu();
   const modal=$('#renameModal');const input=$('#renameInput');
+  if(!modal||!input)return;
+  setRenameModalError('');
   input.value=name.replace(/\.json$/i,'');
   modal.classList.add('open');setTimeout(()=>{input.focus();input.select();},50);
   const commit=()=>{
     const nv=input.value.trim().replace(/\.json$/i,'');
-    if(!nv)return;const nn=nv+'.json';
-    if(kind==='quest'){if(quests[nn]&&nn!==name){showMsg('Name taken.',false);return;}quests[nn]=quests[name];delete quests[name];if(currentFile===name)currentFile=nn;}
-    else{if(chapters[nn]&&nn!==name){showMsg('Name taken.',false);return;}chapters[nn]=chapters[name];delete chapters[name];if(currentFile===name)currentFile=nn;}
-    modal.classList.remove('open');renderFileList();if(currentFile===nn)renderMain();
+    if(!nv){
+      setRenameModalError(`Name your ${itemKindLabel(kind)} something.`);
+      input.focus();
+      return;
+    }
+    setRenameModalError('');
+    const nn=nv+'.json';
+    if(nn===name){closeRenameModal();return;}
+    if(kind==='quest'){if(quests[nn]&&nn!==name){setRenameModalError('Name taken.');return;}quests[nn]=quests[name];delete quests[name];if(currentFile===name)currentFile=nn;}
+    else{if(chapters[nn]&&nn!==name){setRenameModalError('Name taken.');return;}chapters[nn]=chapters[name];delete chapters[name];if(currentFile===name)currentFile=nn;}
+    closeRenameModal();renderFileList();if(currentFile===nn)renderMain();
   };
-  $('#renameConfirmBtn').onclick=commit;
-  $('#renameCancelBtn').onclick=()=>modal.classList.remove('open');
-  input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();commit();}if(e.key==='Escape')modal.classList.remove('open');};
+onClick('#renameConfirmBtn',commit);
+onClick('#renameCancelBtn',closeRenameModal);
+  input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();commit();}if(e.key==='Escape')closeRenameModal();};
+  input.oninput=()=>setRenameModalError('');
 }
 
 function duplicateFile(name,kind){
@@ -1064,26 +1413,28 @@ function duplicateFile(name,kind){
   renderFileList();showMsg(`Duplicated as ${nn}`,true);
 }
 
-$('#ctxEditName').onclick=()=>{if(ctxTarget)showRenameModal(ctxTarget.name,ctxTarget.kind);};
-$('#ctxDuplicate').onclick=()=>{if(ctxTarget){duplicateFile(ctxTarget.name,ctxTarget.kind);hideCtxMenu();}};
-$('#ctxDelete').onclick=()=>{
+onClick('#ctxEditName',()=>{if(ctxTarget)showRenameModal(ctxTarget.name,ctxTarget.kind);});
+onClick('#ctxDuplicate',()=>{if(ctxTarget){duplicateFile(ctxTarget.name,ctxTarget.kind);hideCtxMenu();}});
+onClick('#ctxUnlink',()=>{if(ctxTarget?.kind==='quest'){unbindQ(ctxTarget.name);hideCtxMenu();}});
+onClick('#ctxDelete',()=>{
   if(!ctxTarget)return;const{name,kind}=ctxTarget;hideCtxMenu();
   if(!confirm(`Delete ${name}?`))return;
   if(kind==='quest')delete quests[name];else delete chapters[name];
   if(currentFile===name&&mode===kind)currentFile=null;
   renderFileList();renderMain();
-};
+});
 // Close context menu on any click outside
 document.addEventListener('click',hideCtxMenu);
 document.addEventListener('contextmenu',e=>{if(!e.target.closest('#fileList'))hideCtxMenu();});
-$('#renameModal').onclick=e=>{if(e.target===$('#renameModal'))$('#renameModal').classList.remove('open');};
+onClick('#renameModal',e=>{if(e.target===$('#renameModal'))closeRenameModal();});
 
 // ── Init ──────────────────────────────────────────────────────────
 const restored=loadAutosave();
 renderFileList();
 if(restored&&currentFile){renderMain();}
-else{$('#btnNewQuest').click();}
+else{$('#btnNewQuest')?.click();}
 renderValidation();
 saveAutosaveNow('init');
+updateHistoryButtons();
 setInterval(()=>saveAutosaveNow('interval'),8000);
 })();
