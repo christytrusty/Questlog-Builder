@@ -49,3 +49,4 @@ This repository keeps the public website versions in order:
 Current public release: `v2.5`.
 
 Newer work is added after it passes the local release checklist.
+Codex was used to pull minecraft id's, sandbox test, and release. It would take me 20+ hours to pull all ids manually hell na.
