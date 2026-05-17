@@ -4,6 +4,8 @@ Questlog Builder is a static website for creating and editing Questlog JSON proj
 
 The editor is meant to make Questlog quest files easier to write, check, import, and export without needing to hand-edit every JSON file.
 
+Questlog Builder is an independent editor for Questlog JSON projects and is not affiliated with the Questlog mod authors unless stated otherwise.
+
 ## What It Does
 
 - Edit quest and chapter JSON in a browser.

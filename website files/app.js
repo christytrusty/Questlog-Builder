@@ -39,7 +39,7 @@ const EQUIP_SLOTS=["head","chest","legs","feet","mainhand","offhand","body"];
 const OBJ_TYPES=["questlog:stat","questlog:block_mine","questlog:block_place","questlog:entity_breed","questlog:entity_death","questlog:entity_kill","questlog:entity_tame","questlog:item_craft","questlog:item_drop","questlog:item_equip","questlog:item_obtain","questlog:item_use","questlog:visit_biome","questlog:visit_dimension","questlog:visit_position","questlog:trample","questlog:enchant","questlog:effect_added","questlog:visit_structure","questlog:or","questlog:not","questlog:block_interact","questlog:entity_approach","questlog:quest_complete","questlog:read","questlog:advancement","questlog:unobtainable"];
 const REW_TYPES=["questlog:item","questlog:command","questlog:experience","questlog:loot_table"];
 const NO_AMOUNT_OBJECTIVES=new Set(["questlog:or","questlog:not","questlog:read","questlog:unobtainable","questlog:quest_complete"]);
-const APP_VERSION='2.2';
+const APP_VERSION='2.3';
 window.QUESTLOG_APP_VERSION=APP_VERSION;
 document.documentElement.dataset.questlogAppVersion=APP_VERSION;
 const PANEL_DEF=["display","progress","sounds","layout","labels","badge"];
@@ -129,10 +129,16 @@ const AUTOSAVE_KEY='ql.project.autosave.v2';
 const PRE_V22_BACKUP_KEY='ql.project.autosave.before-v2.2';
 const AUTOSAVE_PREF_KEY='ql.autosave.enabled';
 const TOOLTIP_PREF_KEY='ql.tooltips.enabled';
+const SIDEBAR_WIDTH_KEY='ql.sidebar.width';
+const LIST_SORT_KEY='ql.list.sort';
+const TUTORIAL_SEEN_KEY='ql.tutorial.seen.v23';
 let autosaveTimer=null;
 let suppressAutosave=false;
 let autosaveEnabled=localStorage.getItem(AUTOSAVE_PREF_KEY)!=='false';
 let tooltipsEnabled=localStorage.getItem(TOOLTIP_PREF_KEY)!=='false';
+let listSort=['alpha','order','recent'].includes(localStorage.getItem(LIST_SORT_KEY))?localStorage.getItem(LIST_SORT_KEY):'alpha';
+let fileMeta={};
+let questSearch='';
 const HISTORY_LIMIT=60;
 let undoStack=[],redoStack=[],historyRestoring=false;
 function autosavePayload(){
@@ -144,6 +150,8 @@ function autosavePayload(){
     currentFile,
     quests,
     chapters,
+    fileMeta,
+    listSort,
     undoStack,
     redoStack,
     rawMode:!!$('#viewRaw')?.checked
@@ -272,9 +280,13 @@ function loadAutosave(){
     const data=JSON.parse(raw);if(!autosaveHasWork(data))return false;
     quests=data.quests&&typeof data.quests==='object'?data.quests:{};
     chapters=data.chapters&&typeof data.chapters==='object'?data.chapters:{};
+    fileMeta=data.fileMeta&&typeof data.fileMeta==='object'?data.fileMeta:{};
+    listSort=['alpha','order','recent'].includes(data.listSort)?data.listSort:listSort;
+    localStorage.setItem(LIST_SORT_KEY,listSort);
     undoStack=Array.isArray(data.undoStack)?data.undoStack.slice(-HISTORY_LIMIT):[];
     redoStack=Array.isArray(data.redoStack)?data.redoStack.slice(-HISTORY_LIMIT):[];
     Object.values(quests).forEach(q=>{fixQA(q);nqbd(q);});
+    ensureFileMeta();
     if(data.namespace&&$('#defaultNs'))$('#defaultNs').value=data.namespace;
     if(data.mode==='chapter'||data.mode==='quest')mode=data.mode;
     currentFile=data.currentFile||null;
@@ -305,7 +317,7 @@ function closeResetModal(){
 function performFullReset(){
   suppressAutosave=true;
   clearAutosaveStorage();
-  quests={};chapters={};currentFile=null;mode='quest';rawMode=false;jsonFocused=false;
+  quests={};chapters={};fileMeta={};currentFile=null;mode='quest';rawMode=false;jsonFocused=false;
   if($('#viewRaw'))$('#viewRaw').checked=false;
   suppressAutosave=false;
   renderFileList();
@@ -334,6 +346,58 @@ function fixKnownLegacyIds(q){
   (q.rewards||[]).forEach(r=>{if(r&&r.claim_sound==='minecraft:block.stonecutter.take_result')r.claim_sound='minecraft:ui.stonecutter.take_result';});
 }
 function defIncMain(ch){return ch==='questlog:main'||ch==='main';}
+function metaKey(kind,name){return `${kind}:${name}`;}
+function ensureFileMeta(){
+  const now=Date.now();
+  Object.keys(chapters).forEach(name=>{const k=metaKey('chapter',name);if(!fileMeta[k])fileMeta[k]={updatedAt:now};});
+  Object.keys(quests).forEach(name=>{const k=metaKey('quest',name);if(!fileMeta[k])fileMeta[k]={updatedAt:now};});
+  Object.keys(fileMeta).forEach(k=>{
+    const [kind,...rest]=k.split(':');
+    const name=rest.join(':');
+    if((kind==='quest'&&!quests[name])||(kind==='chapter'&&!chapters[name]))delete fileMeta[k];
+  });
+}
+function touchFile(kind,name){
+  if(!name)return;
+  fileMeta[metaKey(kind,name)]={updatedAt:Date.now()};
+}
+function moveFileMeta(kind,oldName,newName){
+  const oldKey=metaKey(kind,oldName),newKey=metaKey(kind,newName);
+  fileMeta[newKey]=fileMeta[oldKey]||{updatedAt:Date.now()};
+  fileMeta[newKey].updatedAt=Date.now();
+  delete fileMeta[oldKey];
+}
+function fileUpdatedAt(kind,name){return Number(fileMeta[metaKey(kind,name)]?.updatedAt)||0;}
+function setListSort(value){
+  listSort=['alpha','order','recent'].includes(value)?value:'alpha';
+  localStorage.setItem(LIST_SORT_KEY,listSort);
+  const sel=$('#questListSort');if(sel)sel.value=listSort;
+  renderFileList();
+}
+function sortFiles(names,kind){
+  const fallback=(a,b)=>String(a).localeCompare(String(b));
+  if(listSort==='recent')return [...names].sort((a,b)=>fileUpdatedAt(kind,b)-fileUpdatedAt(kind,a)||fallback(a,b));
+  if(listSort==='order'){
+    const data=kind==='quest'?quests:chapters;
+    const field=kind==='quest'?'sort_order':'order';
+    return [...names].sort((a,b)=>(Number(data[a]?.[field])||0)-(Number(data[b]?.[field])||0)||fallback(a,b));
+  }
+  return [...names].sort(fallback);
+}
+function fileSearchText(name,kind){
+  const base=String(name||'').replace(/\.json$/i,'');
+  const data=kind==='quest'?quests[name]:chapters[name];
+  const label=kind==='quest'?data?.title:data?.name;
+  return `${base} ${name} ${label||''}`.toLowerCase();
+}
+function matchesSearch(name,kind){
+  const q=questSearch.trim().toLowerCase();
+  return !q||fileSearchText(name,kind).includes(q);
+}
+function setQuestSearch(value){
+  questSearch=String(value||'');
+  renderFileList();
+}
 
 // ── Binding helpers ───────────────────────────────────────────────
 function questBoundCh(qn){
@@ -345,12 +409,14 @@ function questBoundCh(qn){
 function bindQ(qn,cn){
   const q=quests[qn];if(!q)return;
   pushHistorySnapshot();
+  touchFile('quest',qn);
   q.chapter=`${getNs()}:${cn.replace(/\.json$/i,'')}`;
   renderFileList();if(currentFile===qn&&mode==='quest'){renderMain();}
 }
 function unbindQ(qn){
   const q=quests[qn];if(!q)return;
   pushHistorySnapshot();
+  touchFile('quest',qn);
   delete q.chapter;
   renderFileList();if(currentFile===qn&&mode==='quest'){renderMain();}
 }
@@ -400,8 +466,8 @@ function startRename(row,oldName,kind){
     }
     if(nv===base){done=true;renderFileList();return;}
     const nn=nv+'.json';
-    if(kind==='quest'){if(quests[nn]&&nn!==oldName){showMsg('Name taken.',false);return;}quests[nn]=quests[oldName];delete quests[oldName];if(currentFile===oldName)currentFile=nn;}
-    else{if(chapters[nn]&&nn!==oldName){showMsg('Name taken.',false);return;}chapters[nn]=chapters[oldName];delete chapters[oldName];if(currentFile===oldName)currentFile=nn;}
+    if(kind==='quest'){if(quests[nn]&&nn!==oldName){showMsg('Name taken.',false);return;}quests[nn]=quests[oldName];delete quests[oldName];moveFileMeta('quest',oldName,nn);if(currentFile===oldName)currentFile=nn;}
+    else{if(chapters[nn]&&nn!==oldName){showMsg('Name taken.',false);return;}chapters[nn]=chapters[oldName];delete chapters[oldName];moveFileMeta('chapter',oldName,nn);if(currentFile===oldName)currentFile=nn;}
     done=true;
     renderFileList();if(currentFile===nn)renderMain();
   };
@@ -435,15 +501,24 @@ function bindFileNameRename(row,name,kind){
 function renderFileList(){
   if(isDragging)return;
   const list=$('#fileList');list.innerHTML='';
-  const qNames=Object.keys(quests).sort();
-  const cNames=Object.keys(chapters).sort();
+  ensureFileMeta();
+  const sortSel=$('#questListSort');if(sortSel)sortSel.value=listSort;
+  const searchEl=$('#questSearch');if(searchEl&&searchEl.value!==questSearch)searchEl.value=questSearch;
+  const qNames=sortFiles(Object.keys(quests),'quest');
+  const cNames=sortFiles(Object.keys(chapters),'chapter');
   const boundTo={};const unbound=[];
   qNames.forEach(qn=>{const cf=questBoundCh(qn);if(cf){if(!boundTo[cf])boundTo[cf]=[];boundTo[cf].push(qn);}else unbound.push(qn);});
+  const visibleUnbound=unbound.filter(qn=>matchesSearch(qn,'quest'));
 
   // Chapters
   const cl=document.createElement('div');cl.className='sb-group';cl.textContent='Chapters';list.appendChild(cl);
+  let visibleChapters=0;
   if(!cNames.length){const e=document.createElement('div');e.className='sb-empty';e.textContent='No chapters';list.appendChild(e);}
   cNames.forEach(cf=>{
+    const chapterMatches=matchesSearch(cf,'chapter');
+    const visibleKids=(boundTo[cf]||[]).filter(qn=>chapterMatches||matchesSearch(qn,'quest'));
+    if(questSearch.trim()&&!chapterMatches&&!visibleKids.length)return;
+    visibleChapters++;
     const wrap=document.createElement('div');
     const cRow=makeFiRow(cf,'C',cf===currentFile&&mode==='chapter');
     bindFileNameRename(cRow,cf,'chapter');
@@ -453,7 +528,7 @@ function renderFileList(){
     wrap.appendChild(cRow);
     const kids=document.createElement('div');kids.className='fi-children chapter-drop-zone';
     bindChapterDropTarget(kids,cf);
-    (boundTo[cf]||[]).forEach(qn=>{
+    visibleKids.forEach(qn=>{
       const qRow=makeFiRow(qn,'Q',qn===currentFile&&mode==='quest',true);
       qRow.draggable=true;
       bindFileNameRename(qRow,qn,'quest');
@@ -465,6 +540,7 @@ function renderFileList(){
     });
     wrap.appendChild(kids);list.appendChild(wrap);
   });
+  if(cNames.length&&!visibleChapters){const e=document.createElement('div');e.className='sb-empty';e.textContent='No matching chapters';list.appendChild(e);}
 
   // Quests
   const ql=document.createElement('div');ql.className='sb-group';ql.style.marginTop='10px';ql.textContent='Quests';list.appendChild(ql);
@@ -472,8 +548,8 @@ function renderFileList(){
   uz.ondragover=e=>{e.preventDefault();if(draggedQuest)uz.classList.add('drop-zone-active');};
   uz.ondragleave=()=>uz.classList.remove('drop-zone-active');
   uz.ondrop=e=>{e.preventDefault();uz.classList.remove('drop-zone-active');if(draggedQuest){unbindQ(draggedQuest);draggedQuest=null;}};
-  if(!unbound.length){const e=document.createElement('div');e.className='sb-empty';e.textContent=qNames.length?'All bound':'No quests';uz.appendChild(e);}
-  unbound.forEach(qn=>{
+  if(!visibleUnbound.length){const e=document.createElement('div');e.className='sb-empty';e.textContent=questSearch.trim()?'No matching unbound quests':qNames.length?'All bound':'No quests';uz.appendChild(e);}
+  visibleUnbound.forEach(qn=>{
     const qRow=makeFiRow(qn,'Q',qn===currentFile&&mode==='quest');
     qRow.draggable=true;
     bindFileNameRename(qRow,qn,'quest');
@@ -496,7 +572,13 @@ function makeFiRow(name,tag,active,hasUnlink){
   return row;
 }
 
-function selectFile(name,kind){currentFile=name;mode=kind;renderFileList();renderMain();}
+function selectFile(name,kind,panelKey){
+  currentFile=name;
+  mode=kind;
+  if(kind==='quest'&&panelKey)setTab(panelKey);
+  renderFileList();
+  renderMain();
+}
 
 // ── Normalize helpers ─────────────────────────────────────────────
 function nvb(b){if(!b||typeof b!=='object')return;if(b.x1!==undefined&&b.minX===undefined)b.minX=b.x1;if(b.y1!==undefined&&b.minY===undefined)b.minY=b.y1;if(b.z1!==undefined&&b.minZ===undefined)b.minZ=b.z1;if(b.x2!==undefined&&b.maxX===undefined)b.maxX=b.x2;if(b.y2!==undefined&&b.maxY===undefined)b.maxY=b.y2;if(b.z2!==undefined&&b.maxZ===undefined)b.maxZ=b.z2;delete b.x1;delete b.y1;delete b.z1;delete b.x2;delete b.y2;delete b.z2;}
@@ -569,9 +651,9 @@ function templateTags(){return OBJ_TYPES.slice();}
 function slugFile(s){return String(s||'quest').toLowerCase().replace(/[^a-z0-9_./-]+/g,'_').replace(/^_+|_+$/g,'')+'.json';}
 function uniqueFileName(base,map){let n=base.endsWith('.json')?base:base+'.json';let i=2;const stem=n.replace(/\.json$/i,'');while(map[n])n=`${stem}_${i++}.json`;return n;}
 function cloneTemplateQuest(t){const q={title:t.title,description:t.description||'',icon:t.icon||{item:'minecraft:book'},objectives:JSON.parse(JSON.stringify(t.objectives||[])),requirements:JSON.parse(JSON.stringify(t.requirements||[])),rewards:JSON.parse(JSON.stringify(t.rewards||[]))};if(t.completed_sound)q.completed_sound=t.completed_sound;if(t.triggered_sound)q.triggered_sound=t.triggered_sound;if(t.toast_on_unlock!==undefined)q.toast_on_unlock=t.toast_on_unlock;if(t.toast_on_complete!==undefined)q.toast_on_complete=t.toast_on_complete;fixQA(q);return q;}
-function createQuestFromTemplate(t){const fn=uniqueFileName(t.file||slugFile(t.title),quests);const q=cloneTemplateQuest(t);quests[fn]=q;selectFile(fn,'quest');showMsg(`Created template: ${t.title}`,true);scheduleAutosave();}
+function createQuestFromTemplate(t){const fn=uniqueFileName(t.file||slugFile(t.title),quests);const q=cloneTemplateQuest(t);quests[fn]=q;touchFile('quest',fn);selectFile(fn,'quest');showMsg(`Created template: ${t.title}`,true);scheduleAutosave();}
 function ensureTemplateChapter(){const fn='vanilla_starter.json';if(!chapters[fn])chapters[fn]={name:'Vanilla Starter',icon:{item:'minecraft:grass_block'},order:0};return fn;}
-function createStarterPack(){const ch=ensureTemplateChapter();const ns=getNs()||'questlog';const made=[];QUEST_TEMPLATES.forEach((t,i)=>{const fn=uniqueFileName(t.file||slugFile(t.title),quests);const q=cloneTemplateQuest(t);q.chapter=`${ns}:${ch.replace(/\.json$/i,'')}`;q.sort_order=i;quests[fn]=q;made.push(fn);});renderFileList();selectFile(made[0]||ch,made[0]?'quest':'chapter');renderValidation();showMsg(`Created ${made.length} vanilla starter quests.`,true);scheduleAutosave();}
+function createStarterPack(){const ch=ensureTemplateChapter();touchFile('chapter',ch);const ns=getNs()||'questlog';const made=[];QUEST_TEMPLATES.forEach((t,i)=>{const fn=uniqueFileName(t.file||slugFile(t.title),quests);const q=cloneTemplateQuest(t);q.chapter=`${ns}:${ch.replace(/\.json$/i,'')}`;q.sort_order=i;quests[fn]=q;touchFile('quest',fn);made.push(fn);});renderFileList();selectFile(made[0]||ch,made[0]?'quest':'chapter');renderValidation();showMsg(`Created ${made.length} vanilla starter quests.`,true);scheduleAutosave();}
 function openTemplateModal(){const modal=$('#templateModal');if(!modal)return;modal.classList.add('open');renderTemplateModal();setTimeout(()=>$('#templateSearch')?.focus(),50);}
 function closeTemplateModal(){$('#templateModal')?.classList.remove('open');}
 function renderTemplateModal(){const list=$('#templateList'),cat=$('#templateCategory'),search=$('#templateSearch'),cx=$('#templateComplexity'),tag=$('#templateTag');if(!list||!cat)return;if(!cat.dataset.ready){cat.innerHTML='<option value="all">All categories</option>'+templateCategories().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');cat.dataset.ready='1';}if(cx&&!cx.dataset.ready){cx.innerHTML='<option value="all">All complexity</option>'+templateComplexities().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');cx.dataset.ready='1';}if(tag&&!tag.dataset.ready){tag.innerHTML='<option value="all">All objective tags</option>'+templateTags().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');tag.dataset.ready='1';}
@@ -580,12 +662,199 @@ function renderTemplateModal(){const list=$('#templateList'),cat=$('#templateCat
   list.innerHTML=rows.map((t,i)=>`<div class="template-row" data-tpl="${esc(t.title)}"><div class="template-main"><div class="template-name">${esc(t.title)}</div><div class="template-desc">${esc(t.description||'')}</div><div class="template-meta"><span>${esc(t.cat)}</span><span>${esc(t.complexity||'Simple')}</span><span>${esc((t.objectives||[]).length)} objective${(t.objectives||[]).length===1?'':'s'}</span><span>${esc((t.requirements||[]).length)} req</span><span>${esc((t.tags||[]).slice(0,2).join(', '))}</span></div></div><button class="btn btn-primary btn-sm template-create" data-index="${QUEST_TEMPLATES.indexOf(t)}">Create</button></div>`).join('')||'<div class="template-empty">No templates match that search.</div>';
   $$('.template-create',list).forEach(btn=>btn.onclick=()=>createQuestFromTemplate(QUEST_TEMPLATES[Number(btn.dataset.index)]));
 }
+
+const CHANGELOGS=[
+  {
+    version:'2.3',
+    title:'Version 2.3',
+    status:'Completed creator usability release',
+    sections:[
+      {title:'Updated',items:[
+        'Changelog moved into a full-screen overlay with a version selector.',
+        'Left quest/chapter sidebar is wider and resizable.',
+        'Quest and chapter list now has top search/filter and compact sorting controls.',
+        'Validation warnings can jump to and highlight likely editor fields.',
+        'Tooltip coverage expanded across core controls and fields.',
+        'First-visit guided tutorial added, with Settings replay, spotlight highlights, and a Quit tutorial button.',
+        'Tutorial now walks through Display, Progress, Sounds, Advanced, resources, Settings, and export basics.',
+        'Release checklist added for safer Neocities uploads.',
+        'Tutorial spotlight and popup placement polished so highlighted fields stay visible.',
+        'Project ZIP export now uses config/questlog/quests and config/questlog/chapters paths.'
+      ]}
+    ]
+  },
+  {
+    version:'2.2',
+    title:'Version 2.2',
+    status:'Completed safety and cleanup release',
+    sections:[
+      {title:'Updated',items:[
+        'Top toast notifications for status and errors.',
+        'Undo and redo history survives reloads.',
+        'Inline rename, Add, and Import/export controls were cleaned up.',
+        'Settings menu added for namespace, autosave, raw JSON, export, validation, reset, and tooltip controls.',
+        'Neocities mixed-file warning and cache-busting file versions added.',
+        'Version 2.0 to 2.2 autosave migration safeguard added.',
+        'questlog:quest_complete no longer exposes or exports required_amount.'
+      ]}
+    ]
+  },
+  {
+    version:'2.0',
+    title:'Version 2.0',
+    status:'Older officially completed version',
+    sections:[
+      {title:'Updated',items:[
+        'Added more features, but needed decluttering so the UI changed a good amount.',
+        'Featuring templates for quests.',
+        'Autosaving and reset feature.',
+        'Works by browser local storage.',
+        'Missing/Error detection.',
+        'Import project zips.',
+        'Suggestions box, supported for all Minecraft IDs including sounds.',
+        'Improved drag quest onto chapters to link them.',
+        'Improved code, optimization, and backend logistics.',
+        'Yay now its a website.'
+      ]}
+    ]
+  }
+];
+function renderChangelog(version=APP_VERSION){
+  const select=$('#changelogVersion'),body=$('#changelogBody');if(!select||!body)return;
+  if(!select.dataset.ready){
+    select.innerHTML=CHANGELOGS.map(c=>`<option value="${esc(c.version)}">Version ${esc(c.version)}</option>`).join('');
+    select.dataset.ready='1';
+  }
+  const entry=CHANGELOGS.find(c=>c.version===version)||CHANGELOGS[0];
+  select.value=entry.version;
+  body.innerHTML=`<div class="changelog-version-title">${esc(entry.title)}</div><div class="changelog-version-sub">${esc(entry.status)}</div>${entry.sections.map(sec=>`<div class="changelog-section-title">${esc(sec.title)}</div><ul class="changelog-list">${sec.items.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`).join('')}`;
+}
+function openChangelogModal(){
+  closeSettingsMenu();
+  const modal=$('#changelogModal');if(!modal)return;
+  renderChangelog(APP_VERSION);
+  modal.classList.add('open');
+}
+function closeChangelogModal(){$('#changelogModal')?.classList.remove('open');}
+
+const TUTORIAL_STEPS=[
+  {target:'#questSearch',title:'Search the project',text:'Type here to temporarily filter the quest and chapter list. It only changes what you see; clearing the box brings the full list back.',pad:5},
+  {target:'#questListSort',title:'Sort without changing files',text:'Use this to view quests alphabetically, by Questlog order, or by recently updated. Sorting does not rename files or change exported JSON.',pad:5},
+  {target:'#fileList',title:'Quest and chapter files',text:'Questlog IDs come from file names. Double-click a file name to rename it, right-click for file actions, and drag quests onto chapters to link them.',pad:5},
+  {target:'#btnAddMenu',title:'Create content',text:'Add creates quests, chapters, or starter templates. Templates are working examples you can edit into your own modpack quests.',pad:5},
+  {target:'#btnImportExportMenu',title:'Import and export safely',text:'Import existing Questlog JSON or ZIP projects here. Export selected file downloads one JSON file; Export project ZIP is usually what you want for a full pack project.',pad:5},
+  {target:'#formTabs',tab:'display',title:'Editor sections overview',text:'The center editor is split into Display, Progress, Sounds, and Advanced. Display is text and appearance, Progress is requirements/objectives/rewards, Sounds is notifications, and Advanced is mostly layout/resource-pack options.',pad:5},
+  {target:'#qf_title',tab:'display',title:'Display: identity and placement',text:'Title is what players read. Sort order controls quest position inside a chapter. Chapter ID links this quest to a chapter file, usually namespace:chapter_file_name.',pad:7},
+  {target:'#qf_description',tab:'display',title:'Display: description and icon',text:'Description is the main quest text and supports Questlog rich text links. The icon controls what players see beside the quest in the Questlog UI.',pad:7},
+  {target:'#addReq',tab:'progress',title:'Progress: requirements',text:'Requirements gate or unlock a quest. Use them for “complete this first” or “own this item first” style logic. You usually do not need hidden:true when requirements already gate the quest.',pad:5},
+  {target:'#addObj',tab:'progress',title:'Progress: objectives',text:'Objectives are what the player must do to complete the quest. Item obtain, block mine, advancement, quest complete, and similar types live here.',pad:5},
+  {target:'#addRew',tab:'progress',title:'Progress: rewards and failures',text:'Rewards are what the player can claim after completion. Failures are optional and only needed for special quest designs.',pad:5},
+  {target:'#qf_completed_sound',tab:'sounds',title:'Sounds and notifications',text:'Use this section for completed/triggered sounds, unlock toasts, completion toasts, and popup behavior. Sound fields expect Minecraft sound IDs.',pad:7},
+  {target:'.adv-wrap',tab:'layout',title:'Advanced is for polish',text:'Advanced sections cover layout, textures, labels, colors, and badges. Most quests do not need these at first, but they help packs with custom resource-pack styling.',pad:5},
+  {target:'#validationList',title:'Validation catches mistakes',text:'Validation catches missing objectives, broken IDs, and risky references. Click a warning to jump to the likely field and highlight it.',pad:5},
+  {target:'#liveJson',title:'Live JSON preview',text:'The right panel shows the selected file as Questlog JSON. Power users can enable raw JSON editing in Settings, but the forms are safer for normal work.',pad:5},
+  {target:'.tb-links',title:'Top-left resources',text:'These links go to Modrinth, the Questlog wiki, and examples. Use the wiki for deeper Questlog behavior once the editor basics make sense.',pad:5},
+  {targets:['.history-actions','#themeToggle'],title:'Undo, redo, and theme',text:'Undo and redo help recover accidental edits, and the theme button switches light/dark mode. Undo history is saved with the browser project.',pad:5},
+  {target:'#settingsMenu',openSettings:true,title:'Settings recap',text:'Settings contains namespace, project-wide validation, raw JSON mode, autosave, minified export, tooltips, changelog, this tutorial, and reset saved progress.',pad:5}
+];
+let tutorialIndex=0,tutorialResizeBound=false;
+function markTutorialSeen(){try{localStorage.setItem(TUTORIAL_SEEN_KEY,'true');}catch{}}
+function openTutorialPrompt(force=false){
+  if(!force&&localStorage.getItem(TUTORIAL_SEEN_KEY)==='true')return;
+  $('#tutorialPrompt')?.classList.add('open');
+}
+function closeTutorialPrompt(){$('#tutorialPrompt')?.classList.remove('open');}
+function tutorialTargetRect(step){
+  const selectors=step?.targets||(step?.target?[step.target]:[]);
+  const rects=selectors.map(sel=>document.querySelector(sel)).filter(Boolean).map(el=>{
+    if(el.scrollIntoView)el.scrollIntoView({block:'center',inline:'nearest'});
+    return el.getBoundingClientRect();
+  }).filter(r=>r&&r.width>=4&&r.height>=4);
+  if(!rects.length)return null;
+  const left=Math.min(...rects.map(r=>r.left)),top=Math.min(...rects.map(r=>r.top));
+  const right=Math.max(...rects.map(r=>r.right)),bottom=Math.max(...rects.map(r=>r.bottom));
+  return {left,top,right,bottom,width:right-left,height:bottom-top};
+}
+function prepareTutorialStep(step){
+  if(step?.tab&&mode==='quest'){
+    setTab(step.tab);
+    renderMain();
+  }
+  if(step?.openSettings)$('#settingsMenu')?.classList.add('open');
+  else closeSettingsMenu();
+}
+function placeTutorial(){
+  const layer=$('#tutorialLayer'),spot=$('#tutorialSpotlight'),pop=$('#tutorialPop');
+  if(!layer?.classList.contains('open')||!spot||!pop)return;
+  const step=TUTORIAL_STEPS[tutorialIndex];
+  let r=tutorialTargetRect(step);
+  if(!r||r.width<4||r.height<4){
+    r={left:window.innerWidth/2-120,top:window.innerHeight/2-80,width:240,height:160,right:window.innerWidth/2+120,bottom:window.innerHeight/2+80};
+  }
+  const pad=Number.isFinite(step?.pad)?step.pad:4;
+  const left=Math.max(6,Math.round(r.left-pad)),top=Math.max(6,Math.round(r.top-pad));
+  const width=Math.min(window.innerWidth-left-6,Math.round(r.width+pad*2));
+  const height=Math.min(window.innerHeight-top-6,Math.round(r.height+pad*2));
+  Object.assign(spot.style,{left:left+'px',top:top+'px',width:width+'px',height:height+'px'});
+  const popW=Math.min(360,window.innerWidth-26),gap=14;
+  const popH=pop.offsetHeight||220;
+  const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+  const rightSpace=window.innerWidth-(left+width)-gap-13;
+  const leftSpace=left-gap-13;
+  const bottomSpace=window.innerHeight-(top+height)-gap-13;
+  const topSpace=top-gap-13;
+  let px,py;
+  if(rightSpace>=popW){
+    px=left+width+gap;py=clamp(top,13,window.innerHeight-popH-13);
+  }else if(leftSpace>=popW){
+    px=left-popW-gap;py=clamp(top,13,window.innerHeight-popH-13);
+  }else if(bottomSpace>=popH){
+    px=clamp(left+width/2-popW/2,13,window.innerWidth-popW-13);py=top+height+gap;
+  }else if(topSpace>=popH){
+    px=clamp(left+width/2-popW/2,13,window.innerWidth-popW-13);py=top-popH-gap;
+  }else{
+    px=clamp(left+width/2-popW/2,13,window.innerWidth-popW-13);
+    py=bottomSpace>=topSpace?clamp(top+height+gap,13,window.innerHeight-popH-13):clamp(top-popH-gap,13,window.innerHeight-popH-13);
+  }
+  Object.assign(pop.style,{left:px+'px',top:py+'px'});
+}
+function renderTutorial(){
+  const step=TUTORIAL_STEPS[tutorialIndex];if(!step)return endTutorial(false);
+  prepareTutorialStep(step);
+  $('#tutorialTitle').textContent=step.title;
+  $('#tutorialText').innerHTML=`${esc(step.text)}${tutorialIndex===TUTORIAL_STEPS.length-1?' <a href="https://moddedmc.wiki/en/project/questlog/latest/docs" target="_blank" rel="noreferrer">Open Questlog wiki</a>.':''}`;
+  $('#tutorialProgress').textContent=`${tutorialIndex+1} / ${TUTORIAL_STEPS.length}`;
+  const back=$('#tutorialBackBtn'),next=$('#tutorialNextBtn');
+  if(back)back.disabled=tutorialIndex===0;
+  if(next)next.textContent=tutorialIndex===TUTORIAL_STEPS.length-1?'Done':'Next';
+  requestAnimationFrame(placeTutorial);
+}
+function startTutorial(){
+  markTutorialSeen();
+  closeTutorialPrompt();
+  closeSettingsMenu();
+  closeSidebarMenus();
+  tutorialIndex=0;
+  $('#tutorialLayer')?.classList.add('open');
+  if(!tutorialResizeBound){
+    tutorialResizeBound=true;
+    window.addEventListener('resize',placeTutorial);
+    window.addEventListener('scroll',placeTutorial,true);
+  }
+  renderTutorial();
+}
+function endTutorial(markSeen=true){
+  if(markSeen)markTutorialSeen();
+  $('#tutorialLayer')?.classList.remove('open');
+  closeSettingsMenu();
+}
+
 function jsonSpace(){return $('#compactJson')?.checked?0:2;}
 function stringifyJson(obj){return JSON.stringify(obj,null,jsonSpace());}
 function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);}
-function classifyImportedJson(name,data){const norm=String(name||'import.json').split('/').pop()||'import.json';const isQ=data&&typeof data==='object'&&(data.objectives!==undefined||data.requirements!==undefined||data.rewards!==undefined||data.title!==undefined);if(isQ){fixQA(data);nqbd(data);const fn=uniqueFileName(norm.replace(/\.json$/i,'')+'.json',quests);quests[fn]=data;return {kind:'quest',file:fn};}const fn=uniqueFileName(norm.replace(/\.json$/i,'')+'.json',chapters);chapters[fn]=data;return {kind:'chapter',file:fn};}
+function classifyImportedJson(name,data){const norm=String(name||'import.json').split('/').pop()||'import.json';const isQ=data&&typeof data==='object'&&(data.objectives!==undefined||data.requirements!==undefined||data.rewards!==undefined||data.title!==undefined);if(isQ){fixQA(data);nqbd(data);const fn=uniqueFileName(norm.replace(/\.json$/i,'')+'.json',quests);quests[fn]=data;touchFile('quest',fn);return {kind:'quest',file:fn};}const fn=uniqueFileName(norm.replace(/\.json$/i,'')+'.json',chapters);chapters[fn]=data;touchFile('chapter',fn);return {kind:'chapter',file:fn};}
 async function importZipFile(file){if(typeof JSZip==='undefined')throw new Error('JSZip failed to load.');const zip=await JSZip.loadAsync(file);const imported=[];const entries=Object.values(zip.files).filter(z=>!z.dir&&z.name.toLowerCase().endsWith('.json'));
-  for(const ent of entries){try{const txt=await ent.async('string');const data=JSON.parse(txt);let rel=ent.name.replace(/^.*config\/questlog\//i,'');let kind=null;if(/(^|\/)quests\//i.test(rel))kind='quest';if(/(^|\/)chapters\//i.test(rel))kind='chapter';let base=rel.split('/').pop()||'import.json';if(kind==='quest'){fixQA(data);nqbd(data);const fn=uniqueFileName(base,quests);quests[fn]=data;imported.push({kind,file:fn});}else if(kind==='chapter'){const fn=uniqueFileName(base,chapters);chapters[fn]=data;imported.push({kind,file:fn});}else imported.push(classifyImportedJson(base,data));}catch(err){console.warn('[zip import]',ent.name,err);}}
+  for(const ent of entries){try{const txt=await ent.async('string');const data=JSON.parse(txt);let rel=ent.name.replace(/^.*config\/questlog\//i,'');let kind=null;if(/(^|\/)quests\//i.test(rel))kind='quest';if(/(^|\/)chapters\//i.test(rel))kind='chapter';let base=rel.split('/').pop()||'import.json';if(kind==='quest'){fixQA(data);nqbd(data);const fn=uniqueFileName(base,quests);quests[fn]=data;touchFile('quest',fn);imported.push({kind,file:fn});}else if(kind==='chapter'){const fn=uniqueFileName(base,chapters);chapters[fn]=data;touchFile('chapter',fn);imported.push({kind,file:fn});}else imported.push(classifyImportedJson(base,data));}catch(err){console.warn('[zip import]',ent.name,err);}}
   if(!imported.length)throw new Error('No JSON quest/chapter files found in that ZIP.');renderFileList();selectFile(imported[0].file,imported[0].kind);renderValidation();scheduleAutosave();return imported.length;}
 
 
@@ -677,7 +946,7 @@ dValidate();
 // ── Renderable ────────────────────────────────────────────────────
 function renderRend(p,val){
   let k='item';if(typeof val==='string'&&val)k='stringitem';else if(val&&val.texture)k='texture';else if(val&&val.item)k='item';
-  return`<div class="field"><label>${p} kind</label><select data-r="${p}-kind"><option value="item" ${k==='item'?'selected':''}>Item (object)</option><option value="texture" ${k==='texture'?'selected':''}>Texture</option><option value="stringitem" ${k==='stringitem'?'selected':''}>Item ID (string)</option></select></div><div class="field" data-r="${p}-item"><label>Item ID</label><input type="text" data-r="${p}-itemv" value="${esc(val&&val.item?val.item:'')}" placeholder="minecraft:diamond" /></div><div class="field hidden" data-r="${p}-tex"><label>Texture path</label><input type="text" data-r="${p}-texv" value="${esc(val&&val.texture?val.texture:'')}" /></div><div class="field hidden" data-r="${p}-str"><label>Item ID string</label><input type="text" data-r="${p}-strv" value="${typeof val==='string'?esc(val):''}" /></div>`;
+  return`<div class="field" data-tip="Choose how this icon is written in Questlog JSON."><label>${p} kind</label><select data-r="${p}-kind"><option value="item" ${k==='item'?'selected':''}>Item (object)</option><option value="texture" ${k==='texture'?'selected':''}>Texture</option><option value="stringitem" ${k==='stringitem'?'selected':''}>Item ID (string)</option></select></div><div class="field" data-r="${p}-item" data-tip="Minecraft item ID used for the Questlog icon."><label>Item ID</label><input type="text" data-r="${p}-itemv" value="${esc(val&&val.item?val.item:'')}" placeholder="minecraft:diamond" /></div><div class="field hidden" data-r="${p}-tex" data-tip="Resource-pack texture path used for the Questlog icon."><label>Texture path</label><input type="text" data-r="${p}-texv" value="${esc(val&&val.texture?val.texture:'')}" /></div><div class="field hidden" data-r="${p}-str" data-tip="Legacy/simple item ID string format."><label>Item ID string</label><input type="text" data-r="${p}-strv" value="${typeof val==='string'?esc(val):''}" /></div>`;
 }
 
 // ── Description toolbar HTML ──────────────────────────────────────
@@ -706,10 +975,10 @@ function renderQForm(q){
 <details class="section" data-panel-key="display" open>
   <summary>Display &amp; Text</summary>
   <div class="sec-body">
-    <div class="g2"><div class="field"><label>Title</label><input type="text" id="qf_title" value="${esc(q.title||'')}" /></div><div class="field"><label>Sort order</label><input type="number" id="qf_sort_order" value="${d('sort_order',0)}" /></div><div class="field"><label>Chapter ID</label><input type="text" id="qf_chapter" value="${esc(ch)}" placeholder="questlog:main" /></div></div>
+    <div class="g2"><div class="field" data-tip="The player-facing quest title shown in Questlog."><label>Title</label><input type="text" id="qf_title" value="${esc(q.title||'')}" /></div><div class="field" data-tip="Questlog uses this number to order quests inside a chapter."><label>Sort order</label><input type="number" id="qf_sort_order" value="${d('sort_order',0)}" /></div><div class="field" data-tip="The chapter this quest belongs to, usually namespace:chapter_file_name."><label>Chapter ID</label><input type="text" id="qf_chapter" value="${esc(ch)}" placeholder="questlog:main" /></div></div>
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin:10px 0;"><label class="toggle-label" data-tip="Mark the quest text as translatable for language files."><input type="checkbox" id="qf_translatable" ${d('translatable',false)?'checked':''} /> Translatable</label><label class="toggle-label" data-tip="Show this quest in the main Questlog view when appropriate."><input type="checkbox" id="qf_include_in_main" ${incMain?'checked':''} /> Include in main</label><label class="toggle-label" data-tip="Hide even after requirements are met. Usually requirements are enough for normal gating."><input type="checkbox" id="qf_hidden" ${d('hidden',false)?'checked':''} /> Hidden permanently</label></div>
     <div class="hint" style="margin-bottom:10px;">⚠ <strong>Hidden</strong> suppresses even after requirements are met. Requirements auto-gate — no need for hidden.</div>
-    <div class="field"><label>Description</label>${descToolbar('qf_description')}<textarea id="qf_description">${esc(typeof q.description==='string'?q.description:q.description!=null?JSON.stringify(q.description):'')}</textarea></div>
+    <div class="field" data-tip="Main quest description. Supports Questlog rich text links and formatting codes."><label>Description</label>${descToolbar('qf_description')}<textarea id="qf_description">${esc(typeof q.description==='string'?q.description:q.description!=null?JSON.stringify(q.description):'')}</textarea></div>
     <div class="hint" style="margin-bottom:8px;">Supports <span class="kbd">[text](quest:ns:id)</span>, <span class="kbd">[text](image:ns:path)</span></div>
     ${renderDescField('qf_description_completed','Description (completed)',q.description_completed,true)}
     ${renderDescField('qf_description_failed','Description (failed)',q.description_failed,true)}
@@ -730,8 +999,8 @@ function renderQForm(q){
 <details class="section" data-panel-key="sounds">
   <summary>Sounds &amp; Notifications</summary>
   <div class="sec-body">
-    <div class="g2" style="grid-template-columns:1fr 1fr;"><div class="field"><label>Completed sound</label><input type="text" id="qf_completed_sound" value="${esc(d('completed_sound','')||'')}" placeholder="minecraft:block.amethyst_block.hit" /></div><div class="field"><label>Triggered sound</label><input type="text" id="qf_triggered_sound" value="${esc(d('triggered_sound','')||'')}" placeholder="minecraft:item.trident.hit_ground" /></div></div>
-    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;"><label class="toggle-label"><input type="checkbox" id="qf_toast_on_unlock" ${d('toast_on_unlock',true)?'checked':''} /> Toast on unlock</label><label class="toggle-label"><input type="checkbox" id="qf_toast_on_complete" ${d('toast_on_complete',true)?'checked':''} /> Toast on complete</label><label class="toggle-label"><input type="checkbox" id="qf_show_popup_on_unlock" ${d('show_popup_on_unlock',false)?'checked':''} /> Popup on unlock</label></div>
+    <div class="g2" style="grid-template-columns:1fr 1fr;"><div class="field" data-tip="Sound played when the quest is completed. Use a Minecraft sound ID."><label>Completed sound</label><input type="text" id="qf_completed_sound" value="${esc(d('completed_sound','')||'')}" placeholder="minecraft:block.amethyst_block.hit" /></div><div class="field" data-tip="Sound played when the quest unlocks or triggers. Use a Minecraft sound ID."><label>Triggered sound</label><input type="text" id="qf_triggered_sound" value="${esc(d('triggered_sound','')||'')}" placeholder="minecraft:item.trident.hit_ground" /></div></div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;"><label class="toggle-label" data-tip="Show a toast when this quest becomes available."><input type="checkbox" id="qf_toast_on_unlock" ${d('toast_on_unlock',true)?'checked':''} /> Toast on unlock</label><label class="toggle-label" data-tip="Show a toast when this quest is completed."><input type="checkbox" id="qf_toast_on_complete" ${d('toast_on_complete',true)?'checked':''} /> Toast on complete</label><label class="toggle-label" data-tip="Show a larger popup when the quest unlocks."><input type="checkbox" id="qf_show_popup_on_unlock" ${d('show_popup_on_unlock',false)?'checked':''} /> Popup on unlock</label></div>
   </div>
 </details>
 
@@ -786,19 +1055,19 @@ function renderQForm(q){
 
 function renderChForm(c){
   const d=(k,v)=>(c[k]!==undefined?c[k]:v);
-  return`<div class="section"><div class="sec-body"><div class="g2"><div class="field"><label>Display name</label><input type="text" id="cf_name" value="${esc(c.name||'')}" /></div><div class="field"><label>Order</label><input type="number" id="cf_order" value="${d('order',0)}" /></div></div><div style="display:flex;flex-wrap:wrap;gap:12px;margin:10px 0;"><label class="toggle-label"><input type="checkbox" id="cf_translatable" ${d('translatable',false)?'checked':''} /> Translatable</label><label class="toggle-label"><input type="checkbox" id="cf_default_chapter" ${d('default_chapter',false)?'checked':''} /> Default chapter</label><label class="toggle-label"><input type="checkbox" id="cf_hidden" ${d('hidden',false)?'checked':''} /> Hidden</label></div><div class="hint" style="margin-bottom:10px;">Hidden chapters still show quests if requirements are met.</div><div class="g2">${renderRend('chicon',c.icon)}</div></div></div>`;
+  return`<div class="section"><div class="sec-body"><div class="g2"><div class="field" data-tip="The player-facing chapter name shown in Questlog."><label>Display name</label><input type="text" id="cf_name" value="${esc(c.name||'')}" /></div><div class="field" data-tip="Questlog uses this number to order chapters."><label>Order</label><input type="number" id="cf_order" value="${d('order',0)}" /></div></div><div style="display:flex;flex-wrap:wrap;gap:12px;margin:10px 0;"><label class="toggle-label" data-tip="Mark chapter text as translatable for language files."><input type="checkbox" id="cf_translatable" ${d('translatable',false)?'checked':''} /> Translatable</label><label class="toggle-label" data-tip="Use this as the default chapter when Questlog opens."><input type="checkbox" id="cf_default_chapter" ${d('default_chapter',false)?'checked':''} /> Default chapter</label><label class="toggle-label" data-tip="Hide the chapter until Questlog conditions reveal it."><input type="checkbox" id="cf_hidden" ${d('hidden',false)?'checked':''} /> Hidden</label></div><div class="hint" style="margin-bottom:10px;">Hidden chapters still show quests if requirements are met.</div><div class="g2">${renderRend('chicon',c.icon)}</div></div></div>`;
 }
 
 // ── Objectives ────────────────────────────────────────────────────
-function oSel(sel){return`<select class="obj-type">${OBJ_TYPES.map(t=>`<option value="${t}" ${t===sel?'selected':''}>${t}</option>`).join('')}</select>`;}
-function rSel(sel){return`<select class="rew-type">${REW_TYPES.map(t=>`<option value="${t}" ${t===sel?'selected':''}>${t}</option>`).join('')}</select>`;}
+function oSel(sel){return`<select class="obj-type" data-tip="Choose the Questlog objective type this entry uses.">${OBJ_TYPES.map(t=>`<option value="${t}" ${t===sel?'selected':''}>${t}</option>`).join('')}</select>`;}
+function rSel(sel){return`<select class="rew-type" data-tip="Choose the Questlog reward type this entry gives.">${REW_TYPES.map(t=>`<option value="${t}" ${t===sel?'selected':''}>${t}</option>`).join('')}</select>`;}
 
 function renderOF(o){
   const t=o.type||'questlog:item_obtain';const ra=o.required_amount!==undefined?o.required_amount:1;
-  const cn=`<div class="field"><label>Name (display)</label><input type="text" class="obj-name" value="${esc(o.name||'')}" placeholder="optional" /></div><label class="toggle-label" style="margin-bottom:8px;"><input type="checkbox" class="obj-trans" ${o.translatable?'checked':''} /> Name is translation key</label>`;
+  const cn=`<div class="field" data-tip="Optional display name for this objective. Leave blank if the type does not need a label."><label>Name (display)</label><input type="text" class="obj-name" value="${esc(o.name||'')}" placeholder="optional" /></div><label class="toggle-label" style="margin-bottom:8px;" data-tip="Treat the objective name as a language key instead of literal text."><input type="checkbox" class="obj-trans" ${o.translatable?'checked':''} /> Name is translation key</label>`;
   const iv=o.icon===undefined||o.icon===null?'':typeof o.icon==='string'?o.icon:JSON.stringify(o.icon);
   const ci=`<div class="field"><label>Icon — optional</label><input type="text" class="obj-icon" value="${esc(iv)}" placeholder='item id or {"item":"..."}' /></div>`;
-  const amt=s=>s?`<div class="field"><label>Required amount</label><input type="number" class="obj-amt" min="1" value="${ra}" /></div>`:'';
+  const amt=s=>s?`<div class="field" data-tip="How many times the player must do this objective. Some Questlog objective types do not use this."><label>Required amount</label><input type="number" class="obj-amt" min="1" value="${ra}" /></div>`:'';
   if(t==='questlog:or'){const k=Array.isArray(o.objectives)?o.objectives:[];return`${cn}<div class="nested or-kids">${k.map((c,i)=>wrapOC(c,i)).join('')}</div><button type="button" class="btn btn-dashed add-or-child" style="margin-top:5px;">+ Sub-objective</button>`;}
   if(t==='questlog:not'){const ch=o.objective||{type:'questlog:read'};return`${cn}<div class="nested not-child">${wrapOC(ch,0,true)}</div>`;}
   if(t==='questlog:unobtainable')return`${cn}${ci}`;
@@ -934,6 +1203,7 @@ function bindQForm(){
 
 function bindChForm(){
   const sync=()=>{
+    touchFile('chapter',currentFile);
     const c=getCD();c.name=$('#cf_name').value;c.order=parseInt($('#cf_order').value,10)||0;c.translatable=$('#cf_translatable').checked;c.default_chapter=$('#cf_default_chapter').checked;c.hidden=$('#cf_hidden').checked;
     const k=document.querySelector('[data-r="chicon-kind"]')?.value;if(k==='stringitem'){const v=document.querySelector('[data-r="chicon-strv"]')?.value?.trim();if(v)c.icon=v;else delete c.icon;}else if(k==='item'){const v=document.querySelector('[data-r="chicon-itemv"]')?.value?.trim();if(v)c.icon={item:v};else delete c.icon;}else{const v=document.querySelector('[data-r="chicon-texv"]')?.value?.trim();if(v)c.icon={texture:v};else delete c.icon;}
     trimCh(c);setCD(c);dRefresh();renderFileList();
@@ -949,6 +1219,7 @@ function sOS(obj,k,v){v=v.trim();if(v)obj[k]=v;else delete obj[k];}
 
 function syncQ(){
   if(!currentFile||mode!=='quest'||rawMode)return;
+  touchFile('quest',currentFile);
   const q=getCD();
   q.title=$('#qf_title')?.value||'';q.sort_order=parseInt($('#qf_sort_order')?.value,10)||0;q.chapter=$('#qf_chapter')?.value?.trim()||'questlog:main';q.translatable=$('#qf_translatable')?.checked;q.include_in_main=$('#qf_include_in_main')?.checked;q.hidden=$('#qf_hidden')?.checked;
   const dv=$('#qf_description')?.value||'';q.description=pMJ(dv);if(q.description===''||q.description===undefined)delete q.description;
@@ -1221,6 +1492,63 @@ function validateAll(currentOnly){
   return out;
 }
 
+function panelForIssue(issue){
+  if(issue.kind==='chapter')return null;
+  const p=issue.path||'';
+  if(/^(requirements|objectives|failures|rewards)/.test(p))return 'progress';
+  if(/sound|toast|popup/.test(p))return 'sounds';
+  if(/texture|overlay|panel_/.test(p))return 'layout';
+  if(/text_color|button_text|collected_text|uncollected_text|progress_text_color/.test(p))return 'labels';
+  if(/^badge/.test(p))return 'badge';
+  return 'display';
+}
+function targetForIssue(issue){
+  const p=issue.path||'';
+  if(issue.kind==='chapter'){
+    const map={name:'#cf_name',order:'#cf_order'};
+    return $(map[p])?.closest('.field')||$('#panelForm');
+  }
+  const direct={
+    title:'#qf_title',sort_order:'#qf_sort_order',chapter:'#qf_chapter',hidden:'#qf_hidden',
+    completed_sound:'#qf_completed_sound',triggered_sound:'#qf_triggered_sound',
+    text_color:'#qf_text_color',completed_text_color:'#qf_completed_text_color',
+    hovered_text_color:'#qf_hovered_text_color',title_color:'#qf_title_color',
+    progress_text_color:'#qf_progress_text_color'
+  };
+  if(direct[p])return $(direct[p])?.closest('.field,.toggle-label')||$(direct[p]);
+  const listMatch=p.match(/^(requirements|objectives|failures|rewards)\[(\d+)\](?:\.(\w+))?/);
+  if(listMatch){
+    const root={requirements:'#reqList',objectives:'#objList',failures:'#failList',rewards:'#rewList'}[listMatch[1]];
+    const card=$(root)?.querySelector(`:scope > .${listMatch[1]==='rewards'?'rew':'obj'}-card[data-${listMatch[1]==='rewards'?'ri':'i'}="${listMatch[2]}"]`);
+    if(!card)return $(root);
+    const field=listMatch[3]||'';
+    const cls={
+      type:'.obj-type,.rew-type',name:'.obj-name,.rw-name',required_amount:'.obj-amt',
+      item:'.obj-item,.rw-item',block:'.obj-block',entity:'.obj-entity',quest:'.obj-quest,.obj-read-quest',
+      advancement:'.obj-adv',claim_sound:'.rw-sound',count:'.rw-count',command:'.rw-cmd',
+      experience:'.rw-xp',loot_table:'.rw-loot',permission_level:'.rw-plvl'
+    }[field];
+    const el=cls?card.querySelector(cls):null;
+    return el?.closest('.field,.card-head')||card;
+  }
+  return $('#panelForm');
+}
+function jumpToIssue(issue){
+  const panel=panelForIssue(issue);
+  if(panel)setTab(panel);
+  selectFile(issue.file,issue.kind,panel);
+  setTimeout(()=>{
+    const target=targetForIssue(issue);if(!target)return;
+    $$('.validation-highlight').forEach(el=>el.classList.remove('validation-highlight'));
+    target.classList.add('validation-highlight');
+    target.scrollIntoView({behavior:'smooth',block:'center'});
+    const input=target.matches('input,textarea,select')?target:target.querySelector('input,textarea,select');
+    input?.focus?.({preventScroll:true});
+    showMsg('Jumped to validation issue.',true);
+    setTimeout(()=>target.classList.remove('validation-highlight'),3600);
+  },60);
+}
+
 function renderValidation(){
   const list=$('#validationList'),badge=$('#validationBadge');if(!list||!badge)return;
   const project=$('#validateProject')?.checked!==false;
@@ -1234,8 +1562,8 @@ function renderValidation(){
   if(!issues.length){list.innerHTML=`<div class="validation-empty">No problems found. Clean JSON, tidy satchel. ✨</div>`;return;}
   const order={missing:0,error:1,warn:2,info:3};
   const sorted=[...issues].sort((a,b)=>(order[a.level]??9)-(order[b.level]??9)||String(a.file).localeCompare(String(b.file)));
-  list.innerHTML=sorted.slice(0,100).map(i=>`<div class="validation-issue ${i.level}" data-file="${esc(i.file)}" data-kind="${esc(i.kind)}"><div class="validation-issue-top"><span class="validation-sev">${esc(i.level)}</span><span class="validation-file">${esc(i.file)}</span><span class="validation-path">${esc(i.path)}</span></div><div class="validation-msg">${esc(i.msg)}</div></div>`).join('')+(sorted.length>100?`<div class="validation-empty">${sorted.length-100} more issues hidden.</div>`:'');
-  $$('.validation-issue',list).forEach(el=>{el.onclick=()=>{selectFile(el.dataset.file,el.dataset.kind);showMsg('Selected '+el.dataset.file,true);};});
+  list.innerHTML=sorted.slice(0,100).map((i,idx)=>`<div class="validation-issue ${i.level}" data-issue-index="${idx}" data-file="${esc(i.file)}" data-kind="${esc(i.kind)}" data-path="${esc(i.path)}" data-tip="Click to jump to this warning in the editor."><div class="validation-issue-top"><span class="validation-sev">${esc(i.level)}</span><span class="validation-file">${esc(i.file)}</span><span class="validation-path">${esc(i.path)}</span></div><div class="validation-msg">${esc(i.msg)}</div></div>`).join('')+(sorted.length>100?`<div class="validation-empty">${sorted.length-100} more issues hidden.</div>`:'');
+  $$('.validation-issue',list).forEach(el=>{el.onclick=()=>jumpToIssue(sorted[Number(el.dataset.issueIndex)]);});
 }
 const dValidate=debounce(renderValidation,220);
 
@@ -1279,13 +1607,43 @@ function setupSettingsMenu(){
   };
   menu.addEventListener('click',e=>e.stopPropagation());
   document.addEventListener('click',closeSettingsMenu);
-  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSettingsMenu();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettingsMenu();closeChangelogModal();closeTutorialPrompt();}});
+}
+function setupSidebarResize(){
+  const app=$('.app-body'),handle=$('#sidebarResizer');if(!app||!handle)return;
+  const clamp=n=>Math.max(210,Math.min(360,Math.round(n)));
+  const apply=n=>app.style.setProperty('--sidebar-width',`${clamp(n)}px`);
+  const saved=parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY),10);
+  apply(Number.isFinite(saved)?saved:240);
+  let dragging=false;
+  handle.addEventListener('pointerdown',e=>{
+    dragging=true;
+    handle.classList.add('dragging');
+    handle.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+  });
+  window.addEventListener('pointermove',e=>{
+    if(!dragging)return;
+    const left=app.getBoundingClientRect().left;
+    apply(e.clientX-left);
+  });
+  window.addEventListener('pointerup',e=>{
+    if(!dragging)return;
+    dragging=false;
+    handle.classList.remove('dragging');
+    handle.releasePointerCapture?.(e.pointerId);
+    const width=parseInt(getComputedStyle(app).getPropertyValue('--sidebar-width'),10);
+    if(Number.isFinite(width))localStorage.setItem(SIDEBAR_WIDTH_KEY,String(width));
+  });
 }
 setupSettingsMenu();
 setupHelpInteractions();
+setupSidebarResize();
 
-onClick('#btnNewQuest',()=>{let b='new_quest',n=`${b}.json`,i=1;while(quests[n])n=`${b}_${i++}.json`;quests[n]=defQ();selectFile(n,'quest');});
-onClick('#btnNewChapter',()=>{let b='new_chapter',n=`${b}.json`,i=1;while(chapters[n])n=`${b}_${i++}.json`;chapters[n]=defC();selectFile(n,'chapter');});
+onClick('#btnNewQuest',()=>{let b='new_quest',n=`${b}.json`,i=1;while(quests[n])n=`${b}_${i++}.json`;quests[n]=defQ();touchFile('quest',n);selectFile(n,'quest');});
+onClick('#btnNewChapter',()=>{let b='new_chapter',n=`${b}.json`,i=1;while(chapters[n])n=`${b}_${i++}.json`;chapters[n]=defC();touchFile('chapter',n);selectFile(n,'chapter');});
+onEvent('#questListSort','change',e=>setListSort(e.target.value));
+onEvent('#questSearch','input',e=>setQuestSearch(e.target.value));
 onClick('#btnPickImport',()=>$('#fileImport')?.click());
 const fileImportEl=$('#fileImport');
 if(fileImportEl)fileImportEl.onchange=async e=>{
@@ -1306,18 +1664,30 @@ onEvent('#templateCategory','change',renderTemplateModal);
 $('#templateComplexity')?.addEventListener('change',renderTemplateModal);
 $('#templateTag')?.addEventListener('change',renderTemplateModal);
 onClick('#templateModal',e=>{if(e.target===$('#templateModal'))closeTemplateModal();});
+onClick('#btnChangelog',openChangelogModal);
+onClick('#changelogCloseBtn',closeChangelogModal);
+onEvent('#changelogVersion','change',e=>renderChangelog(e.target.value));
+onClick('#changelogModal',e=>{if(e.target===$('#changelogModal'))closeChangelogModal();});
+onClick('#btnTutorial',startTutorial);
+onClick('#tutorialYesBtn',startTutorial);
+onClick('#tutorialNoBtn',()=>{markTutorialSeen();closeTutorialPrompt();});
+$('#tutorialPop')?.addEventListener('click',e=>e.stopPropagation());
+onClick('#tutorialQuitBtn',e=>{e.stopPropagation();endTutorial(true);});
+onClick('#tutorialBackBtn',e=>{e.stopPropagation();tutorialIndex=Math.max(0,tutorialIndex-1);renderTutorial();});
+onClick('#tutorialNextBtn',e=>{e.stopPropagation();if(tutorialIndex>=TUTORIAL_STEPS.length-1)endTutorial(true);else{tutorialIndex++;renderTutorial();}});
+onClick('#tutorialPrompt',e=>{if(e.target===$('#tutorialPrompt')){markTutorialSeen();closeTutorialPrompt();}});
 $('#compactJson')?.addEventListener('change',()=>{refreshJson();scheduleAutosave();});
 if($('#viewRaw'))$('#viewRaw').onchange=()=>{rawMode=!!$('#viewRaw')?.checked;renderMain();};
 $('#autosaveToggle')?.addEventListener('change',e=>setAutosaveEnabled(e.target.checked));
 $('#tooltipsToggle')?.addEventListener('change',e=>setTooltipsEnabled(e.target.checked));
 $('#defaultNs')?.addEventListener('input',()=>{renderFileList();renderValidation();refreshJson();scheduleAutosave();});
 const lj=$('#liveJson');
-const applyLJ=debounce(()=>{if(!currentFile||!getCD())return;try{const p=JSON.parse(lj.value);if(mode==='quest'){fixQA(p);nqbd(p);trimQ(p);quests[currentFile]=p;}else{trimCh(p);chapters[currentFile]=p;}lj.value=mode==='quest'?stringifyJson(buildQOut(p)):stringifyJson(p);showMsg('JSON applied.',true);renderMain();}catch(err){showMsg(err.message||String(err),false);}},420);
+const applyLJ=debounce(()=>{if(!currentFile||!getCD())return;try{const p=JSON.parse(lj.value);if(mode==='quest'){fixQA(p);nqbd(p);trimQ(p);quests[currentFile]=p;touchFile('quest',currentFile);}else{trimCh(p);chapters[currentFile]=p;touchFile('chapter',currentFile);}lj.value=mode==='quest'?stringifyJson(buildQOut(p)):stringifyJson(p);showMsg('JSON applied.',true);renderMain();}catch(err){showMsg(err.message||String(err),false);}},420);
 lj.addEventListener('focusin',()=>{jsonFocused=true;});
 lj.addEventListener('focusout',()=>{jsonFocused=false;refreshJson();});
 lj.addEventListener('input',()=>{if(!currentFile)return;applyLJ();});
 onClick('#btnDownload',()=>{if(!currentFile)return;if(mode==='chapter'&&$('#cf_name'))$('#cf_name').oninput?.();else syncQ();const data=getCD();if(!data)return;let out;if(mode==='quest')out=buildQOut(data);else{out=JSON.parse(JSON.stringify(data));trimCh(out);}downloadBlob(new Blob([stringifyJson(out)],{type:'application/json'}),currentFile);showMsg('Downloaded.',true);});
-onClick('#btnDownloadAll',async()=>{if(typeof JSZip==='undefined'){showMsg('JSZip failed.',false);return;}if(mode==='quest')syncQ();else if($('#cf_name'))$('#cf_name').oninput?.();const zip=new JSZip();Object.entries(quests).forEach(([n,o])=>zip.file(`quests/${n}`,stringifyJson(buildQOut(o))));Object.entries(chapters).forEach(([n,c])=>{const cp=JSON.parse(JSON.stringify(c));trimCh(cp);zip.file(`chapters/${n}`,stringifyJson(cp));});const blob=await zip.generateAsync({type:'blob'});downloadBlob(blob,'questlog_export.zip');showMsg($('#compactJson')?.checked?'Compact ZIP exported.':'Pretty ZIP exported.',true);});
+onClick('#btnDownloadAll',async()=>{if(typeof JSZip==='undefined'){showMsg('JSZip failed.',false);return;}if(mode==='quest')syncQ();else if($('#cf_name'))$('#cf_name').oninput?.();const zip=new JSZip();Object.entries(quests).forEach(([n,o])=>zip.file(`config/questlog/quests/${n}`,stringifyJson(buildQOut(o))));Object.entries(chapters).forEach(([n,c])=>{const cp=JSON.parse(JSON.stringify(c));trimCh(cp);zip.file(`config/questlog/chapters/${n}`,stringifyJson(cp));});const blob=await zip.generateAsync({type:'blob'});downloadBlob(blob,'questlog_export.zip');showMsg($('#compactJson')?.checked?'Compact ZIP exported.':'Pretty ZIP exported.',true);});
 function shouldRecordHistory(e){
   if(historyRestoring)return false;
   const t=e.target;if(!t||!t.closest)return false;
@@ -1343,6 +1713,7 @@ function shouldRecordHistory(e){
 function maybeRecordHistory(e){if(shouldRecordHistory(e))pushHistorySnapshot();}
 function maybeRecordFocusHistory(e){
   const t=e.target;
+  if(['questListSort','questSearch'].includes(t?.id))return;
   if(!historyRestoring&&t?.closest?.('input,textarea,select'))pushHistorySnapshot();
 }
 document.body.addEventListener('focusin',maybeRecordFocusHistory,true);
@@ -1351,7 +1722,7 @@ document.body.addEventListener('change',maybeRecordHistory,true);
 document.body.addEventListener('click',maybeRecordHistory,true);
 $('#btnUndo')?.addEventListener('click',undoProject);
 $('#btnRedo')?.addEventListener('click',redoProject);
-function onFC(e){if(e&&(e.target===lj||e.target.closest?.('#liveJson')||e.target.id==='viewRaw'))return;if(rawMode)return;if(mode==='quest'){syncQ();dRefresh();}else if($('#cf_name'))$('#cf_name').oninput?.();}
+function onFC(e){if(e&&(e.target===lj||e.target.closest?.('#liveJson')||['viewRaw','questListSort','questSearch'].includes(e.target.id)))return;if(rawMode)return;if(mode==='quest'){syncQ();dRefresh();}else if($('#cf_name'))$('#cf_name').oninput?.();}
 document.body.addEventListener('input',onFC);document.body.addEventListener('change',onFC);
 document.body.addEventListener('input',scheduleAutosave);document.body.addEventListener('change',scheduleAutosave);document.body.addEventListener('click',()=>setTimeout(scheduleAutosave,0));
 onClick('#btnValidate',()=>{if(mode==='quest')syncQ();else if($('#cf_name'))$('#cf_name').oninput?.();renderValidation();showMsg('Validation refreshed.',true);});
@@ -1396,8 +1767,8 @@ function showRenameModal(name,kind){
     setRenameModalError('');
     const nn=nv+'.json';
     if(nn===name){closeRenameModal();return;}
-    if(kind==='quest'){if(quests[nn]&&nn!==name){setRenameModalError('Name taken.');return;}quests[nn]=quests[name];delete quests[name];if(currentFile===name)currentFile=nn;}
-    else{if(chapters[nn]&&nn!==name){setRenameModalError('Name taken.');return;}chapters[nn]=chapters[name];delete chapters[name];if(currentFile===name)currentFile=nn;}
+    if(kind==='quest'){if(quests[nn]&&nn!==name){setRenameModalError('Name taken.');return;}quests[nn]=quests[name];delete quests[name];moveFileMeta('quest',name,nn);if(currentFile===name)currentFile=nn;}
+    else{if(chapters[nn]&&nn!==name){setRenameModalError('Name taken.');return;}chapters[nn]=chapters[name];delete chapters[name];moveFileMeta('chapter',name,nn);if(currentFile===name)currentFile=nn;}
     closeRenameModal();renderFileList();if(currentFile===nn)renderMain();
   };
 onClick('#renameConfirmBtn',commit);
@@ -1408,8 +1779,8 @@ onClick('#renameCancelBtn',closeRenameModal);
 
 function duplicateFile(name,kind){
   const base=name.replace(/\.json$/i,'');let nn=base+'_copy.json';let i=2;
-  if(kind==='quest'){while(quests[nn])nn=`${base}_copy${i++}.json`;quests[nn]=JSON.parse(JSON.stringify(quests[name]));}
-  else{while(chapters[nn])nn=`${base}_copy${i++}.json`;chapters[nn]=JSON.parse(JSON.stringify(chapters[name]));}
+  if(kind==='quest'){while(quests[nn])nn=`${base}_copy${i++}.json`;quests[nn]=JSON.parse(JSON.stringify(quests[name]));touchFile('quest',nn);}
+  else{while(chapters[nn])nn=`${base}_copy${i++}.json`;chapters[nn]=JSON.parse(JSON.stringify(chapters[name]));touchFile('chapter',nn);}
   renderFileList();showMsg(`Duplicated as ${nn}`,true);
 }
 
@@ -1419,7 +1790,8 @@ onClick('#ctxUnlink',()=>{if(ctxTarget?.kind==='quest'){unbindQ(ctxTarget.name);
 onClick('#ctxDelete',()=>{
   if(!ctxTarget)return;const{name,kind}=ctxTarget;hideCtxMenu();
   if(!confirm(`Delete ${name}?`))return;
-  if(kind==='quest')delete quests[name];else delete chapters[name];
+  if(kind==='quest'){delete quests[name];delete fileMeta[metaKey('quest',name)];}
+  else{delete chapters[name];delete fileMeta[metaKey('chapter',name)];}
   if(currentFile===name&&mode===kind)currentFile=null;
   renderFileList();renderMain();
 });
@@ -1436,5 +1808,6 @@ else{$('#btnNewQuest')?.click();}
 renderValidation();
 saveAutosaveNow('init');
 updateHistoryButtons();
+setTimeout(()=>openTutorialPrompt(false),500);
 setInterval(()=>saveAutosaveNow('interval'),8000);
 })();
