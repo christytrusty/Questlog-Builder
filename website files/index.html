@@ -3,7 +3,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Questlog JSON Editor</title>
-  <link rel="stylesheet" href="style.css?v=2.3">
+  <link rel="stylesheet" href="style.css?v=2.5">
 <style>
     :root {
       --bg:#131210; --sf:#1b1a16; --sf2:#232118; --sf3:#2a2924;
@@ -49,12 +49,12 @@
     .ns-wrap input{width:80px;padding:4px 7px;background:var(--bg);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--font);font-size:12px;outline:none;}
     .ns-wrap input:focus{border-color:var(--ac);}
     .settings-wrap{position:relative;}
-    .settings-menu{position:absolute;right:0;top:calc(100% + 8px);width:310px;max-height:calc(100vh - 62px);overflow:auto;background:var(--sf);border:1px solid var(--bd2);border-radius:var(--r2);box-shadow:0 14px 38px rgba(0,0,0,.48);z-index:1900;display:none;padding:12px;}
+    .settings-menu{position:absolute;right:0;top:calc(100% + 8px);width:340px;max-height:calc(100vh - 62px);overflow:auto;background:var(--sf);border:1px solid var(--bd2);border-radius:var(--r2);box-shadow:0 14px 38px rgba(0,0,0,.48);z-index:1900;display:none;padding:12px;}
     .settings-menu.open{display:block;}
     .settings-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;}
     .settings-title{font-weight:700;font-size:13px;color:var(--tx);}
-    .settings-section{border-top:1px solid var(--bd);padding-top:10px;margin-top:10px;}
-    .settings-section:first-of-type{border-top:none;padding-top:0;margin-top:0;}
+    .settings-section{border:1px solid var(--bd);border-radius:var(--r2);padding:10px;margin-top:9px;background:rgba(0,0,0,.08);}
+    .settings-section:first-of-type{margin-top:0;}
     .settings-label{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--mu2);margin-bottom:7px;}
     .settings-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:7px 0;}
     .settings-row .toggle-label{font-size:12px;}
@@ -63,6 +63,11 @@
     .settings-field input[type="text"]{width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--font);font-size:12.5px;outline:none;}
     .settings-field input[type="text"]:focus{border-color:var(--ac);}
     .settings-copy{font-size:11.5px;color:var(--mu);line-height:1.45;}
+    .settings-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:9px;}
+    .settings-action-grid .btn{width:100%;}
+    .settings-danger-zone{border-top:1px solid var(--bd);margin-top:10px;padding-top:10px;}
+    .compact-status{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-bottom:0;}
+    .compact-status span{border:1px solid var(--bd);border-radius:var(--r);padding:5px 6px;background:rgba(0,0,0,.08);color:var(--tx);}
     .changelog-list{margin:6px 0 0;padding-left:16px;color:var(--mu);font-size:11.5px;line-height:1.45;}
     .changelog-list li{margin:3px 0;}
     .changelog-card{width:min(760px,calc(100vw - 36px));max-height:calc(100vh - 54px);display:flex;flex-direction:column;gap:12px;}
@@ -73,6 +78,42 @@
     .changelog-version-title{font-size:18px;font-weight:800;color:var(--tx);line-height:1.2;margin-bottom:4px;}
     .changelog-version-sub{font-size:12px;color:var(--mu);margin-bottom:12px;}
     .changelog-section-title{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--ac);margin:14px 0 5px;}
+    .schema-badge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:var(--ac);text-decoration:none;border:1px solid rgba(212,146,74,.3);background:var(--ac-bg);border-radius:var(--r);padding:2px 7px;line-height:1.35;white-space:nowrap;}
+    .schema-badge:hover{border-color:rgba(212,146,74,.55);background:var(--ac-hi);}
+    .export-preview-card{width:min(820px,calc(100vw - 36px));max-height:calc(100vh - 54px);display:flex;flex-direction:column;gap:12px;}
+    .export-preview-body{overflow:auto;border-top:1px solid var(--bd);padding-top:12px;}
+    .export-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px;}
+    .export-summary-cell{border:1px solid var(--bd);border-radius:var(--r);background:var(--bg);padding:8px;}
+    .export-summary-num{font-size:18px;font-weight:800;color:var(--tx);line-height:1.1;}
+    .export-summary-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);margin-top:3px;}
+    .export-section-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--ac);margin:13px 0 6px;}
+    .export-info-box{border:1px solid var(--bd);border-radius:var(--r);background:rgba(212,146,74,.07);padding:8px 9px;margin-bottom:12px;color:var(--mu);font-size:11.5px;line-height:1.45;}
+    .export-check-list{display:grid;gap:6px;}
+    .export-check{border:1px solid var(--bd);border-radius:var(--r);background:var(--bg);padding:7px 8px;font-size:11.5px;line-height:1.4;color:var(--tx);}
+    .export-check.ok{border-color:rgba(90,138,74,.35);background:var(--ok-bg);}
+    .export-check.warn,.export-check.missing{border-color:rgba(212,146,74,.38);background:rgba(212,146,74,.09);}
+    .export-check.error{border-color:rgba(192,80,64,.35);background:var(--err-bg);}
+    .export-check strong{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;margin-right:5px;}
+    .tool-card{width:min(860px,calc(100vw - 36px));max-height:calc(100vh - 54px);display:flex;flex-direction:column;gap:12px;}
+    .tool-body{overflow:auto;border-top:1px solid var(--bd);padding-top:12px;}
+    .tool-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;}
+    .tool-panel{border:1px solid var(--bd);border-radius:var(--r);background:var(--bg);padding:10px;display:grid;gap:8px;align-content:start;}
+    .tool-panel-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--ac);}
+    .tool-copy{font-size:11.5px;color:var(--mu);line-height:1.45;}
+    .tool-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+    .tool-row input[type="text"]{flex:1;min-width:150px;padding:6px 8px;background:var(--sf);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--font);font-size:12.5px;outline:none;}
+    .tool-list{display:grid;gap:5px;max-height:260px;overflow:auto;padding-right:2px;}
+    .tool-list-item{display:flex;align-items:center;gap:7px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);padding:6px 7px;font-size:11.5px;min-width:0;}
+    .tool-list-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .tool-meta{font-family:var(--mono);color:var(--mu);font-size:10.5px;}
+    .recent-list{display:grid;gap:5px;overflow:auto;max-height:480px;}
+    .recent-row{display:flex;align-items:center;gap:8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--bg);padding:7px 8px;font-size:11.5px;cursor:pointer;}
+    .recent-row:hover{border-color:var(--bd2);background:var(--sf2);}
+    .recent-row-main{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .recent-row-sub{font-size:10.5px;color:var(--mu);white-space:nowrap;}
+    .migration-preview{display:grid;gap:4px;font-size:11.5px;color:var(--mu);}
+    @media (max-width:720px){.export-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+    @media (max-width:780px){.tool-grid{grid-template-columns:1fr;}}
     .hover-tip{position:fixed;z-index:3000;display:none;max-width:280px;padding:6px 8px;border:1px solid var(--bd2);border-radius:var(--r);background:var(--sf);color:var(--tx);box-shadow:0 8px 22px rgba(0,0,0,.45);font-size:11.5px;line-height:1.35;pointer-events:none;}
     .tutorial-card{width:min(430px,calc(100vw - 36px));}
     .tutorial-prompt-copy{font-size:12px;line-height:1.5;color:var(--mu);margin-top:-4px;}
@@ -117,9 +158,9 @@
     .sidebar-tools{border-bottom:1px solid var(--bd);padding:6px 6px 7px;display:grid;gap:5px;background:rgba(0,0,0,.08);}
     .sidebar-filter{width:100%;padding:5px 7px;border-radius:var(--r);border:1px solid var(--bd);background:var(--bg);color:var(--tx);font-family:var(--font);font-size:12px;outline:none;}
     .sidebar-filter:focus{border-color:var(--ac);}
-    .sidebar-sort{display:flex;align-items:center;gap:5px;}
-    .sidebar-sort label{font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mu2);white-space:nowrap;}
-    .sidebar-sort select{min-width:0;flex:1;padding:4px 6px;border-radius:var(--r);border:1px solid var(--bd);background:var(--bg);color:var(--tx);font-family:var(--font);font-size:11.5px;}
+    .sidebar-sort{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:5px;}
+    .sidebar-sort select{min-width:0;width:100%;padding:4px 6px;border-radius:var(--r);border:1px solid var(--bd);background:var(--bg);color:var(--tx);font-family:var(--font);font-size:11.5px;}
+    .sidebar-sort .btn{white-space:nowrap;padding:4px 7px;}
     .sb-scroll{flex:1;overflow-y:auto;padding:6px 5px;}
     .sb-group{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--mu2);padding:10px 5px 4px;user-select:none;}
     .sb-empty{font-size:11.5px;color:var(--mu);padding:3px 5px;font-style:italic;}
@@ -145,6 +186,7 @@
     /* ── Rename modal ──────────────────────────────────────────── */
     .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:2000;}
     .modal-bg.open{display:flex;}
+    #confirmModal{z-index:2400;}
     .modal-card{background:var(--sf);border:1px solid var(--bd2);border-radius:var(--r2);padding:20px 22px;min-width:300px;box-shadow:0 20px 60px rgba(0,0,0,.6);}
     .modal-title{font-size:13px;font-weight:600;color:var(--tx);margin-bottom:14px;}
     .modal-sub{font-size:11px;color:var(--mu);margin-bottom:8px;}
@@ -361,7 +403,7 @@
           <div>
             <div class="settings-title">Settings</div>
           </div>
-          <span class="version-pill" id="versionPill">v2.3</span>
+          <span class="version-pill" id="versionPill">v2.5</span>
         </div>
 
         <div class="settings-section">
@@ -383,20 +425,15 @@
         </div>
 
         <div class="settings-section">
-          <div class="settings-label">Changelog</div>
-          <div class="settings-copy">Open the project changelog and switch between completed or current versions.</div>
-          <div class="settings-row"><button type="button" class="btn" id="btnChangelog" data-tip="Open the full changelog with a version selector.">Open changelog</button></div>
-        </div>
-
-        <div class="settings-section">
-          <div class="settings-label">Tutorial</div>
-          <div class="settings-copy">Replay the guided editor rundown with highlighted controls.</div>
-          <div class="settings-row"><button type="button" class="btn" id="btnTutorial" data-tip="Start the guided Questlog Editor tutorial.">Open tutorial</button></div>
-        </div>
-
-        <div class="settings-section">
-          <div class="settings-label">Danger</div>
-          <button class="btn btn-danger-soft reset-sidebar-btn" id="btnResetProgress" title="Reset all editor progress" data-tip="Clear quests, chapters, autosave data, and saved undo history from this browser.">Reset saved progress</button>
+          <div class="settings-label">Status & support</div>
+          <div class="settings-copy compact-status" id="projectStatusMini">No project loaded.</div>
+          <div class="settings-action-grid">
+            <button type="button" class="btn" id="btnTutorial" data-tip="Start the guided Questlog Editor tutorial.">Tutorial</button>
+            <button type="button" class="btn" id="btnChangelog" data-tip="Open the full changelog with a version selector.">Changelog</button>
+          </div>
+          <div class="settings-danger-zone">
+            <button class="btn btn-danger-soft reset-sidebar-btn" id="btnResetProgress" title="Reset all editor progress" data-tip="Clear quests, chapters, autosave data, and saved undo history from this browser.">Reset saved progress</button>
+          </div>
         </div>
       </div>
     </div>
@@ -414,12 +451,12 @@
     <div class="sidebar-tools">
       <input type="search" class="sidebar-filter" id="questSearch" placeholder="Search quests..." autocomplete="off" data-tip="Temporarily filter the quest and chapter list. Clearing this box shows everything again.">
       <div class="sidebar-sort" data-tip="Change how chapters and quests are sorted in the left panel. This does not rename files or change JSON unless you edit fields.">
-        <label for="questListSort">Sort</label>
         <select id="questListSort">
           <option value="alpha">Alphabetical</option>
           <option value="order">Order</option>
           <option value="recent">Recent</option>
         </select>
+        <button class="btn btn-sm" id="btnBulkDeleteOpen" type="button" data-tip="Open a checklist for deleting multiple quest or chapter files.">Bulk delete</button>
       </div>
     </div>
     <div class="sb-scroll" id="fileList"></div>
@@ -440,7 +477,7 @@
         <div class="sidebar-menu" id="importExportMenu">
           <button type="button" id="btnPickImport" data-tip="Load existing Questlog JSON files or a project ZIP.">Import JSON / ZIP...</button>
           <button type="button" id="btnDownload" data-tip="Download only the currently selected quest or chapter JSON.">Export selected file</button>
-          <button type="button" id="btnDownloadAll" data-tip="Download all loaded quests and chapters as a Questlog project ZIP.">Export project ZIP</button>
+          <button type="button" id="btnDownloadAll" data-tip="Preview checks, then download all loaded quests and chapters as a Questlog project ZIP.">Export project ZIP</button>
         </div>
         <input type="file" id="fileImport" accept=".json,application/json,.zip,application/zip,application/x-zip-compressed" multiple="">
       </div>
@@ -469,6 +506,7 @@
       <span class="json-head-label" id="jsonPanelLabel">Live JSON</span>
       <div class="json-head-spacer"></div>
       <span class="autosave-status" id="autosaveStatus">Auto save mode</span>
+      <button class="btn btn-sm" id="btnManualSaveHead" type="button" hidden data-tip="Autosave is off. Save this browser project now.">Save now</button>
     </div>
     <section class="validation-panel" aria-label="Quest validation panel">
       <div class="validation-toolbar">
@@ -483,10 +521,36 @@
 
 </div>
 
+<!-- Bulk delete modal -->
+<div class="modal-bg" id="bulkDeleteModal">
+  <div class="modal-card tool-card">
+    <div class="changelog-head">
+      <div>
+        <div class="modal-title">Bulk delete</div>
+        <div class="modal-sub">Select quest/chapter files, review the count, then delete them together.</div>
+      </div>
+      <div class="changelog-tools">
+        <button class="btn" id="bulkDeleteCloseBtn">Close</button>
+      </div>
+    </div>
+      <div class="tool-body">
+        <div class="tool-row">
+          <button class="btn" id="bulkSelectNoneBtn">Select none</button>
+        </div>
+      <div class="tool-list" id="bulkDeleteList"></div>
+      <div class="tool-row">
+        <span class="tool-copy" id="bulkDeleteCount">0 selected</span>
+        <button class="btn btn-danger-soft" id="bulkDeleteBtn">Delete selected</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Context menu -->
 <div class="ctx-menu" id="ctxMenu">
   <button id="ctxEditName" data-tip="Rename the selected JSON file without changing its title text."><span class="ctx-icon">✎</span>Edit name</button>
   <button id="ctxDuplicate" data-tip="Copy the selected quest or chapter into a new file."><span class="ctx-icon">⎘</span>Duplicate</button>
+  <button id="ctxMakeTemplate" data-tip="Save this quest as a reusable custom template."><span class="ctx-icon">✦</span>Make template</button>
   <button id="ctxUnlink" data-tip="Remove this quest from its current chapter list."><span class="ctx-icon">↑</span>Unbind from chapter</button>
   <div class="ctx-sep"></div>
   <button id="ctxDelete" class="ctx-danger" data-tip="Delete the selected quest or chapter from this browser project."><span class="ctx-icon">✕</span>Delete</button>
@@ -502,6 +566,38 @@
     <div class="modal-actions">
       <button class="btn" id="renameCancelBtn">Cancel</button>
       <button class="btn btn-primary" id="renameConfirmBtn">Rename</button>
+    </div>
+  </div>
+</div>
+
+<!-- Export preview modal -->
+<div class="modal-bg" id="exportPreviewModal">
+  <div class="modal-card export-preview-card">
+    <div class="changelog-head">
+      <div>
+        <div class="modal-title">Export preview</div>
+        <div class="modal-sub">Check warnings and missing data before downloading the project ZIP.</div>
+      </div>
+      <div class="changelog-tools">
+        <button class="btn" id="exportPreviewCloseBtn">Close</button>
+      </div>
+    </div>
+    <div class="export-preview-body" id="exportPreviewBody"></div>
+    <div class="modal-actions">
+      <button class="btn" id="exportPreviewCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="exportPreviewZipBtn">Export ZIP</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm action modal -->
+<div class="modal-bg" id="confirmModal">
+  <div class="modal-card reset-card">
+    <div class="modal-title" id="confirmTitle">Confirm action?</div>
+    <div class="modal-sub" id="confirmCopy">This cannot be undone unless you use undo or restore a backup.</div>
+    <div class="modal-actions">
+      <button class="btn" id="confirmCancelBtn">Cancel</button>
+      <button class="btn btn-danger-soft" id="confirmActionBtn">Delete</button>
     </div>
   </div>
 </div>
@@ -568,6 +664,7 @@
       <select class="modal-input" id="templateTag">
         <option value="all">All objective tags</option>
       </select>
+      <label class="toggle-label" data-tip="Show only templates you created with right-click Make template."><input type="checkbox" id="templateCustomOnly"> Your templates</label>
     </div>
     <div class="template-actions">
       <button class="btn btn-primary" id="templateCreatePack">Create starter pack</button>
@@ -598,19 +695,19 @@
   </div>
 </div>
 
-<script src="error-guard.js?v=2.3"></script>
-<script src="jszip.min.js?v=2.3"></script>
-<script src="minecraft-ids.js?v=2.3"></script>
-<script src="minecraft-sounds.js?v=2.3"></script>
-<script src="app.js?v=2.3"></script>
+<script src="error-guard.js?v=2.5"></script>
+<script src="jszip.min.js?v=2.5"></script>
+<script src="minecraft-ids.js?v=2.5"></script>
+<script src="minecraft-sounds.js?v=2.5"></script>
+<script src="app.js?v=2.5"></script>
 <script>
-  window.QUESTLOG_HTML_VERSION='2.3';
+  window.QUESTLOG_HTML_VERSION='2.5';
   setTimeout(function(){
-    if(window.QUESTLOG_APP_VERSION==='2.3'||document.documentElement.dataset.questlogAppVersion==='2.3')return;
+    if(window.QUESTLOG_APP_VERSION==='2.5'||document.documentElement.dataset.questlogAppVersion==='2.5')return;
     var warn=document.createElement('div');
     warn.id='versionMismatchWarning';
     warn.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(10,8,6,.92);color:#f3d7a4;display:flex;align-items:center;justify-content:center;padding:24px;font:14px system-ui,sans-serif;';
-    warn.innerHTML='<div style="max-width:560px;border:1px solid #d4924a;background:#1b1a16;padding:18px;border-radius:5px;line-height:1.5"><strong style="display:block;color:#fff;margin-bottom:8px">Questlog Editor files are mixed.</strong>The page loaded v2.3 HTML, but the app script is missing or still an older cached version. Re-upload every file from the website files folder, then hard refresh this page.</div>';
+    warn.innerHTML='<div style="max-width:560px;border:1px solid #d4924a;background:#1b1a16;padding:18px;border-radius:5px;line-height:1.5"><strong style="display:block;color:#fff;margin-bottom:8px">Questlog Editor files are mixed.</strong>The page loaded v2.5 HTML, but the app script is missing or still an older cached version. Re-upload every file from the website files folder, then hard refresh this page.</div>';
     document.body.appendChild(warn);
   },800);
 </script>

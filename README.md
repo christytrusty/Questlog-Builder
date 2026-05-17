@@ -13,6 +13,8 @@ Questlog Builder is an independent editor for Questlog JSON projects and is not 
 - Export files back into the Questlog folder layout.
 - Validate common missing fields and broken references.
 - Use starter quest templates as examples.
+- Preview export readiness before downloading a project ZIP.
+- Save custom quest templates and bulk-delete project files.
 
 ## Project Layout
 
@@ -42,5 +44,8 @@ This repository keeps the public website versions in order:
 - `v2.0`
 - `v2.2`
 - `v2.3`
+- `v2.5`
+
+Current public release: `v2.5`.
 
 Newer work is added after it passes the local release checklist.

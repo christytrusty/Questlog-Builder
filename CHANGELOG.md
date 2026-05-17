@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.5
+
+- Added an export preview flow focused on warning counts, missing data, and the Questlog install folders.
+- Added a sample project ZIP fixture for import/export regression checks.
+- Added right-click Make template for saving selected quests as custom reusable templates.
+- Added custom-template filtering and per-template deletion.
+- Added a left-sidebar Bulk delete flow with an in-app confirmation modal.
+- Replaced browser delete popups with in-app delete confirmations.
+- Added compact project status in Settings.
+- Added a right-panel Save now button when autosave is turned off.
+- Removed confusing Activity and Project tools panels from the visible UI.
+- Cleaned the Settings support/status area.
+- Passed local saved-data replacement testing from v2.3 to v2.5 before release.
+
 ## v2.3
 
 - Added a changelog window with version selection.
