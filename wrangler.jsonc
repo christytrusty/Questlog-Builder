@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "questlog-builder",
+  "compatibility_date": "2026-05-18",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "website files"
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
+}
