@@ -1,4 +1,16 @@
-# Changelog
+﻿# Changelog
+
+## v2.8
+
+- Cleaned up the Advanced editor into clearer texture, overlay, panel, label, color, and badge groups.
+- Added drag-and-drop import for `.json` and `.zip` files using the same safe import path as the Import/export menu.
+- Polished templates with custom-template counts, custom highlighting, clearer Use template actions, and source-file metadata for templates made from quests.
+- Upgraded Export ZIP into a clearer export readiness screen with ready/review/not-ready status, upload path reminders, clickable warning rows, and missing-chapter export blockers.
+- Optional UI sounds now load replaceable `.wav` files from `website files/ui-sounds/`, with typing sounds, a top-right mute button, Settings toggles, and volume up to 200%.
+- Added Website personalization for premade light/dark themes, selected theme pairing, curated fonts, editor toggles, and sound feel settings.
+- Refreshed vanilla Minecraft Java 1.21.1 sound, item, block, and biome suggestions.
+- Added verified mod ID suggestion packs generated from selected mod jars, while keeping internal counts and source notes out of the UI.
+- Simplified the mod support selector so each row shows the mod name, mod ID, and a short creator-friendly description.
 
 ## v2.5
 
@@ -12,7 +24,6 @@
 - Added a right-panel Save now button when autosave is turned off.
 - Removed confusing Activity and Project tools panels from the visible UI.
 - Cleaned the Settings support/status area.
-- Passed local saved-data replacement testing from v2.3 to v2.5 before release.
 
 ## v2.3
 

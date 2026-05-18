@@ -28,10 +28,57 @@ function maybeRunStorageRecovery(){
 maybeRunStorageRecovery();
 
 // ── Theme ─────────────────────────────────────────────────────────
+const THEME_NAMES={
+  dark:'Questlog Dark',
+  light:'Questlog Light',
+  mossbound:'Mossbound',
+  'ivory-harbor':'Ivory Harbor',
+  'royal-steel':'Royal Steel',
+  'cocoa-gold':'Cocoa Gold',
+  'neon-slate':'Neon Slate',
+  'matrix-lime':'Matrix Lime',
+  'violet-laser':'Violet Laser',
+  'mars-charcoal':'Mars Charcoal',
+  'crimson-smoke':'Crimson Smoke',
+  'frosted-steel':'Frosted Steel',
+  'umber-sand':'Umber Sand',
+  'blush-clay':'Blush Clay',
+  'emerald-spruce':'Emerald Spruce',
+  'valhalla-bloom':'Valhalla Bloom',
+  'heliotrope-mist':'Heliotrope Mist',
+  'ink-mint':'Ink Mint',
+  'ocean-foam':'Ocean Foam',
+  'plum-rose':'Plum Rose',
+  'tangerine-glow':'Tangerine Glow',
+  'salmon-sushi':'Salmon Sushi',
+  'graphite-gold':'Graphite Gold',
+  'harvest-cinder':'Harvest Cinder',
+  'sea-turtle':'Sea Turtle',
+  'gotham-violet':'Gotham Violet'
+};
+const LIGHT_THEME_IDS=new Set([
+  'light','mossbound','ivory-harbor','royal-steel','cocoa-gold',
+  'crimson-smoke','frosted-steel','umber-sand','blush-clay',
+  'heliotrope-mist','ocean-foam'
+]);
 let cTheme=localStorage.getItem('ql.theme')||'dark';
-function applyTheme(t){document.documentElement.setAttribute('data-theme',t);$('#themeToggle').textContent=t==='dark'?'☀':'☾';cTheme=t;localStorage.setItem('ql.theme',t);}
+function updateThemeToggle(){
+  const btn=$('#themeToggle');
+  if(!btn)return;
+  const isLight=LIGHT_THEME_IDS.has(cTheme);
+  btn.textContent=isLight?'☾':'☀';
+  btn.setAttribute('aria-label',isLight?'Switch to dark theme':'Switch to light theme');
+  btn.setAttribute('data-tip',isLight?'Switch to Questlog Dark.':'Switch to Questlog Light.');
+}
+function applyTheme(t){
+  cTheme=THEME_NAMES[t]?t:'dark';
+  document.documentElement.setAttribute('data-theme',cTheme);
+  localStorage.setItem('ql.theme',cTheme);
+  const personalSelect=$('#personalThemePreset');
+  if(personalSelect)personalSelect.value=cTheme;
+  updateThemeToggle();
+}
 applyTheme(cTheme);
-$('#themeToggle').onclick=()=>applyTheme(cTheme==='dark'?'light':'dark');
 
 // ── Constants ─────────────────────────────────────────────────────
 const MC_STATS=["minecraft:leave_game","minecraft:play_time","minecraft:total_world_time","minecraft:time_since_death","minecraft:time_since_rest","minecraft:sneak_time","minecraft:walk_one_cm","minecraft:crouch_one_cm","minecraft:sprint_one_cm","minecraft:walk_on_water_one_cm","minecraft:fall_one_cm","minecraft:climb_one_cm","minecraft:fly_one_cm","minecraft:walk_under_water_one_cm","minecraft:minecart_one_cm","minecraft:boat_one_cm","minecraft:pig_one_cm","minecraft:horse_one_cm","minecraft:aviate_one_cm","minecraft:swim_one_cm","minecraft:strider_one_cm","minecraft:jump","minecraft:drop","minecraft:damage_dealt","minecraft:damage_dealt_absorbed","minecraft:damage_dealt_resisted","minecraft:damage_taken","minecraft:damage_blocked_by_shield","minecraft:damage_absorbed","minecraft:damage_resisted","minecraft:deaths","minecraft:mob_kills","minecraft:animals_bred","minecraft:player_kills","minecraft:fish_caught","minecraft:talked_to_villager","minecraft:traded_with_villager","minecraft:eat_cake_slice","minecraft:fill_cauldron","minecraft:use_cauldron","minecraft:clean_armor","minecraft:clean_banner","minecraft:clean_shulker_box","minecraft:interact_with_brewingstand","minecraft:interact_with_beacon","minecraft:inspect_dropper","minecraft:inspect_hopper","minecraft:inspect_dispenser","minecraft:play_noteblock","minecraft:tune_noteblock","minecraft:pot_flower","minecraft:trigger_trapped_chest","minecraft:open_enderchest","minecraft:enchant_item","minecraft:play_record","minecraft:interact_with_furnace","minecraft:interact_with_crafting_table","minecraft:open_chest","minecraft:sleep_in_bed","minecraft:open_shulker_box","minecraft:open_barrel","minecraft:interact_with_blast_furnace","minecraft:interact_with_smoker","minecraft:interact_with_lectern","minecraft:interact_with_campfire","minecraft:interact_with_cartography_table","minecraft:interact_with_loom","minecraft:interact_with_stonecutter","minecraft:bell_ring","minecraft:raid_trigger","minecraft:raid_win","minecraft:interact_with_anvil","minecraft:interact_with_grindstone","minecraft:target_hit","minecraft:interact_with_smithing_table"];
@@ -39,7 +86,7 @@ const EQUIP_SLOTS=["head","chest","legs","feet","mainhand","offhand","body"];
 const OBJ_TYPES=["questlog:stat","questlog:block_mine","questlog:block_place","questlog:entity_breed","questlog:entity_death","questlog:entity_kill","questlog:entity_tame","questlog:item_craft","questlog:item_drop","questlog:item_equip","questlog:item_obtain","questlog:item_use","questlog:visit_biome","questlog:visit_dimension","questlog:visit_position","questlog:trample","questlog:enchant","questlog:effect_added","questlog:visit_structure","questlog:or","questlog:not","questlog:block_interact","questlog:entity_approach","questlog:quest_complete","questlog:read","questlog:advancement","questlog:unobtainable"];
 const REW_TYPES=["questlog:item","questlog:command","questlog:experience","questlog:loot_table"];
 const NO_AMOUNT_OBJECTIVES=new Set(["questlog:or","questlog:not","questlog:read","questlog:unobtainable","questlog:quest_complete"]);
-const APP_VERSION='2.5';
+const APP_VERSION='2.8';
 window.QUESTLOG_APP_VERSION=APP_VERSION;
 document.documentElement.dataset.questlogAppVersion=APP_VERSION;
 const PANEL_DEF=["display","progress","sounds","layout","labels","badge"];
@@ -69,6 +116,7 @@ function onEvent(sel,type,fn){const el=$(sel);if(el)el.addEventListener(type,fn)
 function showMsg(t,ok){
   const stack=$('#toastStack');if(!stack)return;
   if(!t){stack.innerHTML='';return;}
+  playUiSound(ok?'success':'error');
   const toast=document.createElement('div');
   toast.className=`toast ${ok?'ok':'err'}`;
   toast.dataset.toastId=String(++toastSeq);
@@ -79,6 +127,295 @@ function showMsg(t,ok){
     setTimeout(()=>toast.remove(),260);
   };
   setTimeout(close,5000);
+}
+let uiAudioCtx=null,lastTypeSoundAt=0;
+const UI_SOUND_FILES={
+  click:'ui-sounds/ui-click.wav',
+  toggle:'ui-sounds/ui-toggle.wav',
+  menu:'ui-sounds/ui-menu.wav',
+  type:'ui-sounds/ui-type.wav',
+  success:'ui-sounds/ui-success.wav',
+  error:'ui-sounds/ui-error.wav'
+};
+const UI_SOUND_SHAPES={
+  click:{freq:420,duration:0.05,gain:0.11},
+  toggle:{freq:560,duration:0.065,gain:0.12},
+  menu:{freq:360,duration:0.07,gain:0.10},
+  type:{freq:720,duration:0.022,gain:0.052},
+  success:{freq:660,duration:0.105,gain:0.13},
+  error:{freq:180,duration:0.13,gain:0.14}
+};
+const uiSoundBuffers={},uiSoundBufferPromises={};
+function canPlayUiSound(kind){
+  if(!uiSoundsEnabled||uiSoundsMuted||uiSoundVolume<=0)return false;
+  if(kind==='type'&&!uiTypingSoundsEnabled)return false;
+  return true;
+}
+function getUiAudioContext(){
+  const AudioCtx=window.AudioContext||window.webkitAudioContext;
+  if(!AudioCtx)return null;
+  uiAudioCtx=uiAudioCtx||new AudioCtx();
+  if(uiAudioCtx.state==='suspended')uiAudioCtx.resume?.();
+  return uiAudioCtx;
+}
+function loadUiSoundBuffer(kind){
+  const key=UI_SOUND_FILES[kind]?kind:'click';
+  if(uiSoundBuffers[key])return Promise.resolve(uiSoundBuffers[key]);
+  if(!uiSoundBufferPromises[key]){
+    uiSoundBufferPromises[key]=fetch(UI_SOUND_FILES[key],{cache:'no-store'})
+      .then(res=>{
+        if(!res.ok)throw new Error(`Missing UI sound: ${key}`);
+        return res.arrayBuffer();
+      })
+      .then(buffer=>{
+        const ctx=getUiAudioContext();
+        if(!ctx)throw new Error('AudioContext unavailable');
+        return ctx.decodeAudioData(buffer);
+      })
+      .then(decoded=>(uiSoundBuffers[key]=decoded))
+      .catch(err=>{
+        delete uiSoundBufferPromises[key];
+        throw err;
+      });
+  }
+  return uiSoundBufferPromises[key];
+}
+function playGeneratedUiSound(kind='click'){
+  try{
+    const ctx=getUiAudioContext();if(!ctx)return;
+    const shape=UI_SOUND_SHAPES[kind]||UI_SOUND_SHAPES.click;
+    const osc=ctx.createOscillator(),gain=ctx.createGain();
+    const now=ctx.currentTime;
+    osc.type='sine';osc.frequency.setValueAtTime(shape.freq,now);
+    gain.gain.setValueAtTime(0.0001,now);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001,shape.gain*uiSoundVolume),now+0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001,now+shape.duration);
+    osc.connect(gain);gain.connect(ctx.destination);
+    osc.start(now);osc.stop(now+shape.duration+0.012);
+  }catch(err){}
+}
+function playUiSound(kind='click'){
+  if(!canPlayUiSound(kind))return;
+  const key=UI_SOUND_FILES[kind]?kind:'click';
+  const ctx=getUiAudioContext();if(!ctx)return;
+  loadUiSoundBuffer(key).then(buffer=>{
+    if(!canPlayUiSound(kind))return;
+    getUiAudioContext();
+    const source=ctx.createBufferSource(),gain=ctx.createGain();
+    source.buffer=buffer;
+    gain.gain.setValueAtTime(Math.min(2,Math.max(0,uiSoundVolume)),ctx.currentTime);
+    source.connect(gain);gain.connect(ctx.destination);
+    source.start();
+  }).catch(()=>playGeneratedUiSound(key));
+}
+function updateUiSoundControls(){
+  const soundBox=$('#uiSoundsToggle'),typeBox=$('#uiTypingSoundsToggle'),vol=$('#uiSoundVolume'),val=$('#uiSoundVolumeValue'),mute=$('#muteToggle');
+  if(soundBox)soundBox.checked=uiSoundsEnabled;
+  if(typeBox){typeBox.checked=uiTypingSoundsEnabled;typeBox.disabled=!uiSoundsEnabled;}
+  if(vol){vol.value=String(Math.round(uiSoundVolume*100));vol.disabled=!uiSoundsEnabled;}
+  if(val)val.textContent=`${Math.round(uiSoundVolume*100)}%`;
+  if(mute){
+    mute.textContent=uiSoundsMuted?'Muted':'♪';
+    mute.classList.toggle('active',uiSoundsEnabled&&!uiSoundsMuted);
+    mute.setAttribute('aria-pressed',String(uiSoundsEnabled&&!uiSoundsMuted));
+    mute.dataset.tip=uiSoundsMuted?'UI sounds are muted. Click to unmute.':'Mute or unmute optional editor UI sounds.';
+  }
+}
+function renderModSupportControls(){
+  const list=$('#modSupportList'),targetSelect=$('#modSuggestionTarget');
+  if(targetSelect)targetSelect.value=modSuggestionTarget;
+  if(!list)return;
+  const packs=Array.isArray(window.MOD_ID_PACKS?.packs)?window.MOD_ID_PACKS.packs:[];
+  if(!packs.length){list.innerHTML='<div class="settings-copy">No mod suggestion packs are configured yet.</div>';return;}
+  list.innerHTML=packs.map(pack=>{
+    const supports=modPackSupportsTarget(pack);
+    const dataCount=modPackDataCount(pack);
+    const active=supports&&dataCount>0;
+    const checked=active&&enabledModSuggestions.has(pack.id);
+    const status=!supports?`Not available for Minecraft ${esc(modSuggestionTarget)}.`:dataCount>0?'':'Coming later.';
+    const modIds=(pack.modIds||[pack.id]).join(', ');
+    const description=pack.description||'Adds modded content for Questlog ID suggestions.';
+    return `<label class="mod-pack-row ${active?'':'disabled'}">
+      <input type="checkbox" class="mod-pack-toggle" value="${esc(pack.id)}" ${checked?'checked':''} ${active?'':'disabled'}>
+      <span>
+        <span class="mod-pack-name">${esc(pack.name||pack.id)}</span>
+        <span class="mod-pack-meta">mod id: ${esc(modIds)}</span>
+        <span class="mod-pack-desc">${esc(description)}</span>
+        ${status?`<span class="mod-pack-status">${status}</span>`:''}
+      </span>
+    </label>`;
+  }).join('');
+}
+function setUiSoundsEnabled(enabled){
+  uiSoundsEnabled=!!enabled;
+  localStorage.setItem(UI_SOUND_PREF_KEY,uiSoundsEnabled?'true':'false');
+  updateUiSoundControls();
+  showMsg(uiSoundsEnabled?'UI sounds enabled.':'UI sounds disabled.',true);
+}
+function setUiSoundsMuted(muted){
+  uiSoundsMuted=!!muted;
+  localStorage.setItem(UI_SOUND_MUTE_KEY,uiSoundsMuted?'true':'false');
+  updateUiSoundControls();
+  showMsg(uiSoundsMuted?'UI sounds muted.':'UI sounds unmuted.',true);
+}
+function setUiTypingSoundsEnabled(enabled){
+  uiTypingSoundsEnabled=!!enabled;
+  localStorage.setItem(UI_TYPING_SOUND_PREF_KEY,uiTypingSoundsEnabled?'true':'false');
+  updateUiSoundControls();
+  showMsg(uiTypingSoundsEnabled?'Typing sounds enabled.':'Typing sounds disabled.',true);
+}
+function setUiSoundVolume(value){
+  uiSoundVolume=Math.min(2,Math.max(0,Number(value)/100||0));
+  localStorage.setItem(UI_SOUND_VOLUME_KEY,String(uiSoundVolume));
+  updateUiSoundControls();
+}
+function setupUiSoundEvents(){
+  updateUiSoundControls();
+  document.addEventListener('click',e=>{
+    const el=e.target?.closest?.('button,.sidebar-row,.tab-btn,.mc-ac-row');
+    if(!el||el.disabled||el.id==='muteToggle'||el.id==='themeToggle')return;
+    playUiSound(el.closest?.('.sidebar-menu,.settings-menu')?'menu':'click');
+  },true);
+  document.addEventListener('change',e=>{
+    if(e.target?.matches?.('input[type="checkbox"],select,input[type="range"]'))playUiSound('toggle');
+  },true);
+  document.addEventListener('input',e=>{
+    const t=e.target;if(!t?.matches?.('input[type="text"],input[type="number"],textarea'))return;
+    const now=Date.now();if(now-lastTypeSoundAt<55)return;
+    lastTypeSoundAt=now;playUiSound('type');
+  },true);
+}
+function defaultPersonalization(){
+  return {
+    count:3,
+    font:"'DM Sans',system-ui,sans-serif",
+    colors:[
+      {label:'Primary',hex:cTheme==='light'?'#edeae0':'#131210',brightness:0},
+      {label:'Secondary',hex:cTheme==='light'?'#faf8f2':'#1b1a16',brightness:0},
+      {label:'Accent',hex:cTheme==='light'?'#b87030':'#d4924a',brightness:0},
+      {label:'Text',hex:cTheme==='light'?'#252018':'#e6e2d6',brightness:0}
+    ]
+  };
+}
+function loadPersonalization(){
+  try{
+    const data=JSON.parse(localStorage.getItem(PERSONALIZATION_KEY)||'null');
+    if(data&&Array.isArray(data.colors))return Object.assign(defaultPersonalization(),data);
+  }catch{}
+  return defaultPersonalization();
+}
+function normalizeHex(v){
+  let s=String(v||'').trim();
+  if(!s.startsWith('#'))s='#'+s;
+  if(/^#[0-9a-fA-F]{3}$/.test(s))s='#'+s.slice(1).split('').map(c=>c+c).join('');
+  return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():'#D4924A';
+}
+function adjustHex(hex,amount){
+  const clean=normalizeHex(hex).slice(1);
+  const n=[0,2,4].map(i=>parseInt(clean.slice(i,i+2),16));
+  const out=n.map(v=>Math.max(0,Math.min(255,Math.round(v+(amount/100)*(amount>=0?255-v:v)))));
+  return '#'+out.map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+}
+const PERSONALIZATION_THEME_PROPS=['--bg','--sf','--sf2','--sf3','--bd','--bd2','--json-bg','--ac','--ac-bg','--ac-hi','--tx','--json-tx'];
+function applyPersonalization(data=loadPersonalization()){
+  const root=document.documentElement;
+  PERSONALIZATION_THEME_PROPS.forEach(prop=>root.style.removeProperty(prop));
+  if(data.font)root.style.setProperty('--font',data.font);
+}
+function clonePersonalizationDraft(){
+  return JSON.parse(JSON.stringify(personalizationDraft||defaultPersonalization()));
+}
+function pushPersonalHistory(){
+  if(!personalizationDraft)return;
+  personalUndoStack.push(clonePersonalizationDraft());
+  if(personalUndoStack.length>40)personalUndoStack.shift();
+  personalRedoStack=[];
+  updatePersonalHistoryButtons();
+}
+function updatePersonalHistoryButtons(){
+  const u=$('#personalUndoBtn'),r=$('#personalRedoBtn');
+  if(u)u.disabled=!personalUndoStack.length;
+  if(r)r.disabled=!personalRedoStack.length;
+}
+function restorePersonalDraft(next){
+  personalizationDraft=JSON.parse(JSON.stringify(next));
+  $('#personalFontSelect')&&(($('#personalFontSelect').value=personalizationDraft.font||"'DM Sans',system-ui,sans-serif"));
+  renderColorWorkstation();
+  previewPersonalization();
+  updatePersonalHistoryButtons();
+}
+function undoPersonalDraft(){
+  if(!personalUndoStack.length)return;
+  personalRedoStack.push(clonePersonalizationDraft());
+  restorePersonalDraft(personalUndoStack.pop());
+}
+function redoPersonalDraft(){
+  if(!personalRedoStack.length)return;
+  personalUndoStack.push(clonePersonalizationDraft());
+  restorePersonalDraft(personalRedoStack.pop());
+}
+function renderColorWorkstation(){
+  const host=$('#colorWorkstation');if(!host||!personalizationDraft)return;
+  const count=Math.max(3,Math.min(4,Number(personalizationDraft.count)||3));
+  personalizationDraft.count=count;
+  const labels=['Primary','Secondary','Accent','Text'];
+  host.innerHTML=labels.slice(0,count).map((label,i)=>{
+    const color=personalizationDraft.colors[i]||{label,hex:'#D4924A',brightness:0};
+    return `<div class="color-card" data-color-index="${i}">
+      <label>${esc(label)}</label>
+      <div class="color-row">
+        <input type="color" class="personal-color" value="${esc(normalizeHex(color.hex))}">
+        <input type="text" class="personal-hex" value="${esc(normalizeHex(color.hex))}" spellcheck="false">
+      </div>
+      <div class="settings-range-row">
+        <input type="range" class="personal-brightness" min="-40" max="40" step="1" value="${Number(color.brightness)||0}">
+        <span class="settings-range-value">${Number(color.brightness)||0}</span>
+      </div>
+    </div>`;
+  }).join('');
+  $$('.color-card',host).forEach(card=>{
+    const i=Number(card.dataset.colorIndex),picker=card.querySelector('.personal-color'),hex=card.querySelector('.personal-hex'),bright=card.querySelector('.personal-brightness'),val=card.querySelector('.settings-range-value');
+    const arm=()=>{if(personalChangeArmed)return;pushPersonalHistory();personalChangeArmed=true;};
+    const done=()=>{personalChangeArmed=false;};
+    const update=()=>{personalizationDraft.colors[i]={label:labels[i],hex:normalizeHex(hex.value),brightness:Number(bright.value)||0};picker.value=normalizeHex(hex.value);val.textContent=bright.value;previewPersonalization();};
+    card.addEventListener('focusin',arm);
+    card.addEventListener('pointerdown',arm);
+    card.addEventListener('change',done);
+    card.addEventListener('focusout',done);
+    picker.oninput=()=>{hex.value=picker.value;update();};
+    hex.oninput=update;
+    bright.oninput=update;
+  });
+}
+function previewPersonalization(){
+  if(!personalizationDraft)return;
+  applyPersonalization(personalizationDraft);
+}
+function openPersonalizationModal(){
+  closeSettingsMenu();
+  personalizationOriginalTheme=cTheme;
+  personalUndoStack=[];personalRedoStack=[];personalChangeArmed=false;
+  personalizationDraft=loadPersonalization();
+  personalizationDraft.count=Math.max(3,Math.min(4,Number(personalizationDraft.count)||3));
+  $('#personalThemePreset')&&(($('#personalThemePreset').value=cTheme));
+  $('#personalFontSelect')&&(($('#personalFontSelect').value=personalizationDraft.font||"'DM Sans',system-ui,sans-serif"));
+  renderModSupportControls();
+  previewPersonalization();
+  $('#personalizationModal')?.classList.add('open');
+}
+function closePersonalizationModal(save=false){
+  if(save&&personalizationDraft){
+    localStorage.setItem(PERSONALIZATION_KEY,JSON.stringify(personalizationDraft));
+    applyPersonalization(personalizationDraft);
+    showMsg('Website look applied.',true);
+  }else{
+    if(personalizationOriginalTheme)applyTheme(personalizationOriginalTheme);
+    applyPersonalization(loadPersonalization());
+  }
+  personalizationOriginalTheme=null;
+  personalizationDraft=null;
+  personalUndoStack=[];personalRedoStack=[];personalChangeArmed=false;
+  $('#personalizationModal')?.classList.remove('open');
 }
 function setupHelpInteractions(){
   const tip=$('#hoverTip');if(!tip)return;
@@ -129,6 +466,13 @@ const AUTOSAVE_KEY='ql.project.autosave.v2';
 const PRE_V22_BACKUP_KEY='ql.project.autosave.before-v2.2';
 const AUTOSAVE_PREF_KEY='ql.autosave.enabled';
 const TOOLTIP_PREF_KEY='ql.tooltips.enabled';
+const UI_SOUND_PREF_KEY='ql.uiSounds.enabled';
+const UI_SOUND_MUTE_KEY='ql.uiSounds.muted';
+const UI_SOUND_VOLUME_KEY='ql.uiSounds.volume';
+const UI_TYPING_SOUND_PREF_KEY='ql.uiSounds.typing';
+const PERSONALIZATION_KEY='ql.personalization.preview';
+const MOD_SUGGESTION_VERSION_KEY='ql.modSuggestions.version';
+const MOD_SUGGESTION_ENABLED_KEY='ql.modSuggestions.enabled';
 const SIDEBAR_WIDTH_KEY='ql.sidebar.width';
 const LIST_SORT_KEY='ql.list.sort';
 const TUTORIAL_SEEN_KEY='ql.tutorial.seen.v23';
@@ -137,6 +481,15 @@ let autosaveTimer=null;
 let suppressAutosave=false;
 let autosaveEnabled=localStorage.getItem(AUTOSAVE_PREF_KEY)!=='false';
 let tooltipsEnabled=localStorage.getItem(TOOLTIP_PREF_KEY)!=='false';
+let uiSoundsEnabled=localStorage.getItem(UI_SOUND_PREF_KEY)==='true';
+let uiSoundsMuted=localStorage.getItem(UI_SOUND_MUTE_KEY)==='true';
+let uiTypingSoundsEnabled=localStorage.getItem(UI_TYPING_SOUND_PREF_KEY)==='true';
+let uiSoundVolume=Math.min(2,Math.max(0,parseFloat(localStorage.getItem(UI_SOUND_VOLUME_KEY)||'0.85')));
+let modSuggestionTarget=localStorage.getItem(MOD_SUGGESTION_VERSION_KEY)||window.MOD_ID_PACKS?.defaultTarget||'1.21.1';
+let enabledModSuggestions=new Set(JSON.parse(localStorage.getItem(MOD_SUGGESTION_ENABLED_KEY)||'[]'));
+let personalizationDraft=null;
+let personalizationOriginalTheme=null;
+let personalUndoStack=[],personalRedoStack=[],personalChangeArmed=false;
 let listSort=['alpha','order','recent'].includes(localStorage.getItem(LIST_SORT_KEY))?localStorage.getItem(LIST_SORT_KEY):'alpha';
 let fileMeta={};
 let activityLog=[];
@@ -244,13 +597,8 @@ function autosaveHasWork(data){
   return !!(data && ((data.quests&&Object.keys(data.quests).length)||(data.chapters&&Object.keys(data.chapters).length)));
 }
 function updateAutosaveStatus(msg){
-  const el=$('#autosaveStatus');
   const saveBtn=$('#btnManualSaveHead');
   if(saveBtn)saveBtn.hidden=autosaveEnabled;
-  if(el){
-    el.hidden=!autosaveEnabled;
-    el.textContent=msg||'';
-  }
 }
 function saveAutosaveNow(reason='saved',force=false){
   if(suppressAutosave)return;
@@ -706,6 +1054,7 @@ function templateComplexities(){return ['Simple','Intermediate','Advanced'];}
 function templateTags(){return OBJ_TYPES.slice();}
 function slugFile(s){return String(s||'quest').toLowerCase().replace(/[^a-z0-9_./-]+/g,'_').replace(/^_+|_+$/g,'')+'.json';}
 function uniqueFileName(base,map){let n=base.endsWith('.json')?base:base+'.json';let i=2;const stem=n.replace(/\.json$/i,'');while(map[n])n=`${stem}_${i++}.json`;return n;}
+function uniqueTemplateTitle(base){let title=String(base||'Custom quest').trim()||'Custom quest';let n=title,i=2;const used=new Set(customTemplates.map(t=>String(t.title||'').toLowerCase()));while(used.has(n.toLowerCase()))n=`${title} ${i++}`;return n;}
 function cloneTemplateQuest(t){const q={title:t.title,description:t.description||'',icon:t.icon||{item:'minecraft:book'},objectives:JSON.parse(JSON.stringify(t.objectives||[])),requirements:JSON.parse(JSON.stringify(t.requirements||[])),rewards:JSON.parse(JSON.stringify(t.rewards||[]))};if(t.completed_sound)q.completed_sound=t.completed_sound;if(t.triggered_sound)q.triggered_sound=t.triggered_sound;if(t.toast_on_unlock!==undefined)q.toast_on_unlock=t.toast_on_unlock;if(t.toast_on_complete!==undefined)q.toast_on_complete=t.toast_on_complete;fixQA(q);return q;}
 function createQuestFromTemplate(t){const fn=uniqueFileName(t.file||slugFile(t.title),quests);const q=cloneTemplateQuest(t);quests[fn]=q;touchFile('quest',fn);recordActivity('Created from template','quest',fn,t.title);selectFile(fn,'quest');showMsg(`Created template: ${t.title}`,true);scheduleAutosave();}
 function deleteCustomTemplate(index){
@@ -726,8 +1075,8 @@ function deleteCustomTemplate(index){
 }
 function makeTemplateFromQuest(file){
   const q=quests[file];if(!q)return;
-  const title=(q.title||file.replace(/\.json$/i,'')).trim()||'Custom quest';
-  const tpl={cat:'Custom',complexity:'Custom',tags:[...new Set([...(q.requirements||[]),...(q.objectives||[]),...(q.failures||[])].map(o=>o?.type).filter(Boolean))],file:slugFile(title),title,description:q.description||'',icon:q.icon||{item:'minecraft:book'},requirements:JSON.parse(JSON.stringify(q.requirements||[])),objectives:JSON.parse(JSON.stringify(q.objectives||[])),rewards:JSON.parse(JSON.stringify(q.rewards||[]))};
+  const title=uniqueTemplateTitle((q.title||file.replace(/\.json$/i,'')).trim()||'Custom quest');
+  const tpl={cat:'Custom',complexity:'Custom',source_file:file,created_at:new Date().toISOString(),tags:[...new Set([...(q.requirements||[]),...(q.objectives||[]),...(q.failures||[])].map(o=>o?.type).filter(Boolean))],file:slugFile(title),title,description:q.description||'',icon:q.icon||{item:'minecraft:book'},requirements:JSON.parse(JSON.stringify(q.requirements||[])),objectives:JSON.parse(JSON.stringify(q.objectives||[])),rewards:JSON.parse(JSON.stringify(q.rewards||[]))};
   if(q.completed_sound)tpl.completed_sound=q.completed_sound;
   if(q.triggered_sound)tpl.triggered_sound=q.triggered_sound;
   customTemplates.unshift(tpl);
@@ -740,20 +1089,38 @@ function ensureTemplateChapter(){const fn='vanilla_starter.json';if(!chapters[fn
 function createStarterPack(){const ch=ensureTemplateChapter();touchFile('chapter',ch);const ns=getNs()||'questlog';const made=[];QUEST_TEMPLATES.forEach((t,i)=>{const fn=uniqueFileName(t.file||slugFile(t.title),quests);const q=cloneTemplateQuest(t);q.chapter=`${ns}:${ch.replace(/\.json$/i,'')}`;q.sort_order=i;quests[fn]=q;touchFile('quest',fn);made.push(fn);});renderFileList();selectFile(made[0]||ch,made[0]?'quest':'chapter');renderValidation();showMsg(`Created ${made.length} vanilla starter quests.`,true);scheduleAutosave();}
 function openTemplateModal(){const modal=$('#templateModal');if(!modal)return;modal.classList.add('open');renderTemplateModal();setTimeout(()=>$('#templateSearch')?.focus(),50);}
 function closeTemplateModal(){$('#templateModal')?.classList.remove('open');}
-function renderTemplateModal(){const list=$('#templateList'),cat=$('#templateCategory'),search=$('#templateSearch'),cx=$('#templateComplexity'),tag=$('#templateTag');if(!list||!cat)return;const keepCat=cat.value||'all';cat.innerHTML='<option value="all">All categories</option>'+templateCategories().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');cat.value=[...cat.options].some(o=>o.value===keepCat)?keepCat:'all';if(cx&&!cx.dataset.ready){cx.innerHTML='<option value="all">All complexity</option>'+templateComplexities().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');cx.dataset.ready='1';}if(tag&&!tag.dataset.ready){tag.innerHTML='<option value="all">All objective tags</option>'+templateTags().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');tag.dataset.ready='1';}
+function renderTemplateModal(){const list=$('#templateList'),cat=$('#templateCategory'),search=$('#templateSearch'),cx=$('#templateComplexity'),tag=$('#templateTag'),summary=$('#templateSummary');if(!list||!cat)return;const keepCat=cat.value||'all';cat.innerHTML='<option value="all">All categories</option>'+templateCategories().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');cat.value=[...cat.options].some(o=>o.value===keepCat)?keepCat:'all';if(cx&&!cx.dataset.ready){cx.innerHTML='<option value="all">All complexity</option>'+templateComplexities().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');cx.dataset.ready='1';}if(tag&&!tag.dataset.ready){tag.innerHTML='<option value="all">All objective tags</option>'+templateTags().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');tag.dataset.ready='1';}
   const q=String(search?.value||'').trim().toLowerCase();const cv=cat.value||'all';const xv=cx?.value||'all';const tv=tag?.value||'all';
   const customOnly=!!$('#templateCustomOnly')?.checked;
   const pool=allTemplates();
-  const rows=pool.filter(t=>(!customOnly||t.customIndex!==undefined)&&(customOnly||cv==='all'||t.cat===cv)&&(customOnly||xv==='all'||t.complexity===xv)&&(tv==='all'||(t.tags||[]).includes(tv))&&(!q||`${t.title} ${t.cat} ${t.complexity} ${(t.tags||[]).join(' ')} ${t.description}`.toLowerCase().includes(q)));
-  list.innerHTML=rows.map((t,i)=>`<div class="template-row" data-tpl="${esc(t.title)}"><div class="template-main"><div class="template-name">${esc(t.title)}</div><div class="template-desc">${esc(t.description||'')}</div><div class="template-meta"><span>${esc(t.cat)}</span><span>${esc(t.complexity||'Simple')}</span><span>${esc((t.objectives||[]).length)} objective${(t.objectives||[]).length===1?'':'s'}</span><span>${esc((t.requirements||[]).length)} req</span><span>${esc((t.tags||[]).slice(0,2).join(', '))}</span></div></div><div class="template-row-actions"><button class="btn btn-primary btn-sm template-create" data-index="${pool.indexOf(t)}">Create</button>${t.customIndex!==undefined?`<button class="btn btn-danger-soft btn-sm template-delete" data-custom-index="${t.customIndex}">Delete</button>`:''}</div></div>`).join('')||'<div class="template-empty">No templates match that search.</div>';
+  const rows=pool.map((t,index)=>({t,index})).filter(({t})=>(!customOnly||t.customIndex!==undefined)&&(customOnly||cv==='all'||t.cat===cv)&&(customOnly||xv==='all'||t.complexity===xv)&&(tv==='all'||(t.tags||[]).includes(tv))&&(!q||`${t.title} ${t.cat} ${t.complexity} ${(t.tags||[]).join(' ')} ${t.description} ${t.source_file||''}`.toLowerCase().includes(q))).sort((a,b)=>(b.t.customIndex!==undefined)-(a.t.customIndex!==undefined)||String(a.t.title).localeCompare(String(b.t.title)));
+  if(summary)summary.innerHTML=`<strong>${rows.length}</strong> shown <span>${customTemplates.length} custom</span> <span>${QUEST_TEMPLATES.length} built-in</span>`;
+  list.innerHTML=rows.map(({t,index})=>`<div class="template-row ${t.customIndex!==undefined?'is-custom':''}" data-tpl="${esc(t.title)}"><div class="template-main"><div class="template-name">${esc(t.title)}</div><div class="template-desc">${esc(t.description||'')}</div><div class="template-meta">${t.customIndex!==undefined?'<span class="custom-pill">Custom</span>':''}<span>${esc(t.cat)}</span><span>${esc(t.complexity||'Simple')}</span><span>${esc((t.objectives||[]).length)} objective${(t.objectives||[]).length===1?'':'s'}</span><span>${esc((t.requirements||[]).length)} req</span>${t.source_file?`<span>From ${esc(t.source_file.replace(/\.json$/i,''))}</span>`:''}<span>${esc((t.tags||[]).slice(0,2).join(', ')||'No tags')}</span></div></div><div class="template-row-actions"><button class="btn btn-primary btn-sm template-create" data-index="${index}">Use template</button>${t.customIndex!==undefined?`<button class="btn btn-danger-soft btn-sm template-delete" data-custom-index="${t.customIndex}">Delete</button>`:''}</div></div>`).join('')||'<div class="template-empty">No templates match that search.</div>';
   $$('.template-create',list).forEach(btn=>btn.onclick=()=>createQuestFromTemplate(pool[Number(btn.dataset.index)]));
   $$('.template-delete',list).forEach(btn=>btn.onclick=()=>deleteCustomTemplate(Number(btn.dataset.customIndex)));
 }
 const CHANGELOGS=[
   {
+    version:'2.8',
+    title:'Version 2.8',
+    status:'Advanced creator tools',
+    sections:[
+      {title:'Updated',items:[
+        'Advanced editor fields are grouped into clearer texture, overlay, panel, label, color, and badge sections.',
+        'JSON and ZIP files can be dropped onto the editor to import them through the same safe import path as the menu.',
+        'Quest templates show custom counts, clearer Use template buttons, custom highlighting, and source-file info for templates made from quests.',
+        'Export preview now gives a cleaner readiness check before downloading the project ZIP.',
+        'Optional UI sounds now play replaceable files from ui-sounds, with typing sounds, volume control, and a mute button.',
+        'Website personalization now has premade themes, font choices, editor toggles, and sound feel settings.',
+        'Vanilla Minecraft 1.21.1 biome, block, item, and sound suggestions were refreshed.',
+        'Mod ID suggestion support was added for popular packs, with a simple picker that shows the mod name, mod ID, and short description.'
+      ]}
+    ]
+  },
+  {
     version:'2.5',
     title:'Version 2.5',
-    status:'Sandbox tested; waiting for release approval',
+    status:'Project workflow tools',
     sections:[
       {title:'Updated',items:[
         'Export preview focuses on warnings/missing data and a short install-location note.',
@@ -765,16 +1132,13 @@ const CHANGELOGS=[
         'Custom template deletion, file deletion, and bulk delete use in-app confirmation instead of browser popups.',
         'Settings was reorganized so status, tutorial, changelog, and reset controls are grouped together.',
         'Manual Save now lives in the right panel only when autosave is off.'
-      ]},
-      {title:'Remaining focus',items:[
-        'Sandbox replacement testing passed locally. GitHub/Neocities release is waiting for approval.'
       ]}
     ]
   },
   {
     version:'2.3',
     title:'Version 2.3',
-    status:'Completed creator usability release',
+    status:'Creator usability and onboarding',
     sections:[
       {title:'Updated',items:[
         'Changelog moved into a full-screen overlay with a version selector.',
@@ -793,7 +1157,7 @@ const CHANGELOGS=[
   {
     version:'2.2',
     title:'Version 2.2',
-    status:'Completed safety and cleanup release',
+    status:'Safety, recovery, and cleaner controls',
     sections:[
       {title:'Updated',items:[
         'Top toast notifications for status and errors.',
@@ -809,7 +1173,7 @@ const CHANGELOGS=[
   {
     version:'2.0',
     title:'Version 2.0',
-    status:'Older officially completed version',
+    status:'Early editor update',
     sections:[
       {title:'Updated',items:[
         'Added more features, but needed decluttering so the UI changed a good amount.',
@@ -868,8 +1232,8 @@ const TUTORIAL_STEPS=[
   {target:'#validationList',title:'Validation catches mistakes',text:'Validation catches missing objectives, broken IDs, and risky references. Click a warning to jump to the likely field and highlight it.',pad:5},
   {target:'#liveJson',title:'Live JSON preview',text:'The right panel shows the selected file as Questlog JSON. Power users can enable raw JSON editing in Settings, but the forms are safer for normal work.',pad:5},
   {target:'.tb-links',title:'Top-left resources',text:'These links go to Modrinth, the Questlog wiki, and examples. Use the wiki for deeper Questlog behavior once the editor basics make sense.',pad:5},
-  {targets:['.history-actions','#themeToggle'],title:'Undo, redo, and theme',text:'Undo and redo help recover accidental edits, and the theme button switches light/dark mode. Undo history is saved with the browser project.',pad:5},
-  {target:'#settingsMenu',openSettings:true,title:'Settings recap',text:'Settings contains namespace, project-wide validation, raw JSON mode, autosave, minified export, tooltips, project status, changelog, this tutorial, and reset saved progress.',pad:5}
+  {target:'.history-actions',title:'Undo and redo',text:'Undo and redo help recover accidental edits. Undo history is saved with the browser project.',pad:5},
+  {target:'#settingsMenu',openSettings:true,title:'Settings recap',text:'Settings contains namespace, project-wide checking, sound volume, Website personalization, project status, changelog, this tutorial, and reset saved progress.',pad:5}
 ];
 let tutorialIndex=0,tutorialResizeBound=false;
 function markTutorialSeen(){try{localStorage.setItem(TUTORIAL_SEEN_KEY,'true');}catch{}}
@@ -970,6 +1334,41 @@ function classifyImportedJson(name,data){const norm=String(name||'import.json').
 async function importZipFile(file){if(typeof JSZip==='undefined')throw new Error('JSZip failed to load.');const zip=await JSZip.loadAsync(file);const imported=[];const entries=Object.values(zip.files).filter(z=>!z.dir&&z.name.toLowerCase().endsWith('.json'));
   for(const ent of entries){try{const txt=await ent.async('string');const data=JSON.parse(txt);let rel=ent.name.replace(/^.*config\/questlog\//i,'');let kind=null;if(/(^|\/)quests\//i.test(rel))kind='quest';if(/(^|\/)chapters\//i.test(rel))kind='chapter';let base=rel.split('/').pop()||'import.json';if(kind==='quest'){fixQA(data);nqbd(data);const fn=uniqueFileName(base,quests);quests[fn]=data;touchFile('quest',fn);imported.push({kind,file:fn});}else if(kind==='chapter'){const fn=uniqueFileName(base,chapters);chapters[fn]=data;touchFile('chapter',fn);imported.push({kind,file:fn});}else imported.push(classifyImportedJson(base,data));}catch(err){console.warn('[zip import]',ent.name,err);}}
   if(!imported.length)throw new Error('No JSON quest/chapter files found in that ZIP.');renderFileList();selectFile(imported[0].file,imported[0].kind);renderValidation();scheduleAutosave();return imported.length;}
+async function handleImportFiles(fileList,source='Imported'){
+  const arr=Array.from(fileList||[]);if(!arr.length)return 0;
+  let first=null,ok=0,skipped=0;
+  for(const file of arr){
+    const name=(file.name||'').toLowerCase();
+    try{
+      if(name.endsWith('.zip')){ok+=await importZipFile(file);if(!first&&currentFile)first={file:currentFile,kind:mode};continue;}
+      if(!name.endsWith('.json')){skipped++;continue;}
+      const text=await file.text();
+      const data=JSON.parse(text);
+      const res=classifyImportedJson(file.name,data);
+      ok++;
+      if(!first)first=res;
+    }catch(err){showMsg(`${file.name}: ${err.message||String(err)}`,false);}
+  }
+  renderFileList();
+  if(first)selectFile(first.file,first.kind);else renderMain();
+  renderValidation();
+  if(ok)recordActivity(source,'project','',`${ok} files`);
+  scheduleAutosave();
+  if(ok)showMsg(`${source} ${ok} file${ok===1?'':'s'}.`,true);
+  if(skipped)showMsg(`Skipped ${skipped} unsupported file${skipped===1?'':'s'}. Drop .json or .zip files.`,false);
+  return ok;
+}
+function setupDropImport(){
+  const overlay=$('#importDropOverlay');let depth=0;
+  const hasFiles=e=>Array.from(e.dataTransfer?.types||[]).includes('Files');
+  const show=()=>overlay?.classList.add('open');
+  const hide=()=>{depth=0;overlay?.classList.remove('open');};
+  document.addEventListener('dragenter',e=>{if(!hasFiles(e))return;depth++;show();});
+  document.addEventListener('dragover',e=>{if(!hasFiles(e))return;e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='copy';show();});
+  document.addEventListener('dragleave',e=>{if(!hasFiles(e))return;depth=Math.max(0,depth-1);if(depth===0)overlay?.classList.remove('open');});
+  document.addEventListener('drop',async e=>{if(!hasFiles(e))return;e.preventDefault();const files=e.dataTransfer?.files;hide();await handleImportFiles(files,'Dropped');});
+  window.addEventListener('blur',hide);
+}
 
 function syncCurrentForExport(){
   if(mode==='quest')syncQ();
@@ -991,16 +1390,37 @@ function summarizeIssues(issues){
 function exportPreviewChecks(issues,paths){
   const checks=[]; 
   const counts=summarizeIssues(issues);
-  if(!paths.quests.length)checks.push({level:'warn',text:'No quest files will be exported.'});
-  if(!paths.chapters.length)checks.push({level:'warn',text:'No chapter files will be exported.'});
-  if([...Object.keys(quests),...Object.keys(chapters)].some(n=>!FILE_SAFE.test(n))){
-    checks.push({level:'warn',text:'Some filenames are not lowercase Questlog-safe paths.'});
-  }
-  if(counts.error)checks.push({level:'error',text:`${counts.error} serious problem${counts.error===1?'':'s'} should be fixed before export.`});
-  if(counts.missing)checks.push({level:'missing',text:`${counts.missing} missing thing${counts.missing===1?'':'s'} may leave quests incomplete.`});
-  if(counts.warn)checks.push({level:'warn',text:`${counts.warn} warning${counts.warn===1?'':'s'} should be reviewed.`});
-  if(!checks.length)checks.push({level:'ok',text:'No warnings or missing data found for the current project.'});
+  if(!paths.quests.length)checks.push({level:'warn',text:'Add at least one quest file before exporting.'});
+  if(!paths.chapters.length)checks.push({level:'warn',text:'Add at least one chapter file before exporting.'});
+  if([...Object.keys(quests),...Object.keys(chapters)].some(n=>!FILE_SAFE.test(n)))checks.push({level:'warn',text:'Some file names are not Questlog-safe.'});
+  if(counts.error||counts.missing)checks.push({level:'missing',text:'Fix missing/error items shown in the right validation panel.'});
+  if(!checks.length&&counts.warn)checks.push({level:'warn',text:'Warnings exist. Review the right validation panel before release.'});
+  if(!checks.length)checks.push({level:'ok',text:'No blocking export problems found.'});
   return checks;
+}
+function exportReadiness(counts,paths){
+  if(!paths.quests.length||!paths.chapters.length||counts.error||counts.missing){
+    return {
+      level:'blocked',
+      title:'Not ready yet',
+      copy:'Fix missing data and serious errors before uploading this ZIP to a modpack.'
+    };
+  }
+  if(counts.warn){
+    return {
+      level:'review',
+      title:'Ready after review',
+      copy:'The ZIP can be made, but check the warnings first so the pack does not ship confusing quest behavior.'
+    };
+  }
+  return {
+    level:'ready',
+    title:'Ready to export',
+    copy:'No missing data, errors, or warnings were found in the current project check.'
+  };
+}
+function issueLabel(level){
+  return {error:'Fix',missing:'Needs review',warn:'Warning',ok:'Ready'}[level]||level;
 }
 function renderExportPreview(){
   syncCurrentForExport();
@@ -1009,18 +1429,27 @@ function renderExportPreview(){
   const issues=validateAll(false);
   const counts=summarizeIssues(issues);
   const checks=exportPreviewChecks(issues,paths);
-  const issueRows=issues.slice(0,8).map(i=>`<div class="export-check ${esc(i.level)}"><strong>${esc(i.level)}</strong>${esc(i.file)} ${esc(i.path)} - ${esc(i.msg)}</div>`).join('');
-  const totalProblems=counts.error+counts.missing+counts.warn;
+  const ready=exportReadiness(counts,paths);
+  const exportOnlyProblems=(!paths.quests.length?1:0)+(!paths.chapters.length?1:0)+([...Object.keys(quests),...Object.keys(chapters)].some(n=>!FILE_SAFE.test(n))?1:0);
+  const totalProblems=counts.error+counts.missing+counts.warn+exportOnlyProblems;
   body.innerHTML=`
+    <div class="export-hero ${esc(ready.level)}">
+      <div class="export-orb" aria-hidden="true"><span></span></div>
+      <div>
+        <div class="export-ready-title">${esc(ready.title)}</div>
+        <div class="export-ready-copy">${esc(ready.copy)}</div>
+      </div>
+    </div>
     <div class="export-summary-grid">
       <div class="export-summary-cell"><div class="export-summary-num">${paths.quests.length}</div><div class="export-summary-label">Quests</div></div>
       <div class="export-summary-cell"><div class="export-summary-num">${paths.chapters.length}</div><div class="export-summary-label">Chapters</div></div>
-      <div class="export-summary-cell"><div class="export-summary-num">${totalProblems}</div><div class="export-summary-label">Warnings</div></div>
+      <div class="export-summary-cell"><div class="export-summary-num">${totalProblems}</div><div class="export-summary-label">Needs review</div></div>
     </div>
-    <div class="export-info-box">Put quest files in <span class="kbd">config/questlog/quests/</span> and chapter files in <span class="kbd">config/questlog/chapters/</span>.</div>
-    <div class="export-section-title">Checks</div>
-    <div class="export-check-list">${checks.map(c=>`<div class="export-check ${esc(c.level)}"><strong>${esc(c.level)}</strong>${esc(c.text)}</div>`).join('')}</div>
-    ${issueRows?`<div class="export-section-title">Warnings and missing stuff</div><div class="export-check-list">${issueRows}</div>`:''}
+    <div class="export-section-title">Before uploading</div>
+    <div class="export-info-box">Use this ZIP as the upload/copy package. Keep quest files in <span class="kbd">config/questlog/quests/</span> and chapter files in <span class="kbd">config/questlog/chapters/</span>. If the count says there are things to review, use the right validation panel for the exact fixes.</div>
+    <div class="export-section-title">Readiness checks</div>
+    <div class="export-check-list">${checks.map(c=>`<div class="export-check ${esc(c.level)} ${c.level!=='ok'?'needs-attention':''}"><strong>${esc(issueLabel(c.level))}</strong>${esc(c.text)}</div>`).join('')}</div>
+    ${issues.length?'<div class="export-note">Detailed warning rows stay in the validation panel so this screen stays focused on the release decision.</div>':''}
   `;
 }
 function openExportPreviewModal(){
@@ -1154,6 +1583,9 @@ function renderDescField(id,label,value,collapsible){
 
 function nhc(raw,fb){const v=String(raw||'').trim();if(/^#[0-9a-fA-F]{6}$/.test(v))return v.toUpperCase();if(/^#[0-9a-fA-F]{3}$/.test(v)){const h=v.slice(1);return`#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`.toUpperCase();}return fb;}
 function rcf(label,id,val,fb){return`<div class="field"><label>${label}</label><div class="color-pair"><input type="color" id="${id}_picker" data-color-for="${id}" value="${nhc(val||fb,fb)}" /><input type="text" id="${id}" value="${esc(val||fb)}" /></div></div>`;}
+function advTextField(label,id,value,tip='',placeholder=''){return`<div class="field"${tip?` data-tip="${esc(tip)}"`:''}><label>${label}</label><input type="text" id="${id}" value="${esc(value||'')}"${placeholder?` placeholder="${esc(placeholder)}"`:''} /></div>`;}
+function advNumField(label,id,value,tip='',unit='px'){return`<div class="field"${tip?` data-tip="${esc(tip)}"`:''}><label>${label}${unit?` <span class="advanced-unit">${esc(unit)}</span>`:''}</label><input type="number" id="${id}" value="${value}" /></div>`;}
+function advGroup(title,body){return`<div class="advanced-group"><div class="sub-h">${title}</div>${body}</div>`;}
 
 // ── Quest form ────────────────────────────────────────────────────
 function renderQForm(q){
@@ -1196,49 +1628,66 @@ function renderQForm(q){
 
 <details class="section" data-panel-key="layout">
   <summary>UI Layout &amp; Textures</summary>
-  <div class="sec-body"><div class="g2">
-    <div class="field"><label>Background texture</label><input type="text" id="qf_background_texture" value="${esc(d('background_texture','')||'')}" /></div>
-    <div class="field"><label>Right panel texture</label><input type="text" id="qf_right_panel_texture" value="${esc(d('right_panel_texture','')||'')}" /></div>
-    <div class="field"><label>Peripheral texture</label><input type="text" id="qf_peripheral_texture" value="${esc(d('peripheral_texture','')||'')}" /></div>
-    <div class="field"><label>Overlay</label><input type="text" id="qf_overlay" value="${esc(d('overlay','')||'')}" /></div>
-    <div class="field"><label>Overlay W</label><input type="number" id="qf_overlay_width" value="${d('overlay_width','')}" /></div>
-    <div class="field"><label>Overlay H</label><input type="number" id="qf_overlay_height" value="${d('overlay_height','')}" /></div>
-    <div class="field"><label>Overlay X</label><input type="number" id="qf_overlay_x_offset" value="${d('overlay_x_offset',0)}" /></div>
-    <div class="field"><label>Overlay Y</label><input type="number" id="qf_overlay_y_offset" value="${d('overlay_y_offset',0)}" /></div>
-    <div class="field"><label>Left panel W</label><input type="number" id="qf_left_panel_width" value="${d('left_panel_width',275)}" /></div>
-    <div class="field"><label>Right panel W</label><input type="number" id="qf_right_panel_width" value="${d('right_panel_width',170)}" /></div>
-    <div class="field"><label>Panel H</label><input type="number" id="qf_panel_height" value="${d('panel_height',166)}" /></div>
-    <div class="field"><label>Left panel X</label><input type="number" id="qf_left_panel_x_offset" value="${d('left_panel_x_offset',0)}" /></div>
-    <div class="field"><label>Left panel Y</label><input type="number" id="qf_left_panel_y_offset" value="${d('left_panel_y_offset',0)}" /></div>
-    <div class="field"><label>Right panel X</label><input type="number" id="qf_right_panel_x_offset" value="${d('right_panel_x_offset',0)}" /></div>
-    <div class="field"><label>Right panel Y</label><input type="number" id="qf_right_panel_y_offset" value="${d('right_panel_y_offset',0)}" /></div>
-  </div></div>
+  <div class="sec-body">
+    <div class="advanced-note">These fields are mostly for resource-pack styling and custom Questlog layouts. Leave them alone unless your pack is changing textures or panel placement.</div>
+    ${advGroup('Texture sources',`<div class="advanced-grid wide">
+      ${advTextField('Background texture','qf_background_texture',d('background_texture','')||'','Optional full Questlog background texture path.')}
+      ${advTextField('Right panel texture','qf_right_panel_texture',d('right_panel_texture','')||'','Optional texture path for the right info panel.')}
+      ${advTextField('Peripheral texture','qf_peripheral_texture',d('peripheral_texture','')||'','Optional side/peripheral texture path.')}
+      ${advTextField('Overlay texture','qf_overlay',d('overlay','')||'','Optional overlay texture path.')}
+    </div>`)}
+    ${advGroup('Overlay size and position',`<div class="advanced-grid">
+      ${advNumField('Overlay width','qf_overlay_width',d('overlay_width',''),'Pixel width of the overlay texture.')}
+      ${advNumField('Overlay height','qf_overlay_height',d('overlay_height',''),'Pixel height of the overlay texture.')}
+      ${advNumField('Overlay X offset','qf_overlay_x_offset',d('overlay_x_offset',0),'Horizontal overlay offset.')}
+      ${advNumField('Overlay Y offset','qf_overlay_y_offset',d('overlay_y_offset',0),'Vertical overlay offset.')}
+    </div>`)}
+    ${advGroup('Questlog panels',`<div class="advanced-grid">
+      ${advNumField('Left panel width','qf_left_panel_width',d('left_panel_width',275),'Width of the left Questlog panel.')}
+      ${advNumField('Right panel width','qf_right_panel_width',d('right_panel_width',170),'Width of the right Questlog panel.')}
+      ${advNumField('Panel height','qf_panel_height',d('panel_height',166),'Shared panel height.')}
+    </div>`)}
+    ${advGroup('Panel offsets',`<div class="advanced-grid">
+      ${advNumField('Left panel X','qf_left_panel_x_offset',d('left_panel_x_offset',0),'Horizontal offset for the left panel.')}
+      ${advNumField('Left panel Y','qf_left_panel_y_offset',d('left_panel_y_offset',0),'Vertical offset for the left panel.')}
+      ${advNumField('Right panel X','qf_right_panel_x_offset',d('right_panel_x_offset',0),'Horizontal offset for the right panel.')}
+      ${advNumField('Right panel Y','qf_right_panel_y_offset',d('right_panel_y_offset',0),'Vertical offset for the right panel.')}
+    </div>`)}
+  </div>
 </details>
 
 <details class="section" data-panel-key="labels">
   <summary>Button Labels &amp; Palette</summary>
-  <div class="sec-body g2">
-    <div class="field"><label>Back button</label><input type="text" id="qf_back_button_text" value="${esc(d('back_button_text','gui.back'))}" /></div>
-    <div class="field"><label>Collect button</label><input type="text" id="qf_collect_button_text" value="${esc(d('collect_button_text','questlog.reward.collect'))}" /></div>
-    <div class="field"><label>Uncollected</label><input type="text" id="qf_uncollected_text" value="${esc(d('uncollected_text','questlog.reward.uncollected'))}" /></div>
-    <div class="field"><label>Collected</label><input type="text" id="qf_collected_text" value="${esc(d('collected_text','questlog.reward.collected'))}" /></div>
-    ${rcf('Text color','qf_text_color',d('text_color','#4C381B'),'#4C381B')}
-    ${rcf('Completed text','qf_completed_text_color',d('completed_text_color','#529E52'),'#529E52')}
-    ${rcf('Hovered text','qf_hovered_text_color',d('hovered_text_color','#FFFFFF'),'#FFFFFF')}
-    ${rcf('Title color','qf_title_color',d('title_color','#4C381B'),'#4C381B')}
-    ${rcf('Progress text','qf_progress_text_color',d('progress_text_color','#9E7852'),'#9E7852')}
+  <div class="sec-body">
+    <div class="advanced-note">Labels and colors are optional. Defaults are omitted from export so normal quests stay clean.</div>
+    ${advGroup('Button and reward labels',`<div class="advanced-grid wide">
+      ${advTextField('Back button','qf_back_button_text',d('back_button_text','gui.back'),'Translation key or literal text for the back button.')}
+      ${advTextField('Collect button','qf_collect_button_text',d('collect_button_text','questlog.reward.collect'),'Translation key or literal text for the reward collect button.')}
+      ${advTextField('Uncollected reward','qf_uncollected_text',d('uncollected_text','questlog.reward.uncollected'),'Text shown for uncollected rewards.')}
+      ${advTextField('Collected reward','qf_collected_text',d('collected_text','questlog.reward.collected'),'Text shown after rewards are collected.')}
+    </div>`)}
+    ${advGroup('Questlog text colors',`<div class="advanced-grid">
+      ${rcf('Text color','qf_text_color',d('text_color','#4C381B'),'#4C381B')}
+      ${rcf('Completed text','qf_completed_text_color',d('completed_text_color','#529E52'),'#529E52')}
+      ${rcf('Hovered text','qf_hovered_text_color',d('hovered_text_color','#FFFFFF'),'#FFFFFF')}
+      ${rcf('Title color','qf_title_color',d('title_color','#4C381B'),'#4C381B')}
+      ${rcf('Progress text','qf_progress_text_color',d('progress_text_color','#9E7852'),'#9E7852')}
+    </div>`)}
   </div>
 </details>
 
 <details class="section" data-panel-key="badge">
   <summary>Badge — optional</summary>
-  <div class="sec-body g2">
+  <div class="sec-body">
+    <div class="advanced-note">Badges are optional icon overlays. Leave texture empty to remove the badge from exported JSON.</div>
+    <div class="advanced-grid">
     <div class="field"><label>Texture</label><input type="text" id="qb_texture" value="${badge?esc(badge.texture||''):''}" /></div>
     <div class="field"><label>U / V</label><input type="text" id="qb_uv" value="${badge?(badge.u??0)+', '+(badge.v??0):'0, 0'}" /></div>
     <div class="field"><label>W / H</label><input type="text" id="qb_wh" value="${badge?(badge.width??16)+', '+(badge.height??16):'16, 16'}" /></div>
     <div class="field"><label>Tex size W×H</label><input type="text" id="qb_twh" value="${badge?(badge.texture_width??256)+', '+(badge.texture_height??256):'256, 256'}" /></div>
     <div class="field"><label>Frames</label><input type="number" id="qb_frames" value="${badge?badge.frames??1:1}" /></div>
     <div class="field"><label>Frame time (ms)</label><input type="number" id="qb_frame_time" value="${badge?badge.frame_time??100:100}" /></div>
+    </div>
   </div>
 </details>`;
 }
@@ -1435,14 +1884,51 @@ function syncQ(){
 
 
 // ── Minecraft ID autocomplete ─────────────────────────────────────
-const VANILLA_IDS = (()=>{
-  const d = window.MC_ID_DATA || {items:[],blocks:[],entities:[]};
+function modPackDataCount(pack){
+  return ['items','blocks','entities','sounds','biomes'].reduce((sum,key)=>sum+registryRows(pack,key).length,0);
+}
+function registryRows(pack,kind){
+  const rows=pack?.[kind];
+  if(Array.isArray(rows))return rows;
+  return rows&&typeof rows==='object'&&rows.id?[rows]:[];
+}
+function modPackSupportsTarget(pack,target=modSuggestionTarget){
+  return Array.isArray(pack?.supportedVersions)&&pack.supportedVersions.includes(target);
+}
+function activeModPacks(){
+  const packs = Array.isArray(window.MOD_ID_PACKS?.packs) ? window.MOD_ID_PACKS.packs : [];
+  return packs.filter(pack=>enabledModSuggestions.has(pack.id)&&modPackSupportsTarget(pack)&&modPackDataCount(pack)>0);
+}
+function saveEnabledModSuggestions(){
+  localStorage.setItem(MOD_SUGGESTION_ENABLED_KEY,JSON.stringify([...enabledModSuggestions]));
+}
+function buildKnownIds(){
+  const d = window.MC_ID_DATA || {items:[],blocks:[],entities:[],biomes:[]};
+  const modPacks = activeModPacks();
+  const modRows = kind => modPacks.flatMap(pack => {
+    const rows = registryRows(pack,kind);
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name ? `${row.name} · ${pack.name || pack.id || 'Mod pack'}` : pack.name || pack.id || ''
+    }));
+  });
+  const mergeRows = (...lists) => {
+    const seen = new Set();
+    const out = [];
+    for (const list of lists) for (const row of list || []) {
+      if(!row?.id || seen.has(row.id)) continue;
+      seen.add(row.id);
+      out.push(row);
+    }
+    return out;
+  };
   const soundRows=(window.MC_SOUND_IDS||[]).map(id=>({id,name:id.replace(/^minecraft:/,'')}));
   const byKind = {
-    item: d.items || [],
-    block: d.blocks || [],
-    entity: d.entities || [],
-    sound: soundRows
+    item: mergeRows(d.items, modRows('items')),
+    block: mergeRows(d.blocks, modRows('blocks')),
+    entity: mergeRows(d.entities, modRows('entities')),
+    sound: mergeRows(soundRows, modRows('sounds')),
+    biome: mergeRows(d.biomes, modRows('biomes'))
   };
   return {
     data: byKind,
@@ -1450,16 +1936,23 @@ const VANILLA_IDS = (()=>{
       item: new Set((byKind.item||[]).map(x=>x.id)),
       block: new Set((byKind.block||[]).map(x=>x.id)),
       entity: new Set((byKind.entity||[]).map(x=>x.id)),
-      sound: new Set((byKind.sound||[]).map(x=>x.id))
+      sound: new Set((byKind.sound||[]).map(x=>x.id)),
+      biome: new Set((byKind.biome||[]).map(x=>x.id))
     }
   };
-})();
+}
+let VANILLA_IDS = buildKnownIds();
+function refreshKnownIds(){
+  VANILLA_IDS=buildKnownIds();
+  if(acInput)showAc(acInput);
+}
 let acBox=null, acInput=null;
 function acKindForInput(el){
   if(!el || el.tagName!=='INPUT' || el.type!=='text')return null;
   if(el.matches('#qf_completed_sound,#qf_triggered_sound,.rw-sound'))return 'sound';
   if(el.matches('.obj-block'))return 'block';
   if(el.matches('.obj-entity'))return 'entity';
+  if(el.matches('.obj-biome'))return 'biome';
   if(el.matches('.obj-item,.obj-bitem,.rw-item,.obj-icon,.rw-icon'))return 'item';
   const r=el.getAttribute('data-r')||'';
   if(/(?:^|-)itemv$|(?:^|-)strv$/.test(r))return 'item';
@@ -1470,14 +1963,16 @@ function acFilter(kind,q){
   const all=VANILLA_IDS.data[kind]||[];
   let raw=String(q||'').trim().toLowerCase();
   if(!raw || raw.startsWith('#'))return [];
-  raw=raw.replace(/^minecraft:/,'');
-  const full='minecraft:'+raw;
+  const namespaced=raw.includes(':');
+  const short=namespaced?raw.split(':').pop():raw.replace(/^minecraft:/,'');
+  const full=namespaced?raw:'minecraft:'+short;
   const starts=[], contains=[];
   for(const x of all){
     const id=x.id.toLowerCase();
     const name=String(x.name||'').toLowerCase();
-    if(id.startsWith(full) || id.replace(/^minecraft:/,'').startsWith(raw))starts.push(x);
-    else if(id.includes(raw) || name.includes(raw))contains.push(x);
+    const noNs=id.replace(/^[^:]+:/,'');
+    if(id.startsWith(full) || (!namespaced&&noNs.startsWith(short)))starts.push(x);
+    else if(id.includes(raw) || (!namespaced&&noNs.includes(short)) || name.includes(raw))contains.push(x);
     if(starts.length+contains.length>=80)break;
   }
   return starts.concat(contains).slice(0,80);
@@ -1503,7 +1998,7 @@ function showAc(input){
   const rows=acFilter(kind,input.value);
   const box=ensureAcBox();
   if(!rows.length){hideAc();return;}
-  box.innerHTML=`<div class="mc-ac-head">Vanilla ${kind} IDs</div>`+rows.map(x=>`<button type="button" class="mc-ac-row" data-id="${esc(x.id)}"><span>${esc(x.id)}</span>${x.name?`<small>${esc(x.name)}</small>`:''}</button>`).join('');
+  box.innerHTML=`<div class="mc-ac-head">Known ${kind} IDs</div>`+rows.map(x=>`<button type="button" class="mc-ac-row" data-id="${esc(x.id)}"><span>${esc(x.id)}</span>${x.name?`<small>${esc(x.name)}</small>`:''}</button>`).join('');
   $$('.mc-ac-row',box).forEach(btn=>{
     btn.onmousedown=e=>{
       e.preventDefault();
@@ -1599,7 +2094,7 @@ function validateObjective(o,out,file,kind,path,questIds,depth=0){
   if(fld){
     const val=o[fld];
     if(!val)addMissing(out,file,kind,path+'.'+fld,`Add a ${fld} ID.`);
-    else if(['item','block','entity'].includes(fld)){
+    else if(['item','block','entity','biome'].includes(fld)){
       const st=vanillaStatus(fld,val);
       if(st===false)addIssue(out,'error',file,kind,path+'.'+fld,`Unknown vanilla ${fld} ID: ${val}`);
     }
@@ -1873,6 +2368,8 @@ function setupSettingsMenu(){
   if(autosaveBox)autosaveBox.checked=autosaveEnabled;
   const tooltipBox=$('#tooltipsToggle');
   if(tooltipBox)tooltipBox.checked=tooltipsEnabled;
+  updateUiSoundControls();
+  renderModSupportControls();
   btn.onclick=e=>{
     e.stopPropagation();
     closeSidebarMenus();
@@ -1881,7 +2378,7 @@ function setupSettingsMenu(){
   };
   menu.addEventListener('click',e=>e.stopPropagation());
   document.addEventListener('click',closeSettingsMenu);
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettingsMenu();closeChangelogModal();closeTutorialPrompt();closeConfirmModal();closeBulkDeleteModal();}});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettingsMenu();closeChangelogModal();closeTutorialPrompt();closeConfirmModal();closeBulkDeleteModal();closePersonalizationModal(false);}});
 }
 function setupSidebarResize(){
   const app=$('.app-body'),handle=$('#sidebarResizer');if(!app||!handle)return;
@@ -1911,8 +2408,10 @@ function setupSidebarResize(){
   });
 }
 setupSettingsMenu();
+setupUiSoundEvents();
 setupHelpInteractions();
 setupSidebarResize();
+applyPersonalization(loadPersonalization());
 
 onClick('#btnNewQuest',()=>{let b='new_quest',n=`${b}.json`,i=1;while(quests[n])n=`${b}_${i++}.json`;quests[n]=defQ();touchFile('quest',n);recordActivity('Created','quest',n);selectFile(n,'quest');});
 onClick('#btnNewChapter',()=>{let b='new_chapter',n=`${b}.json`,i=1;while(chapters[n])n=`${b}_${i++}.json`;chapters[n]=defC();touchFile('chapter',n);recordActivity('Created','chapter',n);selectFile(n,'chapter');});
@@ -1921,15 +2420,10 @@ onEvent('#questSearch','input',e=>setQuestSearch(e.target.value));
 onClick('#btnPickImport',()=>$('#fileImport')?.click());
 const fileImportEl=$('#fileImport');
 if(fileImportEl)fileImportEl.onchange=async e=>{
-  const files=e.target.files;if(!files?.length)return;const arr=Array.from(files);let first=null,ok=0;
-  for(const file of arr){
-    try{
-      if(file.name.toLowerCase().endsWith('.zip')){ok+=await importZipFile(file);if(!first&&currentFile)first={file:currentFile,kind:mode};continue;}
-      const text=await file.text();const data=JSON.parse(text);const res=classifyImportedJson(file.name,data);ok++;if(!first)first=res;
-    }catch(err){showMsg(`${file.name}: ${err.message||String(err)}`,false);}
-  }
-  renderFileList();if(first)selectFile(first.file,first.kind);else renderMain();renderValidation();recordActivity('Imported','project','',`${ok} files`);scheduleAutosave();if(ok)showMsg(`Imported ${ok} file${ok===1?'':'s'}.`,true);e.target.value='';
+  await handleImportFiles(e.target.files,'Imported');
+  e.target.value='';
 };
+setupDropImport();
 onClick('#btnTemplates',openTemplateModal);
 onClick('#templateCloseBtn',closeTemplateModal);
 onClick('#templateCreatePack',createStarterPack);
@@ -1955,6 +2449,47 @@ $('#compactJson')?.addEventListener('change',()=>{refreshJson();recordActivity('
 if($('#viewRaw'))$('#viewRaw').onchange=()=>{rawMode=!!$('#viewRaw')?.checked;recordActivity(rawMode?'Enabled raw JSON':'Disabled raw JSON','project','');renderMain();};
 $('#autosaveToggle')?.addEventListener('change',e=>setAutosaveEnabled(e.target.checked));
 $('#tooltipsToggle')?.addEventListener('change',e=>setTooltipsEnabled(e.target.checked));
+$('#uiSoundsToggle')?.addEventListener('change',e=>setUiSoundsEnabled(e.target.checked));
+$('#uiTypingSoundsToggle')?.addEventListener('change',e=>setUiTypingSoundsEnabled(e.target.checked));
+$('#uiSoundVolume')?.addEventListener('input',e=>setUiSoundVolume(e.target.value));
+onEvent('#modSuggestionTarget','change',e=>{
+  modSuggestionTarget=e.target.value||'1.21.1';
+  localStorage.setItem(MOD_SUGGESTION_VERSION_KEY,modSuggestionTarget);
+  refreshKnownIds();
+  renderModSupportControls();
+  showMsg(`Mod suggestion target set to Minecraft ${modSuggestionTarget}.`,true);
+});
+document.addEventListener('change',e=>{
+  const box=e.target?.closest?.('.mod-pack-toggle');
+  if(!box)return;
+  if(box.checked)enabledModSuggestions.add(box.value);else enabledModSuggestions.delete(box.value);
+  saveEnabledModSuggestions();
+  refreshKnownIds();
+  renderModSupportControls();
+  showMsg('Mod suggestion settings updated.',true);
+});
+onClick('#themeToggle',()=>{
+  localStorage.removeItem(PERSONALIZATION_KEY);
+  applyTheme(LIGHT_THEME_IDS.has(cTheme)?'dark':'light');
+  personalizationDraft=defaultPersonalization();
+  applyPersonalization(personalizationDraft);
+  showMsg(`${THEME_NAMES[cTheme]} theme applied.`,true);
+});
+onClick('#btnPersonalization',openPersonalizationModal);
+onEvent('#personalThemePreset','change',e=>{
+  const font=personalizationDraft?.font||"'DM Sans',system-ui,sans-serif";
+  applyTheme(e.target.value);
+  personalizationDraft=Object.assign(defaultPersonalization(),{font});
+  previewPersonalization();
+});
+onClick('#personalizationCloseBtn',()=>closePersonalizationModal(false));
+onClick('#personalizationCancelBtn',()=>closePersonalizationModal(false));
+onClick('#personalizationApplyBtn',()=>closePersonalizationModal(true));
+onClick('#personalizationModal',e=>{if(e.target===$('#personalizationModal'))closePersonalizationModal(false);});
+onEvent('#personalFontSelect','change',e=>{if(personalizationDraft){personalizationDraft.font=e.target.value;previewPersonalization();}});
+onClick('#personalUndoBtn',undoPersonalDraft);
+onClick('#personalRedoBtn',redoPersonalDraft);
+onClick('#muteToggle',()=>setUiSoundsMuted(!uiSoundsMuted));
 onClick('#btnManualSaveHead',manualSaveNow);
 $('#defaultNs')?.addEventListener('input',()=>{renderFileList();renderValidation();refreshJson();scheduleAutosave();});
 $('#defaultNs')?.addEventListener('change',()=>recordActivity('Changed namespace','project','',$('#defaultNs')?.value.trim()||'questlog'));
@@ -1976,8 +2511,8 @@ function shouldRecordHistory(e){
   if(historyRestoring)return false;
   const t=e.target;if(!t||!t.closest)return false;
   const ignored=[
-    '#btnUndo','#btnRedo','#btnDownload','#btnDownloadAll','#btnValidate',
-    '#themeToggle','#btnPickImport','#btnAddMenu','#btnImportExportMenu',
+    '#btnUndo','#btnRedo','#btnDownload','#btnDownloadAll',
+    '#themeToggle','#muteToggle','#btnPickImport','#btnAddMenu','#btnImportExportMenu',
     '#ctxEditName','#templateCloseBtn',
     '#renameCancelBtn','#resetCancelBtn','#resetBackBtn'
   ].join(',');
@@ -2009,7 +2544,6 @@ $('#btnRedo')?.addEventListener('click',redoProject);
 function onFC(e){if(e&&(e.target===lj||e.target.closest?.('#liveJson')||['viewRaw','questListSort','questSearch'].includes(e.target.id)))return;if(rawMode)return;if(mode==='quest'){syncQ();recordEditActivity();dRefresh();}else if($('#cf_name')){$('#cf_name').oninput?.();recordEditActivity();}}
 document.body.addEventListener('input',onFC);document.body.addEventListener('change',onFC);
 document.body.addEventListener('input',scheduleAutosave);document.body.addEventListener('change',scheduleAutosave);document.body.addEventListener('click',()=>setTimeout(scheduleAutosave,0));
-onClick('#btnValidate',()=>{if(mode==='quest')syncQ();else if($('#cf_name'))$('#cf_name').oninput?.();renderValidation();recordActivity('Validated','project','',$('#validateProject')?.checked!==false?'Project-wide':'Selected file');showMsg('Validation refreshed.',true);});
 onEvent('#validateProject','change',()=>{renderValidation();recordActivity('Changed validation scope','project','',$('#validateProject')?.checked!==false?'Project-wide':'Selected file');});
 onClick('#btnBulkDeleteOpen',openBulkDeleteModal);
 onClick('#bulkDeleteCloseBtn',closeBulkDeleteModal);

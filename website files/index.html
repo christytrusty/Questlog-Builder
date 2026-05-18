@@ -3,7 +3,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Questlog JSON Editor</title>
-  <link rel="stylesheet" href="style.css?v=2.5">
+  <link rel="stylesheet" href="style.css?v=2.8">
 <style>
     :root {
       --bg:#131210; --sf:#1b1a16; --sf2:#232118; --sf3:#2a2924;
@@ -25,6 +25,222 @@
       --err:#a03828; --err-bg:rgba(160,56,40,.08);
       --json-bg:#f0ece0; --json-tx:#2a2010;
     }
+    [data-theme="mossbound"] {
+      --bg:#f2efea; --sf:#e7ece1; --sf2:#dce5d6; --sf3:#cbd8c4;
+      --bd:#b7c3ad; --bd2:#96a28c;
+      --tx:#243024; --mu:#687260; --mu2:#a5ad9d;
+      --ac:#5e6b55; --ac-bg:rgba(94,107,85,.12); --ac-hi:rgba(94,107,85,.22);
+      --ok:#496d46; --ok-bg:rgba(73,109,70,.12);
+      --err:#a24b3e; --err-bg:rgba(162,75,62,.1);
+      --json-bg:#fbf8f2; --json-tx:#263126;
+    }
+    [data-theme="ivory-harbor"] {
+      --bg:#f5f1eb; --sf:#ebe5dc; --sf2:#ded6cb; --sf3:#cec3b5;
+      --bd:#c4b9ab; --bd2:#a99e91;
+      --tx:#2f2b25; --mu:#776f66; --mu2:#b0a89d;
+      --ac:#6c8ca3; --ac-bg:rgba(108,140,163,.12); --ac-hi:rgba(108,140,163,.22);
+      --ok:#53764c; --ok-bg:rgba(83,118,76,.12);
+      --err:#a34b3d; --err-bg:rgba(163,75,61,.1);
+      --json-bg:#fbf8f3; --json-tx:#2f2b25;
+    }
+    [data-theme="royal-steel"] {
+      --bg:#f4f6fa; --sf:#ffffff; --sf2:#e8edf5; --sf3:#dbe2ec;
+      --bd:#c8d0db; --bd2:#aeb8c6;
+      --tx:#222a34; --mu:#657180; --mu2:#a9b2bf;
+      --ac:#4a78e0; --ac-bg:rgba(74,120,224,.11); --ac-hi:rgba(74,120,224,.2);
+      --ok:#3f7b56; --ok-bg:rgba(63,123,86,.1);
+      --err:#a84742; --err-bg:rgba(168,71,66,.1);
+      --json-bg:#fbfcff; --json-tx:#1f2730;
+    }
+    [data-theme="cocoa-gold"] {
+      --bg:#ead8c3; --sf:#f4e7d6; --sf2:#e3cdb5; --sf3:#d3b996;
+      --bd:#c8aa84; --bd2:#a17b58;
+      --tx:#3c2b20; --mu:#765c48; --mu2:#a8876d;
+      --ac:#c9a15b; --ac-bg:rgba(201,161,91,.16); --ac-hi:rgba(201,161,91,.28);
+      --ok:#5d7a48; --ok-bg:rgba(93,122,72,.12);
+      --err:#9e4637; --err-bg:rgba(158,70,55,.1);
+      --json-bg:#f8ecd9; --json-tx:#3c2b20;
+    }
+    [data-theme="neon-slate"] {
+      --bg:#2f2f34; --sf:#25262c; --sf2:#343741; --sf3:#414752;
+      --bd:#4b515c; --bd2:#68717e;
+      --tx:#eef2f8; --mu:#9ca5b2; --mu2:#737c88;
+      --ac:#3d7eff; --ac-bg:rgba(61,126,255,.14); --ac-hi:rgba(61,126,255,.26);
+      --ok:#68a45f; --ok-bg:rgba(104,164,95,.13);
+      --err:#d16458; --err-bg:rgba(209,100,88,.12);
+      --json-bg:#202126; --json-tx:#dbe6ff;
+    }
+    [data-theme="matrix-lime"] {
+      --bg:#07130d; --sf:#0b1a12; --sf2:#10251a; --sf3:#173523;
+      --bd:#23462f; --bd2:#3d6842;
+      --tx:#ecffd9; --mu:#88a983; --mu2:#506b4f;
+      --ac:#b4ff00; --ac-bg:rgba(180,255,0,.12); --ac-hi:rgba(180,255,0,.24);
+      --ok:#8ad65f; --ok-bg:rgba(138,214,95,.14);
+      --err:#ff4d4d; --err-bg:rgba(255,77,77,.12);
+      --json-bg:#030906; --json-tx:#d6ff9a;
+    }
+    [data-theme="violet-laser"] {
+      --bg:#160024; --sf:#230042; --sf2:#32005f; --sf3:#430082;
+      --bd:#5a1c94; --bd2:#8230bd;
+      --tx:#ffe7fb; --mu:#d78acd; --mu2:#844b95;
+      --ac:#ff00c8; --ac-bg:rgba(255,0,200,.13); --ac-hi:rgba(255,0,200,.25);
+      --ok:#33d7bc; --ok-bg:rgba(51,215,188,.14);
+      --err:#ff3b72; --err-bg:rgba(255,59,114,.13);
+      --json-bg:#0c0018; --json-tx:#ffb7ef;
+    }
+    [data-theme="mars-charcoal"] {
+      --bg:#11131a; --sf:#181b24; --sf2:#232733; --sf3:#303542;
+      --bd:#3b414f; --bd2:#545d6e;
+      --tx:#f5eeee; --mu:#9b8e8e; --mu2:#675f63;
+      --ac:#ff3b3b; --ac-bg:rgba(255,59,59,.13); --ac-hi:rgba(255,59,59,.25);
+      --ok:#69aa68; --ok-bg:rgba(105,170,104,.13);
+      --err:#ff5555; --err-bg:rgba(255,85,85,.13);
+      --json-bg:#0a0c11; --json-tx:#ffd2d2;
+    }
+    [data-theme="crimson-smoke"] {
+      --bg:#b5b7b9; --sf:#d5d7d8; --sf2:#c7cacc; --sf3:#b8bbbe;
+      --bd:#a2a5a8; --bd2:#85898d;
+      --tx:#2d2024; --mu:#6d5960; --mu2:#917f85;
+      --ac:#6e1e2a; --ac-bg:rgba(110,30,42,.12); --ac-hi:rgba(110,30,42,.22);
+      --ok:#52724a; --ok-bg:rgba(82,114,74,.12);
+      --err:#922f3e; --err-bg:rgba(146,47,62,.1);
+      --json-bg:#e1e3e4; --json-tx:#351a20;
+    }
+    [data-theme="frosted-steel"] {
+      --bg:#c7d2d8; --sf:#e2ebef; --sf2:#d3e0e5; --sf3:#c2d0d7;
+      --bd:#a9bac3; --bd2:#8499a6;
+      --tx:#1e2a35; --mu:#5e6d78; --mu2:#8da0aa;
+      --ac:#2c3a47; --ac-bg:rgba(44,58,71,.11); --ac-hi:rgba(44,58,71,.2);
+      --ok:#486f55; --ok-bg:rgba(72,111,85,.11);
+      --err:#a2473f; --err-bg:rgba(162,71,63,.1);
+      --json-bg:#eef6f8; --json-tx:#1d2b36;
+    }
+    [data-theme="umber-sand"] {
+      --bg:#e6d3b1; --sf:#f3e4ca; --sf2:#e2caa5; --sf3:#d2b58c;
+      --bd:#c09f78; --bd2:#9b744f;
+      --tx:#3a2017; --mu:#7f6049; --mu2:#a68768;
+      --ac:#7a3e2d; --ac-bg:rgba(122,62,45,.13); --ac-hi:rgba(122,62,45,.23);
+      --ok:#63794c; --ok-bg:rgba(99,121,76,.12);
+      --err:#9d4738; --err-bg:rgba(157,71,56,.1);
+      --json-bg:#f7ead2; --json-tx:#3a2017;
+    }
+    [data-theme="blush-clay"] {
+      --bg:#e6d7c8; --sf:#f3e5dc; --sf2:#ead1cf; --sf3:#ddbdbf;
+      --bd:#d0afb1; --bd2:#b98d90;
+      --tx:#483133; --mu:#876b6b; --mu2:#b49192;
+      --ac:#b86f75; --ac-bg:rgba(184,111,117,.13); --ac-hi:rgba(184,111,117,.24);
+      --ok:#5d7e55; --ok-bg:rgba(93,126,85,.11);
+      --err:#a84d58; --err-bg:rgba(168,77,88,.1);
+      --json-bg:#f7eee6; --json-tx:#4a3034;
+    }
+    [data-theme="emerald-spruce"] {
+      --bg:#2f4445; --sf:#3d5253; --sf2:#496061; --sf3:#587173;
+      --bd:#617b7c; --bd2:#789594;
+      --tx:#effff2; --mu:#acc9b6; --mu2:#7a9b83;
+      --ac:#5ecc67; --ac-bg:rgba(94,204,103,.14); --ac-hi:rgba(94,204,103,.26);
+      --ok:#7be077; --ok-bg:rgba(123,224,119,.14);
+      --err:#e06758; --err-bg:rgba(224,103,88,.12);
+      --json-bg:#233637; --json-tx:#c8ffd0;
+    }
+    [data-theme="valhalla-bloom"] {
+      --bg:#1f1850; --sf:#2a2364; --sf2:#383078; --sf3:#484092;
+      --bd:#5b519e; --bd2:#7a70b6;
+      --tx:#f9e7f1; --mu:#c8aabd; --mu2:#83719d;
+      --ac:#e8cfdd; --ac-bg:rgba(232,207,221,.13); --ac-hi:rgba(232,207,221,.24);
+      --ok:#87c67d; --ok-bg:rgba(135,198,125,.13);
+      --err:#e27690; --err-bg:rgba(226,118,144,.12);
+      --json-bg:#15103a; --json-tx:#f1d9e8;
+    }
+    [data-theme="heliotrope-mist"] {
+      --bg:#e4ebd0; --sf:#f4f7e9; --sf2:#e9efd8; --sf3:#dbe5c3;
+      --bd:#c8d5ae; --bd2:#abbc8d;
+      --tx:#33283d; --mu:#766682; --mu2:#a898b0;
+      --ac:#af46f5; --ac-bg:rgba(175,70,245,.11); --ac-hi:rgba(175,70,245,.22);
+      --ok:#4f8054; --ok-bg:rgba(79,128,84,.11);
+      --err:#a84d76; --err-bg:rgba(168,77,118,.1);
+      --json-bg:#f8fbef; --json-tx:#362643;
+    }
+    [data-theme="ink-mint"] {
+      --bg:#0f2a2e; --sf:#17383c; --sf2:#20474b; --sf3:#2c585c;
+      --bd:#3b6b6e; --bd2:#5b8f8b;
+      --tx:#eafff6; --mu:#9acbbb; --mu2:#649b8f;
+      --ac:#9fe0c3; --ac-bg:rgba(159,224,195,.14); --ac-hi:rgba(159,224,195,.25);
+      --ok:#79d292; --ok-bg:rgba(121,210,146,.14);
+      --err:#df6a5d; --err-bg:rgba(223,106,93,.12);
+      --json-bg:#092022; --json-tx:#bdf5df;
+    }
+    [data-theme="ocean-foam"] {
+      --bg:#d9f0f2; --sf:#eefbfc; --sf2:#d4ecef; --sf3:#bddde2;
+      --bd:#a7ced5; --bd2:#7faeb9;
+      --tx:#09293e; --mu:#557586; --mu2:#89aebb;
+      --ac:#0e3a5d; --ac-bg:rgba(14,58,93,.11); --ac-hi:rgba(14,58,93,.2);
+      --ok:#427c5c; --ok-bg:rgba(66,124,92,.11);
+      --err:#a24d46; --err-bg:rgba(162,77,70,.1);
+      --json-bg:#f2fdff; --json-tx:#09293e;
+    }
+    [data-theme="plum-rose"] {
+      --bg:#2c1f2e; --sf:#38293a; --sf2:#46364a; --sf3:#574458;
+      --bd:#665166; --bd2:#8a6f80;
+      --tx:#f2dedb; --mu:#c7a6a1; --mu2:#856b76;
+      --ac:#c7a6a1; --ac-bg:rgba(199,166,161,.14); --ac-hi:rgba(199,166,161,.25);
+      --ok:#82aa74; --ok-bg:rgba(130,170,116,.13);
+      --err:#d46f72; --err-bg:rgba(212,111,114,.12);
+      --json-bg:#211722; --json-tx:#f0d0cf;
+    }
+    [data-theme="tangerine-glow"] {
+      --bg:#11182d; --sf:#201f2b; --sf2:#332c31; --sf3:#473635;
+      --bd:#5e473f; --bd2:#8a5e46;
+      --tx:#fff5e7; --mu:#d3b48b; --mu2:#877969;
+      --ac:#ff9201; --ac-bg:rgba(255,146,1,.14); --ac-hi:rgba(255,146,1,.27);
+      --ok:#8bb767; --ok-bg:rgba(139,183,103,.13);
+      --err:#ff6d00; --err-bg:rgba(255,109,0,.13);
+      --json-bg:#0b1021; --json-tx:#ffe0ad;
+    }
+    [data-theme="salmon-sushi"] {
+      --bg:#0b222b; --sf:#173640; --sf2:#234b54; --sf3:#32636c;
+      --bd:#3f747c; --bd2:#6b979d;
+      --tx:#f9f4dc; --mu:#a9c8c8; --mu2:#78979f;
+      --ac:#ffa384; --ac-bg:rgba(255,163,132,.14); --ac-hi:rgba(255,163,132,.25);
+      --ok:#80b777; --ok-bg:rgba(128,183,119,.13);
+      --err:#ff8a84; --err-bg:rgba(255,138,132,.13);
+      --json-bg:#061720; --json-tx:#e7f2f8;
+    }
+    [data-theme="graphite-gold"] {
+      --bg:#2b2e34; --sf:#343840; --sf2:#414650; --sf3:#505662;
+      --bd:#5e6572; --bd2:#7c8492;
+      --tx:#f1e7c9; --mu:#c3ad78; --mu2:#81765c;
+      --ac:#c6a75e; --ac-bg:rgba(198,167,94,.14); --ac-hi:rgba(198,167,94,.26);
+      --ok:#80aa6b; --ok-bg:rgba(128,170,107,.13);
+      --err:#d07161; --err-bg:rgba(208,113,97,.12);
+      --json-bg:#202329; --json-tx:#ecdba9;
+    }
+    [data-theme="harvest-cinder"] {
+      --bg:#091b1a; --sf:#142925; --sf2:#2d3028; --sf3:#4a382c;
+      --bd:#5d4a39; --bd2:#815f43;
+      --tx:#f2e0bd; --mu:#b69b78; --mu2:#776b5f;
+      --ac:#fbce02; --ac-bg:rgba(251,206,2,.13); --ac-hi:rgba(251,206,2,.25);
+      --ok:#82aa63; --ok-bg:rgba(130,170,99,.13);
+      --err:#f27b57; --err-bg:rgba(242,123,87,.12);
+      --json-bg:#05110f; --json-tx:#f6e7ba;
+    }
+    [data-theme="sea-turtle"] {
+      --bg:#101930; --sf:#062c3c; --sf2:#0d5564; --sf3:#1fc4da;
+      --bd:#167f92; --bd2:#5bbfc4;
+      --tx:#f0fbfb; --mu:#9ecbd1; --mu2:#668a9b;
+      --ac:#82efea; --ac-bg:rgba(130,239,234,.14); --ac-hi:rgba(130,239,234,.25);
+      --ok:#7cd486; --ok-bg:rgba(124,212,134,.13);
+      --err:#df7768; --err-bg:rgba(223,119,104,.12);
+      --json-bg:#071222; --json-tx:#cdfafa;
+    }
+    [data-theme="gotham-violet"] {
+      --bg:#101930; --sf:#19294a; --sf2:#283d68; --sf3:#5644a2;
+      --bd:#4f5a87; --bd2:#7669ba;
+      --tx:#f5f4ff; --mu:#b7acd2; --mu2:#7e79a1;
+      --ac:#c27dfc; --ac-bg:rgba(194,125,252,.13); --ac-hi:rgba(194,125,252,.25);
+      --ok:#84c579; --ok-bg:rgba(132,197,121,.13);
+      --err:#e07a94; --err-bg:rgba(224,122,148,.12);
+      --json-bg:#0a1122; --json-tx:#e2ddff;
+    }
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
     html,body{height:100%;}
     body{font-family:var(--font);background:var(--bg);color:var(--tx);font-size:13.5px;line-height:1.5;display:flex;flex-direction:column;overflow:hidden;}
@@ -41,9 +257,13 @@
     .tb-links a:hover{color:var(--tx);background:var(--sf2);}
     .tb-space{flex:1;}
     .tb-actions{display:flex;align-items:center;gap:6px;}
-    .history-actions{display:flex;align-items:center;gap:3px;}
-    .history-actions .btn{min-width:30px;padding:4px 7px;}
+    .history-actions{display:flex;align-items:center;gap:0;border:1px solid var(--bd2);border-radius:var(--r);background:var(--bg);overflow:hidden;}
+    .history-actions .btn{min-width:30px;padding:4px 7px;border:0;background:transparent;border-radius:0;}
+    .history-actions .btn:hover:not(:disabled){background:var(--sf2);}
     .history-actions .btn:disabled{opacity:.38;cursor:not-allowed;filter:none;}
+    .quick-actions{display:flex;align-items:center;gap:0;border:1px solid var(--bd2);border-radius:var(--r);background:var(--bg);overflow:hidden;}
+    .quick-actions .btn{min-width:30px;padding:4px 7px;border:0;background:transparent;border-radius:0;}
+    .quick-actions .btn:hover:not(:disabled){background:var(--sf2);}
     .version-pill{font-size:11px;color:var(--ac);border:1px solid rgba(212,146,74,.28);background:var(--ac-bg);border-radius:var(--r);padding:2px 7px;line-height:1.4;}
     .ns-wrap{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--mu);}
     .ns-wrap input{width:80px;padding:4px 7px;background:var(--bg);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--font);font-size:12px;outline:none;}
@@ -62,9 +282,15 @@
     .settings-field label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mu);}
     .settings-field input[type="text"]{width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--font);font-size:12.5px;outline:none;}
     .settings-field input[type="text"]:focus{border-color:var(--ac);}
+    .settings-field select{width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--font);font-size:12.5px;outline:none;}
+    .settings-field select:focus{border-color:var(--ac);}
+    .settings-field input[type="range"]{width:100%;accent-color:var(--ac);}
+    .settings-range-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;}
+    .settings-range-value{font-size:11px;color:var(--mu);min-width:36px;text-align:right;}
     .settings-copy{font-size:11.5px;color:var(--mu);line-height:1.45;}
     .settings-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:9px;}
     .settings-action-grid .btn{width:100%;}
+    #btnPersonalization{width:100%;justify-content:center;margin-top:2px;}
     .settings-danger-zone{border-top:1px solid var(--bd);margin-top:10px;padding-top:10px;}
     .compact-status{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-bottom:0;}
     .compact-status span{border:1px solid var(--bd);border-radius:var(--r);padding:5px 6px;background:rgba(0,0,0,.08);color:var(--tx);}
@@ -80,20 +306,40 @@
     .changelog-section-title{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--ac);margin:14px 0 5px;}
     .schema-badge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:var(--ac);text-decoration:none;border:1px solid rgba(212,146,74,.3);background:var(--ac-bg);border-radius:var(--r);padding:2px 7px;line-height:1.35;white-space:nowrap;}
     .schema-badge:hover{border-color:rgba(212,146,74,.55);background:var(--ac-hi);}
-    .export-preview-card{width:min(820px,calc(100vw - 36px));max-height:calc(100vh - 54px);display:flex;flex-direction:column;gap:12px;}
+    .export-preview-card{width:min(760px,calc(100vw - 36px));max-height:calc(100vh - 54px);display:flex;flex-direction:column;gap:12px;}
     .export-preview-body{overflow:auto;border-top:1px solid var(--bd);padding-top:12px;}
+    .export-hero{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center;border:1px solid var(--bd);border-radius:var(--r2);padding:14px;margin-bottom:12px;background:linear-gradient(135deg,rgba(212,146,74,.08),rgba(0,0,0,.04));}
+    .export-hero.ready{background:linear-gradient(135deg,rgba(52,88,48,.18),rgba(90,138,74,.22));border-color:rgba(90,138,74,.5);}
+    .export-hero.review{background:linear-gradient(135deg,rgba(212,146,74,.14),rgba(0,0,0,.04));border-color:rgba(212,146,74,.34);}
+    .export-hero.blocked{background:linear-gradient(135deg,rgba(192,80,64,.14),rgba(0,0,0,.04));border-color:rgba(192,80,64,.34);}
+    .export-orb{width:54px;height:54px;border:1px solid rgba(212,146,74,.34);border-radius:50%;position:relative;display:grid;place-items:center;background:radial-gradient(circle at 35% 30%,rgba(232,192,106,.32),rgba(212,146,74,.08) 42%,rgba(0,0,0,.08));box-shadow:0 0 26px rgba(212,146,74,.13);}
+    .export-orb::before,.export-orb::after{content:"";position:absolute;inset:7px;border:1px solid rgba(212,146,74,.34);border-radius:50%;animation:exportPulse 2.4s ease-in-out infinite;}
+    .export-orb::after{inset:16px;animation-delay:.45s;}
+    .export-orb span{width:10px;height:10px;border-radius:50%;background:var(--ac);box-shadow:0 0 12px rgba(212,146,74,.55);}
+    .export-hero.ready .export-orb span{background:var(--ok);box-shadow:0 0 12px rgba(90,138,74,.62);}
+    .export-hero.ready .export-orb{border-color:rgba(90,138,74,.5);background:radial-gradient(circle at 35% 30%,rgba(124,170,96,.34),rgba(90,138,74,.22) 50%,rgba(0,0,0,.08));box-shadow:0 0 26px rgba(90,138,74,.14);}
+    .export-hero.ready .export-orb::before,.export-hero.ready .export-orb::after{border-color:rgba(90,138,74,.42);}
+    .export-hero.blocked .export-orb span{background:var(--err);}
+    .export-hero.review .export-orb span{background:var(--ac);}
+    @keyframes exportPulse{0%,100%{transform:scale(.9);opacity:.42;}50%{transform:scale(1.08);opacity:.9;}}
+    .export-ready-title{font-weight:800;color:var(--tx);font-size:16px;line-height:1.25;}
+    .export-ready-copy{color:var(--mu);font-size:12px;margin-top:4px;line-height:1.45;}
     .export-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px;}
-    .export-summary-cell{border:1px solid var(--bd);border-radius:var(--r);background:var(--bg);padding:8px;}
-    .export-summary-num{font-size:18px;font-weight:800;color:var(--tx);line-height:1.1;}
+    .export-summary-cell{border:1px solid var(--bd);border-radius:var(--r);background:rgba(0,0,0,.05);padding:8px;}
+    .export-summary-num{font-size:17px;font-weight:800;color:var(--tx);line-height:1.1;}
     .export-summary-label{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);margin-top:3px;}
     .export-section-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--ac);margin:13px 0 6px;}
-    .export-info-box{border:1px solid var(--bd);border-radius:var(--r);background:rgba(212,146,74,.07);padding:8px 9px;margin-bottom:12px;color:var(--mu);font-size:11.5px;line-height:1.45;}
+    .export-info-box{border:1px solid var(--bd);border-radius:var(--r);background:rgba(0,0,0,.05);padding:9px 10px;margin-bottom:12px;color:var(--mu);font-size:11.8px;line-height:1.45;}
     .export-check-list{display:grid;gap:6px;}
-    .export-check{border:1px solid var(--bd);border-radius:var(--r);background:var(--bg);padding:7px 8px;font-size:11.5px;line-height:1.4;color:var(--tx);}
-    .export-check.ok{border-color:rgba(90,138,74,.35);background:var(--ok-bg);}
-    .export-check.warn,.export-check.missing{border-color:rgba(212,146,74,.38);background:rgba(212,146,74,.09);}
-    .export-check.error{border-color:rgba(192,80,64,.35);background:var(--err-bg);}
+    .export-check{border:1px solid var(--bd);border-radius:var(--r);background:rgba(0,0,0,.04);padding:7px 8px;font-size:11.5px;line-height:1.4;color:var(--tx);font-family:var(--font);text-align:left;}
+    button.export-check{width:100%;cursor:pointer;}
+    button.export-check:hover{border-color:var(--ac);background:var(--sf2);}
+    .export-check.ok,.export-check.warn,.export-check.missing,.export-check.error{border-color:var(--bd);}
+    .export-check.needs-attention{border-color:rgba(212,146,74,.5);background:rgba(212,146,74,.1);box-shadow:inset 2px 0 0 var(--ac);}
     .export-check strong{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;margin-right:5px;}
+    .export-check .muted{color:var(--mu);font-size:10.5px;}
+    .export-next-list{display:grid;gap:6px;margin-bottom:12px;}
+    .export-note{font-size:11.6px;color:var(--mu);line-height:1.45;margin-top:8px;}
     .tool-card{width:min(860px,calc(100vw - 36px));max-height:calc(100vh - 54px);display:flex;flex-direction:column;gap:12px;}
     .tool-body{overflow:auto;border-top:1px solid var(--bd);padding-top:12px;}
     .tool-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;}
@@ -106,13 +352,49 @@
     .tool-list-item{display:flex;align-items:center;gap:7px;border:1px solid var(--bd);border-radius:var(--r);background:var(--sf);padding:6px 7px;font-size:11.5px;min-width:0;}
     .tool-list-item span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .tool-meta{font-family:var(--mono);color:var(--mu);font-size:10.5px;}
+    .personalization-card{width:min(940px,calc(100vw - 36px));max-height:calc(100vh - 54px);display:flex;flex-direction:column;gap:12px;overflow:hidden;}
+    .personalization-body{overflow:auto;border-top:1px solid var(--bd);padding-top:14px;display:grid;gap:14px;position:relative;}
+    .personalization-body::before{content:"";position:absolute;right:18px;top:12px;width:150px;height:150px;border-radius:50%;border:1px solid color-mix(in srgb,var(--ac) 22%,transparent);background:radial-gradient(circle,var(--ac-hi),transparent 62%);animation:exportPulse 3.2s ease-in-out infinite;pointer-events:none;}
+    .personalization-body::after{content:"";position:absolute;right:56px;top:50px;width:70px;height:70px;border-radius:50%;border:1px solid color-mix(in srgb,var(--tx) 18%,transparent);animation:exportPulse 4.4s ease-in-out infinite reverse;pointer-events:none;}
+    .personalization-grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:14px;position:relative;z-index:1;}
+    .personal-panel{border:0;border-radius:var(--r2);background:linear-gradient(135deg,color-mix(in srgb,var(--sf) 92%,transparent),color-mix(in srgb,var(--bg) 92%,transparent));padding:12px;display:grid;gap:10px;align-content:start;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bd) 74%,transparent);}
+    .personal-title{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--ac);}
+    .scheme-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+    .scheme-card{border:1px solid var(--bd);border-radius:var(--r2);background:var(--bg);padding:9px;display:grid;gap:7px;justify-items:start;color:var(--tx);cursor:pointer;font-family:var(--font);transition:transform .14s,border-color .14s,background .14s;}
+    .scheme-card:hover{transform:translateY(-1px);border-color:var(--bd2);}
+    .scheme-card.active{border-color:rgba(212,146,74,.55);background:var(--ac-bg);}
+    .scheme-icon{height:24px;display:flex;align-items:center;padding-left:4px;}
+    .scheme-dot{width:18px;height:18px;border-radius:50%;border:1px solid rgba(255,255,255,.16);margin-left:-5px;box-shadow:0 1px 5px rgba(0,0,0,.22);}
+    .scheme-card span:last-child{font-size:11.5px;}
+    .color-workstation{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+    .color-card{border:1px solid var(--bd);border-radius:var(--r2);background:linear-gradient(180deg,var(--bg),color-mix(in srgb,var(--sf) 72%,var(--bg)));padding:10px;display:grid;gap:7px;}
+    .color-card label{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);}
+    .color-row{display:grid;grid-template-columns:42px 1fr;gap:8px;align-items:center;}
+    .color-row input[type="color"]{width:42px;height:32px;border:1px solid var(--bd2);background:transparent;border-radius:var(--r);padding:2px;}
+    .color-row input[type="text"]{width:100%;padding:6px 8px;background:var(--sf);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--mono);font-size:12px;}
+    .font-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;}
+    .font-row select,.personal-panel input[type="text"]{width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--bd2);border-radius:var(--r);color:var(--tx);font-family:var(--font);font-size:12.5px;outline:none;}
+    .font-row select:focus,.personal-panel input[type="text"]:focus{border-color:var(--ac);}
+    .personal-history{display:flex;gap:6px;justify-content:flex-end;}
+    .mod-support-panel{grid-column:1/-1;}
+    .mod-support-head{display:grid;grid-template-columns:minmax(180px,260px) 1fr;gap:12px;align-items:end;}
+    .mod-support-note{font-size:11.5px;color:var(--mu);line-height:1.45;}
+    .mod-support-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:260px;overflow:auto;padding-right:2px;}
+    .mod-pack-row{display:grid;grid-template-columns:auto 1fr;gap:8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--bg);padding:8px;}
+    .mod-pack-row.disabled{opacity:.62;}
+    .mod-pack-name{font-weight:700;font-size:12px;color:var(--tx);}
+    .mod-pack-meta{font-size:10.5px;color:var(--mu);line-height:1.35;}
+    .mod-pack-desc{display:block;font-size:11.5px;color:var(--mu);line-height:1.4;margin-top:3px;}
+    .mod-pack-status{font-size:10px;color:var(--ac);margin-top:3px;}
+    @media (max-width:820px){.mod-support-head,.mod-support-list{grid-template-columns:1fr;}}
+    @media (max-width:820px){.personalization-grid{grid-template-columns:1fr;}.color-workstation{grid-template-columns:1fr;}}
     .recent-list{display:grid;gap:5px;overflow:auto;max-height:480px;}
     .recent-row{display:flex;align-items:center;gap:8px;border:1px solid var(--bd);border-radius:var(--r);background:var(--bg);padding:7px 8px;font-size:11.5px;cursor:pointer;}
     .recent-row:hover{border-color:var(--bd2);background:var(--sf2);}
     .recent-row-main{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .recent-row-sub{font-size:10.5px;color:var(--mu);white-space:nowrap;}
     .migration-preview{display:grid;gap:4px;font-size:11.5px;color:var(--mu);}
-    @media (max-width:720px){.export-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+    @media (max-width:720px){.export-summary-grid,.scheme-options{grid-template-columns:1fr;}}
     @media (max-width:780px){.tool-grid{grid-template-columns:1fr;}}
     .hover-tip{position:fixed;z-index:3000;display:none;max-width:280px;padding:6px 8px;border:1px solid var(--bd2);border-radius:var(--r);background:var(--sf);color:var(--tx);box-shadow:0 8px 22px rgba(0,0,0,.45);font-size:11.5px;line-height:1.35;pointer-events:none;}
     .tutorial-card{width:min(430px,calc(100vw - 36px));}
@@ -137,9 +419,7 @@
     .btn-ghost:hover{background:var(--sf2);color:var(--tx);}
     .topbar .btn-ghost{background:var(--sf2);border-color:var(--bd2);min-width:30px;}
     .topbar .btn-ghost:hover{background:var(--sf3);border-color:var(--ac);}
-    /* Theme toggle: bright in dark mode, dark in light mode */
-    [data-theme="dark"] #themeToggle{color:#e8c06a;border-color:rgba(232,192,106,.35);}
-    [data-theme="light"] #themeToggle{color:#2a2010;border-color:var(--bd2);background:var(--sf2);}
+    .topbar .btn-ghost.active{color:var(--ac);border-color:rgba(212,146,74,.42);background:var(--ac-bg);}
     .btn-danger{color:var(--err);border-color:rgba(192,80,64,.3);background:transparent;}
     .btn-danger:hover{background:var(--err-bg);}
     .btn-sm{padding:3px 8px;font-size:12px;}
@@ -348,7 +628,7 @@
 
 /* UI cleanup pass */
 .clean-topbar{gap:9px;}
-.autosave-status{font-size:11px;color:var(--mu);white-space:nowrap;}
+    .autosave-status{font-size:10.5px;color:var(--mu);white-space:nowrap;padding:2px 4px;}
 .sidebar{width:100%;}
 .sb-foot{gap:8px;}
 .sidebar-actions{display:grid;grid-template-columns:1fr;gap:6px;}
@@ -392,10 +672,13 @@
   <div class="tb-space"></div>
   <div class="tb-actions clean-topbar">
     <div class="history-actions" aria-label="Edit history">
-      <button class="btn btn-ghost btn-sm" id="btnUndo" title="Undo last edit" data-tip="Undo the last editor change. Undo history is saved with the project." disabled>↶</button>
-      <button class="btn btn-ghost btn-sm" id="btnRedo" title="Redo edit" data-tip="Redo the last undone change when redo history is available." disabled>↷</button>
+      <button class="btn btn-sm" id="btnUndo" data-tip="Undo the last editor change. Undo history is saved with the project." disabled>↶</button>
+        <button class="btn btn-sm" id="btnRedo" data-tip="Redo the last undone change when redo history is available." disabled>↷</button>
+      </div>
+    <div class="quick-actions" aria-label="Theme and sound">
+      <button class="btn btn-sm" id="themeToggle" type="button" data-tip="Quickly switch between Questlog light and dark themes.">☀</button>
+      <button class="btn btn-sm" id="muteToggle" type="button" data-tip="Mute or unmute optional editor UI sounds.">♪</button>
     </div>
-    <button class="btn btn-ghost btn-sm" id="themeToggle" data-tip="Switch between the light and dark editor themes.">☀</button>
     <div class="settings-wrap">
       <button class="btn btn-ghost btn-sm" id="btnSettings" type="button" title="Settings" data-tip="Open project, editor, export, changelog, and reset settings.">⚙</button>
       <div class="settings-menu" id="settingsMenu">
@@ -403,7 +686,7 @@
           <div>
             <div class="settings-title">Settings</div>
           </div>
-          <span class="version-pill" id="versionPill">v2.5</span>
+          <span class="version-pill" id="versionPill">v2.8</span>
         </div>
 
         <div class="settings-section">
@@ -417,11 +700,15 @@
         </div>
 
         <div class="settings-section">
-          <div class="settings-label">Editor</div>
-          <div class="settings-row"><label class="toggle-label raw-json-toggle" title="Hide the visual editor and edit the current file directly" data-tip="Edit the selected file as raw JSON instead of using the form controls."><input type="checkbox" id="viewRaw"> Edit raw JSON</label></div>
-          <div class="settings-row"><label class="toggle-label" data-tip="Save the editor project to this browser automatically after changes."><input type="checkbox" id="autosaveToggle" checked> Autosave</label></div>
-          <div class="settings-row"><label class="toggle-label" data-tip="Export compact one-line JSON instead of readable formatted JSON."><input type="checkbox" id="compactJson"> Minify exported JSON</label></div>
-          <div class="settings-row"><label class="toggle-label"><input type="checkbox" id="tooltipsToggle" checked> Tooltips</label></div>
+          <div class="settings-label">Personalization</div>
+          <button type="button" class="btn btn-primary" id="btnPersonalization" data-tip="Open website personalization for themes, editor controls, fonts, and sound toggles.">Website personalization</button>
+          <div class="settings-field">
+            <label for="uiSoundVolume">Volume</label>
+            <div class="settings-range-row">
+              <input type="range" id="uiSoundVolume" min="0" max="200" step="5" value="85" data-tip="Set optional UI sound volume. Goes up to 200% for louder feedback.">
+              <span class="settings-range-value" id="uiSoundVolumeValue">85%</span>
+            </div>
+          </div>
         </div>
 
         <div class="settings-section">
@@ -442,6 +729,12 @@
 
 <div class="toast-stack" id="toastStack" aria-live="polite" aria-atomic="false"></div>
 <div class="hover-tip" id="hoverTip" role="tooltip"></div>
+<div class="import-drop-overlay" id="importDropOverlay" aria-hidden="true">
+  <div class="import-drop-card">
+    <div class="import-drop-title">Drop Questlog files</div>
+    <div class="import-drop-copy">Import .json quest/chapter files or a project .zip.</div>
+  </div>
+</div>
 
 <!-- APP BODY -->
 <div class="app-body">
@@ -505,14 +798,9 @@
       <div class="json-dot"></div>
       <span class="json-head-label" id="jsonPanelLabel">Live JSON</span>
       <div class="json-head-spacer"></div>
-      <span class="autosave-status" id="autosaveStatus">Auto save mode</span>
-      <button class="btn btn-sm" id="btnManualSaveHead" type="button" hidden data-tip="Autosave is off. Save this browser project now.">Save now</button>
+      <span class="validation-badge" id="validationBadge">Ready</span>
     </div>
     <section class="validation-panel" aria-label="Quest validation panel">
-      <div class="validation-toolbar">
-        <button type="button" class="btn btn-sm" id="btnValidate" data-tip="Refresh validation for the selected file and, when enabled, the whole project.">Validate</button>
-        <span class="validation-badge" id="validationBadge">Ready</span>
-      </div>
       <div class="validation-actions"></div>
       <div class="validation-list" id="validationList">Create or import quests to validate them.</div>
     </section>
@@ -602,6 +890,115 @@
   </div>
 </div>
 
+<!-- Personalization modal -->
+<div class="modal-bg" id="personalizationModal">
+  <div class="modal-card personalization-card">
+    <div class="changelog-head">
+      <div>
+        <div class="modal-title">Website personalization</div>
+        <div class="modal-sub">Preview premade themes, fonts, editor controls, and optional sound toggles.</div>
+      </div>
+      <div class="changelog-tools">
+        <button class="btn" id="personalizationCloseBtn">Close</button>
+      </div>
+    </div>
+    <div class="personalization-body">
+      <div class="personalization-grid">
+        <div class="personal-panel">
+          <div class="personal-title">Theme & font</div>
+          <div class="settings-field">
+            <label for="personalThemePreset">Theme</label>
+            <select id="personalThemePreset">
+              <optgroup label="Light themes">
+                <option value="light">Questlog Light</option>
+                <option value="mossbound">Mossbound</option>
+                <option value="ivory-harbor">Ivory Harbor</option>
+                <option value="royal-steel">Royal Steel</option>
+                <option value="cocoa-gold">Cocoa Gold</option>
+                <option value="crimson-smoke">Crimson Smoke</option>
+                <option value="frosted-steel">Frosted Steel</option>
+                <option value="umber-sand">Umber Sand</option>
+                <option value="blush-clay">Blush Clay</option>
+                <option value="heliotrope-mist">Heliotrope Mist</option>
+                <option value="ocean-foam">Ocean Foam</option>
+              </optgroup>
+              <optgroup label="Dark themes">
+                <option value="dark">Questlog Dark</option>
+                <option value="neon-slate">Neon Slate</option>
+                <option value="matrix-lime">Matrix Lime</option>
+                <option value="violet-laser">Violet Laser</option>
+                <option value="mars-charcoal">Mars Charcoal</option>
+                <option value="emerald-spruce">Emerald Spruce</option>
+                <option value="valhalla-bloom">Valhalla Bloom</option>
+                <option value="ink-mint">Ink Mint</option>
+                <option value="plum-rose">Plum Rose</option>
+                <option value="tangerine-glow">Tangerine Glow</option>
+                <option value="salmon-sushi">Salmon Sushi</option>
+                <option value="graphite-gold">Graphite Gold</option>
+                <option value="harvest-cinder">Harvest Cinder</option>
+                <option value="sea-turtle">Sea Turtle</option>
+                <option value="gotham-violet">Gotham Violet</option>
+              </optgroup>
+            </select>
+          </div>
+          <div class="settings-field">
+            <label for="personalFontSelect">Font</label>
+            <select id="personalFontSelect">
+              <option value="'DM Sans',system-ui,sans-serif">DM Sans</option>
+              <option value="'Bahnschrift',system-ui,sans-serif">Bahnschrift</option>
+              <option value="Candara,system-ui,sans-serif">Candara</option>
+              <option value="Cambria,Georgia,serif">Cambria</option>
+              <option value="Constantia,Georgia,serif">Constantia</option>
+              <option value="Arial,system-ui,sans-serif">Arial</option>
+              <option value="Verdana,system-ui,sans-serif">Verdana</option>
+              <option value="Georgia,serif">Georgia</option>
+              <option value="'Trebuchet MS',system-ui,sans-serif">Trebuchet MS</option>
+              <option value="Consolas,'Lucida Console',monospace">Consolas</option>
+              <option value="'Courier New',monospace">Courier New</option>
+              <option value="Impact,fantasy">Impact</option>
+              <option value="'Comic Sans MS',cursive">Comic Sans MS</option>
+              <option value="'Segoe Print','Comic Sans MS',cursive">Segoe Print</option>
+              <option value="'Brush Script MT','Segoe Print',cursive">Brush Script MT</option>
+              <option value="'Copperplate Gothic Light','Copperplate',fantasy">Copperplate</option>
+              <option value="'OCR A Extended','Lucida Console',monospace">OCR A Extended</option>
+              <option value="Stencil,Impact,fantasy">Stencil</option>
+            </select>
+          </div>
+        </div>
+        <div class="personal-panel">
+          <div class="personal-title">Editor & sound</div>
+          <label class="toggle-label raw-json-toggle" title="Hide the visual editor and edit the current file directly" data-tip="Edit the selected file as raw JSON instead of using the form controls."><input type="checkbox" id="viewRaw"> Edit raw JSON</label>
+          <label class="toggle-label" data-tip="Save the editor project to this browser automatically after changes."><input type="checkbox" id="autosaveToggle" checked> Autosave</label>
+          <button class="btn btn-sm" id="btnManualSaveHead" type="button" hidden data-tip="Autosave is off. Save this browser project now.">Save now</button>
+          <label class="toggle-label" data-tip="Export compact one-line JSON instead of readable formatted JSON."><input type="checkbox" id="compactJson"> Minify exported JSON</label>
+          <label class="toggle-label"><input type="checkbox" id="tooltipsToggle" checked> Tooltips</label>
+          <label class="toggle-label"><input type="checkbox" id="uiSoundsToggle"> UI sounds</label>
+          <label class="toggle-label"><input type="checkbox" id="uiTypingSoundsToggle"> Typing sounds</label>
+        </div>
+        <div class="personal-panel mod-support-panel">
+          <div class="mod-support-head">
+            <div class="settings-field">
+              <label for="modSuggestionTarget">Mod suggestion target</label>
+              <select id="modSuggestionTarget" data-tip="Choose which Minecraft version mod ID suggestions should target. The editor is primarily built for 1.21.1, with 1.20.1 supported on the side.">
+                <option value="1.21.1">Minecraft 1.21.1</option>
+                <option value="1.20.1">Minecraft 1.20.1 side support</option>
+              </select>
+            </div>
+            <div class="mod-support-note">
+              Choose which supported mod ID packs can appear in autocomplete. The editor only uses IDs that have been added to the site data.
+            </div>
+          </div>
+          <div class="mod-support-list" id="modSupportList"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="personalizationCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="personalizationApplyBtn">Apply look</button>
+    </div>
+  </div>
+</div>
+
 <!-- Changelog modal -->
 <div class="modal-bg" id="changelogModal">
   <div class="modal-card changelog-card">
@@ -666,6 +1063,7 @@
       </select>
       <label class="toggle-label" data-tip="Show only templates you created with right-click Make template."><input type="checkbox" id="templateCustomOnly"> Your templates</label>
     </div>
+    <div class="template-summary" id="templateSummary"></div>
     <div class="template-actions">
       <button class="btn btn-primary" id="templateCreatePack">Create starter pack</button>
       <button class="btn" id="templateCloseBtn">Close</button>
@@ -695,19 +1093,38 @@
   </div>
 </div>
 
-<script src="error-guard.js?v=2.5"></script>
-<script src="jszip.min.js?v=2.5"></script>
-<script src="minecraft-ids.js?v=2.5"></script>
-<script src="minecraft-sounds.js?v=2.5"></script>
-<script src="app.js?v=2.5"></script>
+<script src="error-guard.js?v=2.8"></script>
+<script src="jszip.min.js?v=2.8"></script>
+<script src="minecraft-ids.js?v=2.8"></script>
+<script src="minecraft-sounds.js?v=2.8"></script>
+<script src="mod-id-packs.js?v=2.8"></script>
+<script src="mod-id-packs/create.js?v=2.8"></script>
+<script src="mod-id-packs/farmersdelight.js?v=2.8"></script>
+<script src="mod-id-packs/supplementaries.js?v=2.8"></script>
+<script src="mod-id-packs/quark.js?v=2.8"></script>
+<script src="mod-id-packs/cataclysm.js?v=2.8"></script>
+<script src="mod-id-packs/deeperdarker.js?v=2.8"></script>
+<script src="mod-id-packs/alexscaves.js?v=2.8"></script>
+<script src="mod-id-packs/alexsmobs.js?v=2.8"></script>
+<script src="mod-id-packs/starcatcher.js?v=2.8"></script>
+<script src="mod-id-packs/regions_unexplored.js?v=2.8"></script>
+<script src="mod-id-packs/biomeswevegone.js?v=2.8"></script>
+<script src="mod-id-packs/biomesoplenty.js?v=2.8"></script>
+<script src="mod-id-packs/netherexp.js?v=2.8"></script>
+<script src="mod-id-packs/betternether.js?v=2.8"></script>
+<script src="mod-id-packs/betterend.js?v=2.8"></script>
+<script src="mod-id-packs/endrem.js?v=2.8"></script>
+<script src="mod-id-packs/darkerdepths.js?v=2.8"></script>
+<script src="mod-id-packs/galosphere.js?v=2.8"></script>
+<script src="app.js?v=2.8"></script>
 <script>
-  window.QUESTLOG_HTML_VERSION='2.5';
+  window.QUESTLOG_HTML_VERSION='2.8';
   setTimeout(function(){
-    if(window.QUESTLOG_APP_VERSION==='2.5'||document.documentElement.dataset.questlogAppVersion==='2.5')return;
+    if(window.QUESTLOG_APP_VERSION==='2.8'||document.documentElement.dataset.questlogAppVersion==='2.8')return;
     var warn=document.createElement('div');
     warn.id='versionMismatchWarning';
     warn.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(10,8,6,.92);color:#f3d7a4;display:flex;align-items:center;justify-content:center;padding:24px;font:14px system-ui,sans-serif;';
-    warn.innerHTML='<div style="max-width:560px;border:1px solid #d4924a;background:#1b1a16;padding:18px;border-radius:5px;line-height:1.5"><strong style="display:block;color:#fff;margin-bottom:8px">Questlog Editor files are mixed.</strong>The page loaded v2.5 HTML, but the app script is missing or still an older cached version. Re-upload every file from the website files folder, then hard refresh this page.</div>';
+    warn.innerHTML='<div style="max-width:560px;border:1px solid #d4924a;background:#1b1a16;padding:18px;border-radius:5px;line-height:1.5"><strong style="display:block;color:#fff;margin-bottom:8px">Questlog Editor files are mixed.</strong>The page loaded v2.8 HTML, but the app script is missing or still an older cached version. Re-upload every file from the website files folder, then hard refresh this page.</div>';
     document.body.appendChild(warn);
   },800);
 </script>
