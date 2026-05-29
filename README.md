@@ -1,51 +1,78 @@
 # Questlog Builder
 
-Questlog Builder is a static website for creating and editing Questlog JSON projects for Minecraft modpacks.
+Static browser editor for creating and exporting Minecraft Questlog quest/chapter JSON and the companion GUI resource-pack assets used by Questlog Builder v3.0.
 
-The editor is meant to make Questlog quest files easier to write, check, import, and export without needing to hand-edit every JSON file.
+## Status
 
-Questlog Builder is an independent editor for Questlog JSON projects and is not affiliated with the Questlog mod authors unless stated otherwise.
+v3.0 is the current release implementation.
 
 ## What It Does
 
-- Edit quest and chapter JSON in a browser.
-- Import existing Questlog JSON files or project ZIPs.
-- Export files back into the Questlog folder layout.
-- Validate common missing fields and broken references.
-- Use starter quest templates as examples.
-- Preview export readiness before downloading a project ZIP.
-- Save custom quest templates and bulk-delete project files.
+- Create and edit Questlog quest and chapter JSON.
+- Preview Questlog quest and quest-list screens in Classic, Focused Inspector, Workbench, and Canvas layouts.
+- Edit QuestDetails and global QuestList GUI textures in the browser.
+- Export selected quest/chapter JSON or a project ZIP with Questlog data and generated resource-pack assets.
+- Validate common Questlog setup issues before export, with an override toggle for advanced users.
+- Keep work in browser storage so local drafts survive reloads.
+
+## Running Locally
+
+This project has no npm install step and no build pipeline. The live app files are in `website files/`.
+
+Use any static file server from the project root, for example:
+
+```powershell
+python -m http.server 8023
+```
+
+Then open:
+
+```text
+http://localhost:8023/website%20files/index.html
+```
+
+If you serve from inside `website files/`, open:
+
+```text
+http://localhost:8023/index.html
+```
+
+## Deploying
+
+For GitHub Pages or Cloudflare Pages, deploy the static contents of `website files/`. No build command is required.
+
+Recommended deployment settings:
+
+- Build command: none
+- Output directory: `website files`
+- Entry file: `index.html`
 
 ## Project Layout
 
-- `website files/` contains the live static website files.
-- Open `website files/index.html` directly, or serve the folder with any simple static file server.
+- `website files/index.html` - main app markup and live script/style keys.
+- `website files/style.css` - main styling and embedded font data.
+- `website files/app.js` - main editor behavior, storage, validation, previews, GUI Studio, and export logic.
+- `website files/minecraft-ids.js` - Minecraft ID helper data.
+- `website files/minecraft-sounds.js` - Minecraft sound helper data.
+- `website files/mod-id-packs.js` and `website files/mod-id-packs/` - optional mod autocomplete data.
+- `docs/` - current context, changelog, release notes, and implementation notes.
 
-## Questlog File Paths
+## Release Notes
 
-Quest files belong in:
+The public changelog is in:
 
 ```text
-config/questlog/quests/
+CHANGELOG.md
 ```
 
-Chapter files belong in:
+## Development Notes
 
-```text
-config/questlog/chapters/
+- Keep the app static unless a future phase explicitly adds a build step.
+- Run this after JavaScript edits:
+
+```powershell
+node --check "website files/app.js"
 ```
 
-Questlog IDs are based on file paths, so names and folders matter.
-
-## Version History
-
-This repository keeps the public website versions in order:
-
-- `v2.0`
-- `v2.2`
-- `v2.3`
-- `v2.5`
-
-Current public release: `v2.5`.
-
-Newer work is added after it passes the local release checklist.
+- Make backups before meaningful edits because this folder may not be a git repo.
+- Preserve browser-saved user data and valid Questlog output.

@@ -1,5 +1,55 @@
 # Changelog
 
+## v3.0
+
+Questlog Builder v3.0 is the big GUI editor and release-workflow update. The editor is still a static website, but it now covers much more of the real Questlog creation workflow: quest/chapter JSON, previews, GUI texture editing, resource-pack export, layout presets, themes, sounds, and modded ID suggestions.
+
+### Added
+
+- Added GUI Studio for QuestDetails and the global QuestList, with Create, Layout & Position, and Final screens based on real Questlog texture pieces.
+- Added per-quest QuestDetails GUI drafts and global QuestList GUI drafts, matching how Questlog actually handles those screens.
+- Added project ZIP export with quest/chapter JSON, Builder manifest data, generated resource-pack textures, per-quest QuestDetails assets, global QuestList atlas output, and QuestList client config files.
+- Added Workbench and Canvas layouts with movable panels, Questlog previews, GUI Editor launch buttons, resources, drawing/hand tools, and recoverable saved panel layouts.
+- Added source-verified Mod Support autocomplete packs with Minecraft 1.21.1/1.20.1 availability checks and verified ID counts.
+- Added bundled Minecraft texture previews for items, blocks, quest/chapter badges, objective/reward rows, and supported entity face previews.
+- Added Minecraft-inspired and regular website themes, font choices, grouped UI sound controls, surface gradient, motion effects, and the hidden Press It preference.
+- Added practical quest templates for gates, landmarks, station unlocks, boss trophy turn-ins, and delivery hand-ins.
+- Added an updated guided tutorial covering the current chapter, quest, preview, GUI editor, Mod Support, settings, resources, and export workflow.
+
+### Reworked
+
+- Rebuilt QuestDetails and QuestList previews around verified Questlog source boundaries so export claims stay honest.
+- Reworked Export preview with left-side metadata, readiness checks, ZIP actions, a fixed-height scrollable project tree, themed surfaces, and clearer blocked/ready states.
+- Reworked Settings into Preferences, Project, Help & Support, Mod Support, and Danger Zone.
+- Reworked Settings so preference changes autosave without a bottom Apply/Cancel bar.
+- Reworked Advanced Layout into Textures & Overlay, while moving visual panel placement into GUI Studio.
+- Reworked Progress editing with clearer section cards, live add/remove counts, boxed File/Notify toggles, and lucide-style section icons.
+- Improved Minecraft ID entry with live space-to-underscore cleanup, recent per-field suggestions, and existing quest-ID suggestions for reference fields.
+
+### Polished
+
+- Replaced old glyph/letter controls with Lucide SVG icons across app chrome, Settings, Focused/Workbench/Canvas controls, context menus, Export readiness, side-panel tabs, Progress actions, and GUI Studio.
+- Added subtle motion effects, theme/sound button animations, modal entry effects, and reactive ambient lighting without affecting Canvas or Workbench backgrounds.
+- Kept Canvas and Workbench toolbars visually stable and excluded from ambient/gradient lighting.
+- Improved QuestList Layout and Final previews with real search tab, chapter tab, scrollbar, row divider, hover, and progress-color behavior.
+- Cleaned up the global QuestList Apply action into one compact path, with export access kept separate.
+- Cleaned up Mod Support search and compact sort/select/clear actions.
+- Improved GUI Studio and export preview responsiveness with coalesced refreshes, targeted preview-cache warming, and closed-preview rerender culling.
+- Tightened Export preview download controls, title icon spacing, project tree scrolling, and ZIP readiness messaging for dense projects.
+- Updated GUI Studio scene dropdowns to match the current screenshot files.
+
+### Fixed
+
+- Fixed non-editor QuestDetails previews showing a Back button where Questlog should not show one.
+- Fixed Progress add/remove counts staying stale after deleting requirements, objectives, failures, or rewards.
+- Fixed Canvas panel zoom/pan behavior forcing panels back into frame or stacking them together.
+- Fixed Workbench/Canvas preview panels becoming clipped, too small, or unrecoverable after aggressive resizing and dragging.
+- Fixed QuestList chapter connector lines, minimized-search placement, row text sizing, icon spacing, and duplicate Final apply paths.
+- Fixed GUI Studio texture zones so edit bounds stay locked to real texture dimensions while Questlog child layers remain fixed.
+- Fixed Export preview stretching vertically when many files were listed by making the project ZIP tree scroll internally.
+- Fixed Mod Support data/status issues including Macaw's Paintings handling and the Alex's Mobs 1.21.1 CurseForge port availability.
+- Fixed multiple old fallback icons across Progress, file badges, Settings preview, GUI Studio thumbnails, and toolbars.
+
 ## v2.5
 
 - Added an export preview flow focused on warning counts, missing data, and the Questlog install folders.

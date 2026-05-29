@@ -6,6 +6,34 @@
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 function esc(s){if(s==null)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function createMemoryStorageFallback(){
+  const api={};
+  Object.defineProperties(api,{
+    getItem:{value:key=>Object.prototype.hasOwnProperty.call(api,String(key))?String(api[String(key)]):null},
+    setItem:{value:(key,value)=>{api[String(key)]=String(value);}},
+    removeItem:{value:key=>{delete api[String(key)];}},
+    clear:{value:()=>Object.keys(api).forEach(key=>delete api[key])},
+    key:{value:index=>Object.keys(api)[Number(index)]??null},
+    length:{get:()=>Object.keys(api).length}
+  });
+  return api;
+}
+let storageMode='memory';
+const localStorage=(()=>{
+  const probe='__questlog_storage_probe__';
+  for(const [mode,getter] of [['local',()=>globalThis.localStorage],['session',()=>globalThis.sessionStorage]]){
+    try{
+      const storage=getter();
+      if(!storage||typeof storage.getItem!=='function'||typeof storage.setItem!=='function')continue;
+      storage.setItem(probe,'1');
+      storage.removeItem(probe);
+      storageMode=mode;
+      return storage;
+    }catch(_err){}
+  }
+  return createMemoryStorageFallback();
+})();
+window.QUESTLOG_STORAGE_MODE=storageMode;
 function maybeRunStorageRecovery(){
   const params=new URLSearchParams(location.search);
   const backupKey='ql.project.autosave.before-v2.2';
@@ -28,10 +56,502 @@ function maybeRunStorageRecovery(){
 maybeRunStorageRecovery();
 
 // ── Theme ─────────────────────────────────────────────────────────
-let cTheme=localStorage.getItem('ql.theme')||'dark';
-function applyTheme(t){document.documentElement.setAttribute('data-theme',t);$('#themeToggle').textContent=t==='dark'?'☀':'☾';cTheme=t;localStorage.setItem('ql.theme',t);}
+const DEFAULT_LIGHT_THEME_ID='crimson-ember';
+const DEFAULT_DARK_THEME_ID='mars-charcoal';
+const THEME_PALETTES={
+  "crimson-ember": {
+    "name": "Crimson Ember",
+    "type": "light",
+    "baseSurface": "#FDF1F1",
+    "themeAccent": "#C0282A",
+    "text": "#2A0A0A"
+  },
+  "fire-coral": {
+    "name": "Fire Coral",
+    "type": "light",
+    "baseSurface": "#FDF3EE",
+    "themeAccent": "#D44E1A",
+    "text": "#2C1008"
+  },
+  "desert-sun": {
+    "name": "Desert Sun",
+    "type": "light",
+    "baseSurface": "#FDF5EC",
+    "themeAccent": "#D97820",
+    "text": "#261A06"
+  },
+  "golden-savanna": {
+    "name": "Golden Savanna",
+    "type": "light",
+    "baseSurface": "#FDFAEC",
+    "themeAccent": "#C49A10",
+    "text": "#251F04"
+  },
+  "bamboo-light": {
+    "name": "Bamboo Light",
+    "type": "light",
+    "baseSurface": "#F3FBF0",
+    "themeAccent": "#5BAB2A",
+    "text": "#0F2208"
+  },
+  "taiga-moss": {
+    "name": "Taiga Moss",
+    "type": "light",
+    "baseSurface": "#EFF6EE",
+    "themeAccent": "#2D7B3C",
+    "text": "#0A1F0E"
+  },
+  "warm-reef": {
+    "name": "Warm Reef",
+    "type": "light",
+    "baseSurface": "#EEF9F7",
+    "themeAccent": "#1A9080",
+    "text": "#052420"
+  },
+  "glacial-bay": {
+    "name": "Glacial Bay",
+    "type": "light",
+    "baseSurface": "#EDF8FC",
+    "themeAccent": "#0E93B5",
+    "text": "#032633"
+  },
+  "frostline": {
+    "name": "Frostline",
+    "type": "light",
+    "baseSurface": "#EEF3FD",
+    "themeAccent": "#2456CC",
+    "text": "#0A1540"
+  },
+  "soul-dusk": {
+    "name": "Soul Dusk",
+    "type": "light",
+    "baseSurface": "#F0EFF9",
+    "themeAccent": "#5040C8",
+    "text": "#120F38"
+  },
+  "end-violet": {
+    "name": "End Violet",
+    "type": "light",
+    "baseSurface": "#F5EFF9",
+    "themeAccent": "#8B35C2",
+    "text": "#210B30"
+  },
+  "cherry-petal": {
+    "name": "Cherry Petal",
+    "type": "light",
+    "baseSurface": "#FDF0F6",
+    "themeAccent": "#C8307A",
+    "text": "#300A1C"
+  },
+  "netherblood": {
+    "name": "Netherblood",
+    "type": "dark",
+    "baseSurface": "#1E0C0C",
+    "themeAccent": "#E0433A",
+    "text": "#F9DEDD"
+  },
+  "badlands-dusk": {
+    "name": "Badlands Dusk",
+    "type": "dark",
+    "baseSurface": "#1C0F08",
+    "themeAccent": "#E0601A",
+    "text": "#F9EAE0"
+  },
+  "dripstone-dark": {
+    "name": "Dripstone Dark",
+    "type": "dark",
+    "baseSurface": "#181108",
+    "themeAccent": "#D97826",
+    "text": "#F5E8D5"
+  },
+  "eroded-gold": {
+    "name": "Eroded Gold",
+    "type": "dark",
+    "baseSurface": "#171408",
+    "themeAccent": "#CCA020",
+    "text": "#F5EDCC"
+  },
+  "lush-cave": {
+    "name": "Lush Cave",
+    "type": "dark",
+    "baseSurface": "#0C1A0A",
+    "themeAccent": "#6AC830",
+    "text": "#DAF4CC"
+  },
+  "mangrove-dark": {
+    "name": "Mangrove Dark",
+    "type": "dark",
+    "baseSurface": "#0C1610",
+    "themeAccent": "#28A050",
+    "text": "#CCEFD8"
+  },
+  "warped-dark": {
+    "name": "Warped Dark",
+    "type": "dark",
+    "baseSurface": "#080F10",
+    "themeAccent": "#00B8A0",
+    "text": "#BCEAE4"
+  },
+  "deep-dark": {
+    "name": "Deep Dark",
+    "type": "dark",
+    "baseSurface": "#080E12",
+    "themeAccent": "#00A8CC",
+    "text": "#C0E8F4"
+  },
+  "frozen-abyss": {
+    "name": "Frozen Abyss",
+    "type": "dark",
+    "baseSurface": "#080C18",
+    "themeAccent": "#2D62E0",
+    "text": "#C8D8F8"
+  },
+  "grove-indigo": {
+    "name": "Grove Indigo",
+    "type": "dark",
+    "baseSurface": "#0C0C1A",
+    "themeAccent": "#6A5AE8",
+    "text": "#D4CEFA"
+  },
+  "end-barrens": {
+    "name": "End Barrens",
+    "type": "dark",
+    "baseSurface": "#0F0814",
+    "themeAccent": "#A044E0",
+    "text": "#E4CCFC"
+  },
+  "mushroom-night": {
+    "name": "Mushroom Night",
+    "type": "dark",
+    "baseSurface": "#160A14",
+    "themeAccent": "#D044A8",
+    "text": "#F4CCEE"
+  },
+  "torched-dark": {
+    "name": "Torched Dark",
+    "type": "dark",
+    "baseSurface": "#141210",
+    "themeAccent": "#53471D",
+    "text": "#F0E6D0"
+  },
+  "void": {
+    "name": "Void",
+    "type": "dark",
+    "baseSurface": "#0A0A0C",
+    "themeAccent": "#342C4F",
+    "text": "#D8D4E8"
+  },
+  "light": {
+    "name": "Questlog Light",
+    "type": "light",
+    "baseSurface": "#EDEAE0",
+    "themeAccent": "#B87030",
+    "text": "#252018"
+  },
+  "royal-steel": {
+    "name": "Royal Steel",
+    "type": "light",
+    "baseSurface": "#F4F6FA",
+    "themeAccent": "#4A78E0",
+    "text": "#222A34"
+  },
+  "crimson-smoke": {
+    "name": "Crimson Smoke",
+    "type": "light",
+    "baseSurface": "#B5B7B9",
+    "themeAccent": "#6E1E2A",
+    "text": "#2D2024"
+  },
+  "blush-clay": {
+    "name": "Blush Clay",
+    "type": "light",
+    "baseSurface": "#F2E9E7",
+    "themeAccent": "#2F8266",
+    "text": "#3D2D31"
+  },
+  "ocean-foam": {
+    "name": "Ocean Foam",
+    "type": "light",
+    "baseSurface": "#E8F5F7",
+    "themeAccent": "#B86835",
+    "text": "#143041"
+  },
+  "neon-slate": {
+    "name": "Neon Slate",
+    "type": "dark",
+    "baseSurface": "#2F2F34",
+    "themeAccent": "#3D7EFF",
+    "text": "#EEF2F8"
+  },
+  "matrix-lime": {
+    "name": "Matrix Lime",
+    "type": "dark",
+    "baseSurface": "#07130D",
+    "themeAccent": "#B4FF00",
+    "text": "#ECFFD9"
+  },
+  "violet-laser": {
+    "name": "Violet Laser",
+    "type": "dark",
+    "baseSurface": "#111127",
+    "themeAccent": "#74E6D6",
+    "text": "#F6ECFF"
+  },
+  "gilded-brute": {
+    "name": "Gilded Brute",
+    "type": "dark",
+    "baseSurface": "#090806",
+    "themeAccent": "#F5C542",
+    "text": "#FFF3CF"
+  },
+  "mars-charcoal": {
+    "name": "Mars Charcoal",
+    "type": "dark",
+    "baseSurface": "#11131A",
+    "themeAccent": "#FF3B3B",
+    "text": "#F5EEEE"
+  },
+  "emerald-spruce": {
+    "name": "Emerald Spruce",
+    "type": "dark",
+    "baseSurface": "#2F4445",
+    "themeAccent": "#5ECC67",
+    "text": "#EFFFF2"
+  },
+  "valhalla-bloom": {
+    "name": "Valhalla Bloom",
+    "type": "dark",
+    "baseSurface": "#0D1424",
+    "themeAccent": "#E55AA7",
+    "text": "#EFF9FF"
+  },
+  "black-dark": {
+    "name": "Black Dark",
+    "type": "dark",
+    "baseSurface": "#000000",
+    "themeAccent": "#FFFFFF",
+    "text": "#F7F7F7"
+  },
+  "white-dark": {
+    "name": "White Dark",
+    "type": "dark",
+    "baseSurface": "#0F1115",
+    "themeAccent": "#F4F4F4",
+    "text": "#FFFFFF"
+  }
+};
+const THEME_NAMES=Object.fromEntries(Object.entries(THEME_PALETTES).map(([id,palette])=>[id,palette.name]));
+const LIGHT_THEME_IDS=new Set(Object.keys(THEME_PALETTES).filter(id=>THEME_PALETTES[id].type==='light'));
+const DARK_THEME_IDS=new Set(Object.keys(THEME_PALETTES).filter(id=>THEME_PALETTES[id].type==='dark'));
+const REMOVED_THEME_FALLBACKS={};
+const LIGHT_THEME_CHOICE_KEY='ql.theme.choice.light';
+const DARK_THEME_CHOICE_KEY='ql.theme.choice.dark';
+const GUI_STUDIO_OPTIONS_KEY='ql.guiStudio.toolOptions';
+const GUI_STUDIO_PALETTE_KEY='ql.guiStudio.paletteLibrary';
+function chosenTheme(kind){
+  const fallback=kind==='light'?DEFAULT_LIGHT_THEME_ID:DEFAULT_DARK_THEME_ID;
+  const raw=localStorage.getItem(kind==='light'?LIGHT_THEME_CHOICE_KEY:DARK_THEME_CHOICE_KEY)||fallback;
+  const set=kind==='light'?LIGHT_THEME_IDS:DARK_THEME_IDS;
+  const migrated=REMOVED_THEME_FALLBACKS[raw]||raw;
+  return set.has(migrated)?migrated:fallback;
+}
+let cTheme=localStorage.getItem('ql.theme')||DEFAULT_DARK_THEME_ID;
+let personalizationOriginalLight=null,personalizationOriginalDark=null,personalizationOriginalLayout=null;
+const PERSONAL_LAYOUT_CHOICES=['classic','focused','workbench','canvas'];
+function normalizePersonalLayoutChoice(value){return PERSONAL_LAYOUT_CHOICES.includes(value)?value:'classic';}
+function currentPersonalLayout(){
+  return normalizePersonalLayoutChoice(document.body?.dataset.layout||document.documentElement?.dataset.layout||loadPersonalization().layout);
+}
+function applyPersonalLayout(value){
+  const layout=normalizePersonalLayoutChoice(value);
+  document.documentElement.dataset.layout=layout;
+  if(document.body)document.body.dataset.layout=layout;
+  if(layout!=='canvas'&&typeof cleanupCanvasDomForNonCanvas==='function')cleanupCanvasDomForNonCanvas();
+  if(window.__focusedLayoutControlsReady)updateFocusedPanelState();
+  if(window.__workbenchControlsReady)updateWorkbenchState();
+  if(typeof updateHistoryButtons==='function')updateHistoryButtons();
+  if(typeof refreshReactiveAmbientLight==='function')refreshReactiveAmbientLight();
+}
+let reactiveAmbientTimer=null,reactiveAmbientMoveFrame=null,reactiveAmbientMoveEvent=null;
+const REACTIVE_AMBIENT_TARGETS=[
+  '.right-panel-tab','.display-tab-slot .tab-btn','.desc-tab','.display-toggle-group','.fi','.file-row','.chapter-head',
+  '.template-footer-btn','.template-row','.sidebar-list-add','.btn','.button-icon','.sidebar-import-icon','.quick-actions .btn',
+  '.preferences-card','.settings-feedback-card','.settings-nav button','.settings-action-grid .btn',
+  '.gui-studio-section-tab','.gui-studio-piece-btn','.gui-studio-tool-btn','.gui-studio-layer-row',
+  '.layout-choice','.workbench-extra-panel','.canvas-corner-controls button','.canvas-view-controls button',
+  'input','select','textarea','[aria-pressed="true"]'
+].join(',');
+const REACTIVE_AMBIENT_SAFE_SURFACES=[
+  '.workbench-extra-panel','.workbench-toolbar-shell','.canvas-corner-controls','.canvas-view-controls',
+  '.settings-menu','.modal-card','.ctx-menu','.sidebar-menu','.gui-studio-shell'
+].join(',');
+function ensureReactiveAmbientLight(){
+  if(!document.body)return null;
+  let light=$('#reactiveAmbientLight');
+  if(!light){
+    light=document.createElement('div');
+    light.id='reactiveAmbientLight';
+    light.className='reactive-ambient-light';
+    light.setAttribute('aria-hidden','true');
+    document.body.prepend(light);
+  }
+  return light;
+}
+function setReactiveAmbientPoint(x,y,{pulse=false}={}){
+  if(!document.body||!ensureReactiveAmbientLight())return;
+  const px=Math.round(Number(x)||0);
+  const py=Math.round(Number(y)||0);
+  document.body.style.setProperty('--reactive-light-x',`${px}px`);
+  document.body.style.setProperty('--reactive-light-y',`${py}px`);
+  document.body.classList.remove('reactive-ambient-muted');
+  document.body.classList.add('reactive-ambient-on');
+  if(pulse){
+    document.body.classList.remove('reactive-ambient-pulse');
+    void document.body.offsetWidth;
+    document.body.classList.add('reactive-ambient-pulse');
+    clearTimeout(reactiveAmbientTimer);
+    reactiveAmbientTimer=setTimeout(()=>document.body?.classList.remove('reactive-ambient-pulse'),640);
+  }
+}
+function setReactiveAmbientFromElement(el,{pulse=false}={}){
+  if(!el||!document.body||!ensureReactiveAmbientLight())return;
+  const rect=el.getBoundingClientRect?.();
+  if(!rect||rect.width<=0||rect.height<=0)return;
+  setReactiveAmbientPoint(rect.left+rect.width/2,rect.top+rect.height/2,{pulse});
+}
+function isReactiveAmbientExcludedTarget(start){
+  if(!start?.closest||!document.body)return false;
+  const layout=currentPersonalLayout?.()||document.body.dataset.layout||'classic';
+  if((layout==='canvas'||layout==='workbench')&&start.closest('.workbench-toolbar-shell'))return true;
+  if(start.closest(REACTIVE_AMBIENT_SAFE_SURFACES))return false;
+  if(layout==='canvas'&&start.closest('.canvas-workspace,.canvas-drawing-surface,.canvas-svg-layer,.app-body'))return true;
+  if(layout==='workbench'&&start.closest('.app-body,.workbench-shell'))return true;
+  return false;
+}
+function findReactiveAmbientTarget(start){
+  if(isReactiveAmbientExcludedTarget(start)){
+    document.body?.classList.add('reactive-ambient-muted');
+    return null;
+  }
+  document.body?.classList.remove('reactive-ambient-muted');
+  return start?.closest?.(REACTIVE_AMBIENT_TARGETS);
+}
+function refreshReactiveAmbientLight(){
+  requestAnimationFrame(()=>{
+    ensureReactiveAmbientLight();
+    const target=$('.right-panel-tab.active')||$('.display-tab-slot .tab-btn.active')||$('.desc-tab.active')||$('.fi.active')||$('.template-footer-btn');
+    setReactiveAmbientFromElement(target);
+  });
+}
+function queueReactiveAmbientPointer(e){
+  if(e.pointerType&&e.pointerType!=='mouse')return;
+  const target=findReactiveAmbientTarget(e.target);
+  if(!target)return;
+  reactiveAmbientMoveEvent=e;
+  if(reactiveAmbientMoveFrame)return;
+  reactiveAmbientMoveFrame=requestAnimationFrame(()=>{
+    const ev=reactiveAmbientMoveEvent;
+    reactiveAmbientMoveFrame=null;
+    if(!ev)return;
+    setReactiveAmbientPoint(ev.clientX,ev.clientY);
+  });
+}
+function initReactiveAmbientLight(){
+  ensureReactiveAmbientLight();
+  document.addEventListener('pointermove',queueReactiveAmbientPointer,{passive:true,capture:true});
+  document.addEventListener('pointerdown',e=>{
+    const target=findReactiveAmbientTarget(e.target);
+    if(target)setReactiveAmbientFromElement(target,{pulse:true});
+  },true);
+  document.addEventListener('focusin',e=>{
+    const target=findReactiveAmbientTarget(e.target);
+    if(target)setReactiveAmbientFromElement(target);
+  },true);
+  window.addEventListener('resize',debounce(refreshReactiveAmbientLight,120));
+  refreshReactiveAmbientLight();
+}
+function triggerUiMotion(el,kind='tap'){
+  if(!el?.classList||el.disabled)return;
+  const map={theme:'ui-motion-theme',sound:'ui-motion-sound',settings:'ui-motion-settings'};
+  const extra=map[kind]||'';
+  ['ui-motion-tap','ui-motion-theme','ui-motion-sound','ui-motion-settings'].forEach(cls=>el.classList.remove(cls));
+  void el.offsetWidth;
+  el.classList.add('ui-motion-tap');
+  if(extra)el.classList.add(extra);
+  setReactiveAmbientFromElement(el,{pulse:true});
+  setTimeout(()=>el.classList.remove('ui-motion-tap','ui-motion-theme','ui-motion-sound','ui-motion-settings'),560);
+}
+function triggerSurfaceMotion(el){
+  if(!el?.classList||el.classList.contains('motion-surface-pop'))return;
+  el.classList.remove('motion-surface-pop');
+  void el.offsetWidth;
+  el.classList.add('motion-surface-pop');
+  setTimeout(()=>el.classList.remove('motion-surface-pop'),620);
+}
+function setupUiMotionEvents(){
+  document.addEventListener('pointerdown',e=>{
+    const el=e.target?.closest?.('button,.btn,[role="button"],.mc-ac-row,.tab-btn');
+    if(!el||el.disabled)return;
+    const themeIds=new Set(['themeToggle','preferencesThemeSwapBtn','workbenchThemeBtn','canvasThemeBtn']);
+    const soundIds=new Set(['muteToggle','workbenchMuteBtn','canvasMuteBtn','uiSoundTestBtn','motionPreviewBtn']);
+    const settingsIds=new Set(['btnSettings','workbenchSettingsBtn','canvasSettingsBtn']);
+    const kind=themeIds.has(el.id)?'theme':soundIds.has(el.id)?'sound':settingsIds.has(el.id)?'settings':'tap';
+    triggerUiMotion(el,kind);
+  },true);
+  const observer=new MutationObserver(records=>{
+    records.forEach(record=>{
+      const el=record.target;
+      if(!(el instanceof Element)||!el.classList.contains('open')||el.classList.contains('motion-surface-pop'))return;
+      if(el.matches('.settings-menu,.modal-bg,.ql-preview-modal,.gui-studio-modal,.sidebar-menu,.drop-menu,.ctx-menu,.workbench-add-menu'))triggerSurfaceMotion(el);
+    });
+  });
+  if(document.body)observer.observe(document.body,{subtree:true,attributes:true,attributeFilter:['class']});
+}
+function updateThemeToggle(){
+  const isLight=LIGHT_THEME_IDS.has(cTheme);
+  const icon=isLight?'moon':'sun';
+  const target=isLight?chosenTheme('dark'):chosenTheme('light');
+  const label=isLight?'Switch to dark theme':'Switch to light theme';
+  const tip=`Switch to ${THEME_NAMES[target]||target}.`;
+  ['#themeToggle','#preferencesThemeSwapBtn'].forEach(selector=>{
+    const btn=$(selector);
+    if(!btn)return;
+    btn.innerHTML=guiStudioLucideIcon(icon,'button-icon');
+    btn.classList.add('icon-only','icon-button-polish','icon-spin-on-click');
+    btn.setAttribute('aria-label',label);
+    btn.setAttribute('data-tip',tip);
+    btn.setAttribute('title',tip);
+  });
+  if(window.__workbenchControlsReady)refreshWorkbenchToolbarIcons();
+}
+function toggleWebsiteTheme(){
+  const prefs=personalizationDraft?clonePersonalizationDraft():loadPersonalization();
+  const keepLayout=normalizePersonalLayoutChoice(document.body?.dataset.layout||prefs.layout||'classic');
+  applyTheme(LIGHT_THEME_IDS.has(cTheme)?chosenTheme('dark'):chosenTheme('light'));
+  prefs.layout=keepLayout;
+  if(personalizationDraft){
+    personalizationDraft=prefs;
+    updatePersonalLayoutButtons();
+    localStorage.setItem(PERSONALIZATION_KEY,JSON.stringify(personalizationDraft));
+  }
+  applyPersonalization(prefs);
+}
+function applyTheme(t){
+  cTheme=THEME_NAMES[t]?t:(REMOVED_THEME_FALLBACKS[t]||DEFAULT_DARK_THEME_ID);
+  document.documentElement.setAttribute('data-theme',cTheme);
+  const light=LIGHT_THEME_IDS.has(cTheme);
+  document.documentElement.style.setProperty('--gui-studio-checker-a',light?'#3f3f3f':'#d4d4d4');
+  document.documentElement.style.setProperty('--gui-studio-checker-b',light?'#262626':'#fafafa');
+  document.documentElement.style.setProperty('--gui-studio-grid-line',light?'rgba(255,255,255,.56)':'rgba(0,0,0,.45)');
+  localStorage.setItem('ql.theme',cTheme);
+  const lightSelect=$('#personalLightThemePreset');
+  const darkSelect=$('#personalDarkThemePreset');
+  if(lightSelect)lightSelect.value=chosenTheme('light');
+  if(darkSelect)darkSelect.value=chosenTheme('dark');
+  updateThemeToggle();
+  if(typeof refreshReactiveAmbientLight==='function')refreshReactiveAmbientLight();
+}
 applyTheme(cTheme);
-$('#themeToggle').onclick=()=>applyTheme(cTheme==='dark'?'light':'dark');
 
 // ── Constants ─────────────────────────────────────────────────────
 const MC_STATS=["minecraft:leave_game","minecraft:play_time","minecraft:total_world_time","minecraft:time_since_death","minecraft:time_since_rest","minecraft:sneak_time","minecraft:walk_one_cm","minecraft:crouch_one_cm","minecraft:sprint_one_cm","minecraft:walk_on_water_one_cm","minecraft:fall_one_cm","minecraft:climb_one_cm","minecraft:fly_one_cm","minecraft:walk_under_water_one_cm","minecraft:minecart_one_cm","minecraft:boat_one_cm","minecraft:pig_one_cm","minecraft:horse_one_cm","minecraft:aviate_one_cm","minecraft:swim_one_cm","minecraft:strider_one_cm","minecraft:jump","minecraft:drop","minecraft:damage_dealt","minecraft:damage_dealt_absorbed","minecraft:damage_dealt_resisted","minecraft:damage_taken","minecraft:damage_blocked_by_shield","minecraft:damage_absorbed","minecraft:damage_resisted","minecraft:deaths","minecraft:mob_kills","minecraft:animals_bred","minecraft:player_kills","minecraft:fish_caught","minecraft:talked_to_villager","minecraft:traded_with_villager","minecraft:eat_cake_slice","minecraft:fill_cauldron","minecraft:use_cauldron","minecraft:clean_armor","minecraft:clean_banner","minecraft:clean_shulker_box","minecraft:interact_with_brewingstand","minecraft:interact_with_beacon","minecraft:inspect_dropper","minecraft:inspect_hopper","minecraft:inspect_dispenser","minecraft:play_noteblock","minecraft:tune_noteblock","minecraft:pot_flower","minecraft:trigger_trapped_chest","minecraft:open_enderchest","minecraft:enchant_item","minecraft:play_record","minecraft:interact_with_furnace","minecraft:interact_with_crafting_table","minecraft:open_chest","minecraft:sleep_in_bed","minecraft:open_shulker_box","minecraft:open_barrel","minecraft:interact_with_blast_furnace","minecraft:interact_with_smoker","minecraft:interact_with_lectern","minecraft:interact_with_campfire","minecraft:interact_with_cartography_table","minecraft:interact_with_loom","minecraft:interact_with_stonecutter","minecraft:bell_ring","minecraft:raid_trigger","minecraft:raid_win","minecraft:interact_with_anvil","minecraft:interact_with_grindstone","minecraft:target_hit","minecraft:interact_with_smithing_table"];
@@ -39,13 +559,16 @@ const EQUIP_SLOTS=["head","chest","legs","feet","mainhand","offhand","body"];
 const OBJ_TYPES=["questlog:stat","questlog:block_mine","questlog:block_place","questlog:entity_breed","questlog:entity_death","questlog:entity_kill","questlog:entity_tame","questlog:item_craft","questlog:item_drop","questlog:item_equip","questlog:item_obtain","questlog:item_use","questlog:visit_biome","questlog:visit_dimension","questlog:visit_position","questlog:trample","questlog:enchant","questlog:effect_added","questlog:visit_structure","questlog:or","questlog:not","questlog:block_interact","questlog:entity_approach","questlog:quest_complete","questlog:read","questlog:advancement","questlog:unobtainable"];
 const REW_TYPES=["questlog:item","questlog:command","questlog:experience","questlog:loot_table"];
 const NO_AMOUNT_OBJECTIVES=new Set(["questlog:or","questlog:not","questlog:read","questlog:unobtainable","questlog:quest_complete"]);
-const APP_VERSION='2.5';
+const APP_VERSION='3.0';
 window.QUESTLOG_APP_VERSION=APP_VERSION;
 document.documentElement.dataset.questlogAppVersion=APP_VERSION;
-const PANEL_DEF=["display","progress","sounds","layout","labels","badge"];
-const PANEL_FIELDS={display:["title","sort_order","chapter","translatable","include_in_main","hidden","description","description_completed","description_failed","icon"],progress:["requirements","objectives","failures","rewards"],sounds:["completed_sound","triggered_sound","toast_on_unlock","toast_on_complete","show_popup_on_unlock"],layout:["background_texture","right_panel_texture","peripheral_texture","overlay","overlay_width","overlay_height","overlay_x_offset","overlay_y_offset","left_panel_width","right_panel_width","panel_height","left_panel_x_offset","left_panel_y_offset","right_panel_x_offset","right_panel_y_offset"],labels:["back_button_text","collect_button_text","uncollected_text","collected_text","text_color","completed_text_color","hovered_text_color","title_color","progress_text_color"],badge:["badge"]};
+document.documentElement.dataset.questlogStorage=storageMode;
+const RIGHT_PANEL_MODE_KEY='ql.rightPanelMode';
+const CHAPTER_COLLAPSE_KEY='ql.sidebarCollapsedChapters';
+const PANEL_DEF=["display","progress","layout","labels","badge"];
+const PANEL_FIELDS={display:["title","sort_order","chapter","translatable","include_in_main","hidden","description","description_completed","description_failed","icon","completed_sound","triggered_sound","toast_on_unlock","toast_on_complete","show_popup_on_unlock"],progress:["requirements","objectives","failures","rewards"],layout:["background_texture","right_panel_texture","peripheral_texture","overlay","overlay_width","overlay_height","overlay_x_offset","overlay_y_offset","left_panel_width","right_panel_width","panel_height","left_panel_x_offset","left_panel_y_offset","right_panel_x_offset","right_panel_y_offset"],labels:["back_button_text","collect_button_text","uncollected_text","collected_text","text_color","completed_text_color","hovered_text_color","title_color","progress_text_color"],badge:["badge"]};
 const ADV_KEYS=["layout","labels","badge"];
-const MAIN_KEYS=["display","progress","sounds"];
+const MAIN_KEYS=["display","progress"];
 const MC_COLORS=[
   {code:'§0',name:'Black',color:'#000000'},{code:'§1',name:'Dark Blue',color:'#0000AA'},{code:'§2',name:'Dark Green',color:'#00AA00'},{code:'§3',name:'Dark Aqua',color:'#00AAAA'},
   {code:'§4',name:'Dark Red',color:'#AA0000'},{code:'§5',name:'Dark Purple',color:'#AA00AA'},{code:'§6',name:'Gold',color:'#FFAA00'},{code:'§7',name:'Gray',color:'#AAAAAA'},
@@ -58,7 +581,21 @@ const MC_STYLES=[
 
 // ── State ─────────────────────────────────────────────────────────
 let mode='quest',quests={},chapters={},currentFile=null,rawMode=false,jsonFocused=false;
-let isDragging=false,draggedQuest=null;
+let rightPanelMode=['json','validation'].includes(localStorage.getItem(RIGHT_PANEL_MODE_KEY))?localStorage.getItem(RIGHT_PANEL_MODE_KEY):'json';
+let questPreviewTextMode='default';
+let questPreviewDetailsOpen=false;
+let questPreviewAppliedPanelDismissed=false;
+let questPreviewDetailIndex=0;
+let questlogListSearchExpanded=false;
+let questlogListCondensed=false;
+let questlogListHideCompleted=false;
+let questlogListSearchQuery='';
+let questPreviewOpenedFromList=false;
+let questlogListActiveChapter=null;
+const questPreviewCompletedFiles=new Set();
+const questPreviewFailedFiles=new Set();
+let isDragging=false,draggedQuest=null,questSidebarPointerDrag=null,suppressNextQuestClick=false;
+let collapsedChapters=loadCollapsedChapters();
 let panelOrder=loadOrder();
 let activeAdvKey=null; // which advanced section is currently shown
 let toastSeq=0;
@@ -67,8 +604,10 @@ function debounce(fn,ms){let t;return function(...a){clearTimeout(t);t=setTimeou
 function onClick(sel,fn){const el=$(sel);if(el)el.onclick=fn;else console.warn(`[missing ui] ${sel}`);}
 function onEvent(sel,type,fn){const el=$(sel);if(el)el.addEventListener(type,fn);else console.warn(`[missing ui] ${sel}`);}
 function showMsg(t,ok){
-  const stack=$('#toastStack');if(!stack)return;
+  const studio=$('#guiStudioModal.open');
+  const stack=studio?.querySelector('#guiStudioToastStack')||$('#toastStack');if(!stack)return;
   if(!t){stack.innerHTML='';return;}
+  playUiSound(ok?'confirm':'invalid');
   const toast=document.createElement('div');
   toast.className=`toast ${ok?'ok':'err'}`;
   toast.dataset.toastId=String(++toastSeq);
@@ -80,9 +619,651 @@ function showMsg(t,ok){
   };
   setTimeout(close,5000);
 }
+let uiAudioCtx=null,lastTypeSoundAt=0;
+const UI_SOUND_FILES={
+  click:'ui-sounds/ui-click.wav',
+  toggle:'ui-sounds/ui-toggle.wav',
+  menu:'ui-sounds/ui-menu.wav',
+  type:'ui-sounds/ui-type.wav',
+  backtype:'ui-sounds/ui-backtype.wav',
+  success:'ui-sounds/ui-success.wav',
+  error:'ui-sounds/ui-error.wav',
+  confirm:'ui-sounds/confirm-action.wav',
+  invalid:'ui-sounds/blocked-invalid-action.wav',
+  panel:'ui-sounds/panel-open-close.wav'
+};
+const UI_SOUND_GROUPS=[
+  {label:'Core actions',setting:'UI sounds',routes:['click','toggle','menu','panel']},
+  {label:'Typing',setting:'Typing sounds',routes:['type','backtype']},
+  {label:'Feedback',setting:'Feedback sounds',routes:['confirm','invalid','success','error']}
+];
+const UI_SOUND_SHAPES={
+  click:{freq:420,duration:0.05,gain:0.11},
+  toggle:{freq:560,duration:0.065,gain:0.12},
+  menu:{freq:360,duration:0.07,gain:0.10},
+  type:{freq:720,duration:0.022,gain:0.052},
+  backtype:{freq:410,duration:0.028,gain:0.052},
+  success:{freq:660,duration:0.105,gain:0.13},
+  error:{freq:180,duration:0.13,gain:0.14},
+  confirm:{freq:660,duration:0.105,gain:0.13},
+  invalid:{freq:180,duration:0.13,gain:0.14},
+  panel:{freq:360,duration:0.07,gain:0.10}
+};
+const uiSoundBuffers={},uiSoundBufferPromises={};
+function canPlayUiSound(kind){
+  if(!uiSoundsEnabled||uiSoundsMuted||uiSoundVolume<=0)return false;
+  if((kind==='type'||kind==='backtype')&&!uiTypingSoundsEnabled)return false;
+  if(['success','error','confirm','invalid'].includes(kind)&&!uiFeedbackSoundsEnabled)return false;
+  return true;
+}
+function getUiAudioContext(){
+  const AudioCtx=window.AudioContext||window.webkitAudioContext;
+  if(!AudioCtx)return null;
+  uiAudioCtx=uiAudioCtx||new AudioCtx();
+  if(uiAudioCtx.state==='suspended')uiAudioCtx.resume?.();
+  return uiAudioCtx;
+}
+function loadUiSoundBuffer(kind){
+  const key=UI_SOUND_FILES[kind]?kind:'click';
+  if(uiSoundBuffers[key])return Promise.resolve(uiSoundBuffers[key]);
+  if(!uiSoundBufferPromises[key]){
+    uiSoundBufferPromises[key]=fetch(UI_SOUND_FILES[key],{cache:'no-store'})
+      .then(res=>{
+        if(!res.ok)throw new Error(`Missing UI sound: ${key}`);
+        return res.arrayBuffer();
+      })
+      .then(buffer=>{
+        const ctx=getUiAudioContext();
+        if(!ctx)throw new Error('AudioContext unavailable');
+        return ctx.decodeAudioData(buffer);
+      })
+      .then(decoded=>(uiSoundBuffers[key]=decoded))
+      .catch(err=>{
+        delete uiSoundBufferPromises[key];
+        throw err;
+      });
+  }
+  return uiSoundBufferPromises[key];
+}
+function playGeneratedUiSound(kind='click'){
+  try{
+    const ctx=getUiAudioContext();if(!ctx)return;
+    const shape=UI_SOUND_SHAPES[kind]||UI_SOUND_SHAPES.click;
+    const osc=ctx.createOscillator(),gain=ctx.createGain();
+    const now=ctx.currentTime;
+    osc.type='sine';osc.frequency.setValueAtTime(shape.freq,now);
+    gain.gain.setValueAtTime(0.0001,now);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001,shape.gain*uiSoundVolume),now+0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001,now+shape.duration);
+    osc.connect(gain);gain.connect(ctx.destination);
+    osc.start(now);osc.stop(now+shape.duration+0.012);
+  }catch(err){}
+}
+function uiAudioUserActivated(){
+  const activation=navigator.userActivation;
+  return !activation||activation.isActive||activation.hasBeenActive;
+}
+function playUiSound(kind='click'){
+  if(!canPlayUiSound(kind))return;
+  if(!uiAudioUserActivated())return;
+  const key=UI_SOUND_FILES[kind]?kind:'click';
+  const ctx=getUiAudioContext();if(!ctx)return;
+  loadUiSoundBuffer(key).then(buffer=>{
+    if(!canPlayUiSound(kind))return;
+    getUiAudioContext();
+    const source=ctx.createBufferSource(),gain=ctx.createGain();
+    source.buffer=buffer;
+    gain.gain.setValueAtTime(Math.min(2,Math.max(0,uiSoundVolume)),ctx.currentTime);
+    source.connect(gain);gain.connect(ctx.destination);
+    source.start();
+  }).catch(()=>playGeneratedUiSound(key));
+}
+function renderUiSoundFeedbackCard(){
+  const card=$('#settingsFeedbackCard'),list=$('#settingsFeedbackRoutes'),folder=$('#settingsFeedbackFolder');
+  if(!card||!list)return;
+  if(folder)folder.textContent='website files/ui-sounds/';
+  list.innerHTML=UI_SOUND_GROUPS.map(group=>{
+    const files=group.routes.map(route=>`${route}: ${UI_SOUND_FILES[route].replace('ui-sounds/','')}`).join(' | ');
+    return `<div class="settings-feedback-route" data-sound-group="${group.label.toLowerCase().replace(/[^a-z0-9]+/g,'-')}"><span><strong>${group.label}</strong><small>${group.setting}</small></span><code>${files}</code></div>`;
+  }).join('');
+}
+function updateUiSoundControls(){
+  renderUiSoundFeedbackCard();
+  const soundBox=$('#uiSoundsToggle'),typeBox=$('#uiTypingSoundsToggle'),feedbackBox=$('#uiFeedbackSoundsToggle'),vol=$('#uiSoundVolume'),val=$('#uiSoundVolumeValue'),mute=$('#muteToggle');
+  if(soundBox)soundBox.checked=uiSoundsEnabled;
+  if(typeBox){typeBox.checked=uiTypingSoundsEnabled;typeBox.disabled=!uiSoundsEnabled;}
+  if(feedbackBox){feedbackBox.checked=uiFeedbackSoundsEnabled;feedbackBox.disabled=!uiSoundsEnabled;}
+  if(vol){vol.value=String(Math.round(uiSoundVolume*100));vol.disabled=!uiSoundsEnabled;}
+  if(val)val.textContent=`${Math.round(uiSoundVolume*100)}%`;
+  if(mute){
+    mute.innerHTML=guiStudioLucideIcon(uiSoundsMuted?'volume-x':'volume-2','button-icon');
+    mute.classList.add('icon-only','icon-button-polish');
+    mute.classList.toggle('active',uiSoundsEnabled&&!uiSoundsMuted);
+    mute.setAttribute('aria-pressed',String(uiSoundsEnabled&&!uiSoundsMuted));
+    mute.setAttribute('aria-label',uiSoundsMuted?'Unmute UI sounds':'Mute UI sounds');
+    mute.dataset.tip=uiSoundsMuted?'UI sounds are muted. Click to unmute.':'Mute or unmute optional editor UI sounds.';
+  }
+  updateWorkbenchMuteButton();
+}
+function updateWorkbenchMuteButton(){
+  const btn=$('#workbenchMuteBtn');if(!btn)return;
+  const icon=btn.querySelector('span'),label=btn.querySelector('small');
+  if(icon)icon.innerHTML=guiStudioLucideIcon(uiSoundsMuted?'volume-x':'volume-2','workbench-button-icon');
+  if(label)label.textContent=uiSoundsMuted?'Muted':'Mute';
+  btn.classList.toggle('is-muted',!!uiSoundsMuted);
+  btn.setAttribute('aria-pressed',String(!uiSoundsMuted&&uiSoundsEnabled));
+  const canvasBtn=$('#canvasMuteBtn');
+  if(canvasBtn){
+    canvasBtn.innerHTML=guiStudioLucideIcon(uiSoundsMuted?'volume-x':'volume-2','workbench-button-icon');
+    canvasBtn.classList.toggle('is-muted',!!uiSoundsMuted);
+    canvasBtn.setAttribute('aria-pressed',String(!uiSoundsMuted&&uiSoundsEnabled));
+  }
+}
+function setWorkbenchToolIcon(selector,icon,label){
+  const btn=$(selector);if(!btn)return;
+  btn.innerHTML=`<span class="tool-svg" aria-hidden="true">${guiStudioLucideIcon(icon,'workbench-button-icon')}</span>${label?`<small>${esc(label)}</small>`:''}`;
+}
+function refreshWorkbenchToolbarIcons(){
+  setWorkbenchToolIcon('#workbenchAddPanelBtn','plus','Add panel');
+  setWorkbenchToolIcon('#workbenchExportBtn','download','Export');
+  setWorkbenchToolIcon('#workbenchPreviewBtn','book-open-check','Preview');
+  setWorkbenchToolIcon('#workbenchUndoBtn','undo','Undo');
+  setWorkbenchToolIcon('#workbenchRedoBtn','redo','Redo');
+  setWorkbenchToolIcon('#workbenchSettingsBtn','settings','Settings');
+  setWorkbenchToolIcon('#workbenchThemeBtn',LIGHT_THEME_IDS.has(cTheme)?'moon':'sun','Theme');
+  setWorkbenchToolIcon('#canvasDrawToolBtn','pencil','Draw');
+  setWorkbenchToolIcon('#canvasEraserToolBtn','eraser','Eraser');
+  setWorkbenchToolIcon('#canvasHandToolBtn','hand','Hand');
+  setWorkbenchToolIcon('#canvasThemeBtn',LIGHT_THEME_IDS.has(cTheme)?'moon':'sun','');
+  setWorkbenchToolIcon('#canvasZoomOutBtn','minus','');
+  setWorkbenchToolIcon('#canvasZoomInBtn','plus','');
+  const reset=$('#canvasZoomResetBtn');
+  if(reset){
+    const value=reset.querySelector('.canvas-zoom-label')?.textContent||reset.querySelector('span')?.textContent||'100%';
+    reset.innerHTML=`${guiStudioLucideIcon('rotate-ccw','workbench-button-icon')}<span class="canvas-zoom-label">${esc(value)}</span>`;
+  }
+  setWorkbenchToolIcon('#canvasSettingsBtn','settings','');
+  const canvasSettings=$('#canvasSettingsBtn');
+  if(canvasSettings){
+    canvasSettings.setAttribute('aria-label','Open Settings');
+    canvasSettings.dataset.tip='Open Settings';
+  }
+  $$('.workbench-panel-remove').forEach(btn=>{btn.innerHTML=guiStudioLucideIcon('x','workbench-button-icon');});
+  updateWorkbenchMuteButton();
+}
+function setChromeIconButton(selector,icon,{label='',aria='',spin=false}={}){
+  const btn=$(selector);if(!btn)return;
+  btn.innerHTML=`${guiStudioLucideIcon(icon,'button-icon')}${label?`<span>${esc(label)}</span>`:''}`;
+  btn.classList.add('icon-button-polish');
+  btn.classList.toggle('icon-only',!label);
+  btn.classList.toggle('icon-spin-on-click',!!spin);
+  if(aria)btn.setAttribute('aria-label',aria);
+}
+function setFocusedDockIcon(selector,icon){
+  const slot=$(`${selector} .focused-dock-icon`);
+  if(slot)slot.innerHTML=guiStudioLucideIcon(icon,'focused-dock-svg');
+}
+function refreshFocusedDockIcons(){
+  setFocusedDockIcon('#focusedLeftToggle',focusedLeftOpen?'folder-open':'folder');
+  setFocusedDockIcon('#focusedSettingsToggle','settings');
+  setFocusedDockIcon('#focusedRightToggle','file-code-2');
+}
+function refreshGlobalChromeIcons(){
+  setChromeIconButton('#btnAddMenu','plus',{aria:'Add quest or chapter'});
+  setChromeIconButton('#btnUndo','undo',{aria:'Undo'});
+  setChromeIconButton('#btnRedo','redo',{aria:'Redo'});
+  setChromeIconButton('#btnSettings','settings',{aria:'Open Settings',spin:true});
+  refreshFocusedDockIcons();
+  const closeBtn=$('#settingsCloseBtn');
+  if(closeBtn){
+    closeBtn.innerHTML=guiStudioLucideIcon('x','button-icon');
+    closeBtn.classList.add('icon-button-polish','icon-only');
+  }
+  const prefIcons={preferences:'sliders-horizontal',project:'folder',help:'circle-help',mod:'puzzle',danger:'alert-triangle'};
+  $$('.preferences-nav-item[data-pref-tab]').forEach(btn=>{
+    const icon=prefIcons[btn.dataset.prefTab]||'settings';
+    const mark=btn.querySelector('span:first-child');
+    if(mark)mark.innerHTML=guiStudioLucideIcon(icon,'preferences-nav-icon-svg');
+  });
+  const heroIcon=$('.preferences-hero-icon');
+  if(heroIcon)heroIcon.innerHTML=guiStudioLucideIcon('settings','preferences-hero-svg');
+  updateThemeToggle();
+  updateUiSoundControls();
+  updateModSupportToolIcons();
+}
+function modSupportSortLabel(value){
+  return {available:'Available first',name:'Name A-Z',category:'Category',data:'Most data'}[value]||'Available first';
+}
+function updateModSupportToolIcons(){
+  const sortBtn=$('#modSupportSortButton');
+  if(sortBtn){
+    sortBtn.innerHTML=guiStudioLucideIcon('sliders-horizontal','button-icon');
+    sortBtn.classList.add('icon-only','icon-button-polish');
+    sortBtn.title=`Sort: ${modSupportSortLabel(modSupportSort)}`;
+    sortBtn.setAttribute('aria-label',`Sort mod packs: ${modSupportSortLabel(modSupportSort)}`);
+  }
+  const selectBtn=$('#modSupportSelectAllBtn');
+  if(selectBtn){
+    selectBtn.innerHTML=guiStudioLucideIcon('check','button-icon');
+    selectBtn.classList.add('icon-only','icon-button-polish','mod-support-inline-btn');
+    selectBtn.setAttribute('aria-label','Select shown mod packs');
+  }
+  const clearBtn=$('#modSupportClearAllBtn');
+  if(clearBtn){
+    clearBtn.innerHTML=guiStudioLucideIcon('x','button-icon');
+    clearBtn.classList.add('icon-only','icon-button-polish','mod-support-inline-btn');
+    clearBtn.setAttribute('aria-label','Clear shown mod packs');
+  }
+  $$('#modSupportSortMenu [data-mod-sort-value]').forEach(item=>item.classList.toggle('active',item.dataset.modSortValue===modSupportSort));
+}
+function modPackStatusText(pack,supports,dataCount){
+  if(!supports)return `Not available for Minecraft ${esc(modSuggestionTarget)}.`;
+  if(dataCount>0)return `${dataCount.toLocaleString()} verified IDs available.`;
+  if(pack.verificationStatus==='no_autocomplete_data')return 'Verified for this version; no item/block/entity/biome/sound IDs found for autocomplete.';
+  if(pack.verificationStatus==='requested')return 'Requested; source/jar data still needs verification.';
+  return 'Suggestion data not included yet.';
+}
+function modPackSearchText(pack){
+  return [pack.name,pack.id,pack.category,pack.description,...(pack.modIds||[])].filter(Boolean).join(' ').toLowerCase();
+}
+function compareModPacks(a,b){
+  const aSupports=modPackSupportsTarget(a),bSupports=modPackSupportsTarget(b);
+  const aCount=modPackDataCount(a),bCount=modPackDataCount(b);
+  const aActive=aSupports&&aCount>0,bActive=bSupports&&bCount>0;
+  if(modSupportSort==='available'&&aActive!==bActive)return aActive?-1:1;
+  if(modSupportSort==='category'){
+    const cat=(a.category||'').localeCompare(b.category||'');
+    if(cat)return cat;
+  }
+  if(modSupportSort==='data'&&aCount!==bCount)return bCount-aCount;
+  return (a.name||a.id||'').localeCompare(b.name||b.id||'');
+}
+function filteredModPacks(){
+  const packs=Array.isArray(window.MOD_ID_PACKS?.packs)?window.MOD_ID_PACKS.packs:[];
+  const q=modSupportSearch.trim().toLowerCase();
+  return packs.filter(pack=>!q||modPackSearchText(pack).includes(q)).sort(compareModPacks);
+}
+function renderModSupportControls(){
+  const list=$('#modSupportList'),targetSelect=$('#modSuggestionTarget'),search=$('#modSupportSearch'),sort=$('#modSupportSort'),summary=$('#modSupportSummary');
+  if(targetSelect)targetSelect.value=modSuggestionTarget;
+  if(search&&search.value!==modSupportSearch)search.value=modSupportSearch;
+  if(sort)sort.value=modSupportSort;
+  updateModSupportToolIcons();
+  if(!list)return;
+  const packs=Array.isArray(window.MOD_ID_PACKS?.packs)?window.MOD_ID_PACKS.packs:[];
+  if(!packs.length){list.innerHTML='<div class="settings-copy">No mod suggestion packs are configured yet.</div>';return;}
+  const visible=filteredModPacks();
+  const available=packs.filter(pack=>modPackSupportsTarget(pack)&&modPackDataCount(pack)>0);
+  const visibleAvailable=visible.filter(pack=>modPackSupportsTarget(pack)&&modPackDataCount(pack)>0);
+  if(summary){
+    const selected=available.filter(pack=>enabledModSuggestions.has(pack.id)).length;
+    const visibleSelected=visibleAvailable.filter(pack=>enabledModSuggestions.has(pack.id)).length;
+    summary.textContent=`${visible.length} shown (${visibleAvailable.length} selectable, ${visibleSelected} selected here). ${selected} selected across ${available.length} verified packs for ${modSuggestionTarget}.`;
+  }
+  if(!visible.length){
+    list.innerHTML='<div class="settings-copy">No mod packs match that search.</div>';
+    return;
+  }
+  list.innerHTML=visible.map(pack=>{
+    const supports=modPackSupportsTarget(pack);
+    const dataCount=modPackDataCount(pack);
+    const active=supports&&dataCount>0;
+    const checked=active&&enabledModSuggestions.has(pack.id);
+    const status=modPackStatusText(pack,supports,dataCount);
+    const modIds=(pack.modIds||[]).length?pack.modIds.join(', '):'pending source verification';
+    const description=pack.description||'Adds modded content for Questlog ID suggestions.';
+    return `<label class="mod-pack-row ${active?'':'disabled'}">
+      <input type="checkbox" class="mod-pack-toggle" value="${esc(pack.id)}" ${checked?'checked':''} ${active?'':'disabled'}>
+      <span>
+        <span class="mod-pack-name">${esc(pack.name||pack.id)}</span>
+        <span class="mod-pack-meta">mod id: ${esc(modIds)}</span>
+        <span class="mod-pack-desc">${esc(description)}</span>
+        ${status?`<span class="mod-pack-status">${status}</span>`:''}
+      </span>
+    </label>`;
+  }).join('');
+  const selectAll=$('#modSupportSelectAllBtn'),clearAll=$('#modSupportClearAllBtn');
+  if(selectAll)selectAll.disabled=!visibleAvailable.length;
+  if(clearAll)clearAll.disabled=!visibleAvailable.some(pack=>enabledModSuggestions.has(pack.id));
+}
+function setUiSoundsEnabled(enabled){
+  uiSoundsEnabled=!!enabled;
+  localStorage.setItem(UI_SOUND_PREF_KEY,uiSoundsEnabled?'true':'false');
+  updateUiSoundControls();
+}
+function setUiSoundsMuted(muted){
+  uiSoundsMuted=!!muted;
+  localStorage.setItem(UI_SOUND_MUTE_KEY,uiSoundsMuted?'true':'false');
+  updateUiSoundControls();
+}
+function setUiTypingSoundsEnabled(enabled){
+  uiTypingSoundsEnabled=!!enabled;
+  localStorage.setItem(UI_TYPING_SOUND_PREF_KEY,uiTypingSoundsEnabled?'true':'false');
+  updateUiSoundControls();
+}
+function setUiFeedbackSoundsEnabled(enabled){
+  uiFeedbackSoundsEnabled=!!enabled;
+  localStorage.setItem(UI_FEEDBACK_SOUND_PREF_KEY,uiFeedbackSoundsEnabled?'true':'false');
+  updateUiSoundControls();
+}
+function setUiSoundVolume(value){
+  uiSoundVolume=Math.min(2,Math.max(0,Number(value)/100||0));
+  localStorage.setItem(UI_SOUND_VOLUME_KEY,String(uiSoundVolume));
+  updateUiSoundControls();
+}
+function setupUiSoundEvents(){
+  updateUiSoundControls();
+  const panelSoundClickIds=new Set([
+    'btnSettings','settingsCloseBtn','workbenchSettingsBtn','canvasSettingsBtn',
+    'btnDownloadAll','btnImportExportMenu','focusedExportToggle','workbenchExportBtn',
+    'exportPreviewCloseBtn','exportPreviewCancelBtn',
+    'guiStudioBackBtn','guiStudioFrameBackBtn','guiStudioTopNextBtn',
+    'btnChangelog','changelogCloseBtn','btnTutorial','tutorialYesBtn','tutorialNoBtn',
+    'tutorialQuitBtn','btnResetProgress','resetCancelBtn','resetContinueBtn','resetBackBtn',
+    'resetDeleteBtn','preferencesResetVisualBtn','preferenceResetCancelBtn','preferenceResetConfirmBtn'
+  ]);
+  document.addEventListener('click',e=>{
+    const el=e.target?.closest?.('button,.sidebar-row,.tab-btn,.mc-ac-row');
+    if(!el||el.disabled||el.id==='muteToggle'||el.id==='themeToggle')return;
+    if(panelSoundClickIds.has(el.id)||el.closest?.('.modal-bg,.tutorial-layer'))return;
+    playUiSound(el.closest?.('.sidebar-menu,.settings-menu')?'menu':'click');
+  },true);
+  document.addEventListener('change',e=>{
+    if(e.target?.matches?.('input[type="checkbox"],select,input[type="range"]'))playUiSound('toggle');
+  },true);
+  document.addEventListener('input',e=>{
+    const t=e.target;if(!t?.matches?.('input[type="text"],input[type="number"],textarea'))return;
+    const now=Date.now();if(now-lastTypeSoundAt<55)return;
+    lastTypeSoundAt=now;playUiSound(String(e.inputType||'').startsWith('delete')?'backtype':'type');
+  },true);
+}
+function defaultPersonalization(){
+  return {
+    count:3,
+    font:"'DM Sans',system-ui,sans-serif",
+    layout:'classic',
+    motionEffects:true,
+    surfaceTexture:false,
+    surfaceTextureIntensity:18,
+    colors:[
+      {label:'Primary',hex:(THEME_PALETTES[cTheme]||THEME_PALETTES[DEFAULT_DARK_THEME_ID]).baseSurface,brightness:0},
+      {label:'Secondary',hex:(THEME_PALETTES[cTheme]||THEME_PALETTES[DEFAULT_DARK_THEME_ID]).baseSurface,brightness:8},
+      {label:'Accent',hex:(THEME_PALETTES[cTheme]||THEME_PALETTES[DEFAULT_DARK_THEME_ID]).themeAccent,brightness:0},
+      {label:'Text',hex:(THEME_PALETTES[cTheme]||THEME_PALETTES[DEFAULT_DARK_THEME_ID]).text,brightness:0}
+    ]
+  };
+}
+function loadPersonalization(){
+  try{
+    const data=JSON.parse(localStorage.getItem(PERSONALIZATION_KEY)||'null');
+    if(data&&Array.isArray(data.colors))return Object.assign(defaultPersonalization(),data);
+  }catch{}
+  return defaultPersonalization();
+}
+function normalizeHex(v){
+  let s=String(v||'').trim();
+  if(!s.startsWith('#'))s='#'+s;
+  if(/^#[0-9a-fA-F]{3}$/.test(s))s='#'+s.slice(1).split('').map(c=>c+c).join('');
+  return /^#[0-9a-fA-F]{6}$/.test(s)?s.toUpperCase():'#D4924A';
+}
+function adjustHex(hex,amount){
+  const clean=normalizeHex(hex).slice(1);
+  const n=[0,2,4].map(i=>parseInt(clean.slice(i,i+2),16));
+  const out=n.map(v=>Math.max(0,Math.min(255,Math.round(v+(amount/100)*(amount>=0?255-v:v)))));
+  return '#'+out.map(v=>v.toString(16).padStart(2,'0')).join('').toUpperCase();
+}
+const PERSONALIZATION_THEME_PROPS=['--bg','--sf','--sf2','--sf3','--bd','--bd2','--json-bg','--ac','--ac-bg','--ac-hi','--ac-tx','--tx','--json-tx'];
+function applyPersonalization(data=loadPersonalization()){
+  const root=document.documentElement;
+  PERSONALIZATION_THEME_PROPS.forEach(prop=>root.style.removeProperty(prop));
+  if(data.font)root.style.setProperty('--font',data.font);
+  else root.style.removeProperty('--font');
+  root.dataset.motionEffects=data.motionEffects===false?'off':'on';
+  const textureOn=!!data.surfaceTexture;
+  const textureIntensity=Math.max(0,Math.min(60,Number(data.surfaceTextureIntensity)||0));
+  if(textureOn){
+    root.dataset.surfaceTexture='grain';
+    const tintAlpha=Math.round(4+(textureIntensity/60)*13);
+    root.style.setProperty('--surface-texture-alpha',`${tintAlpha}%`);
+    root.style.setProperty('--surface-texture-chrome-alpha',`${Math.min(38,tintAlpha+8)}%`);
+  }else{
+    delete root.dataset.surfaceTexture;
+    root.style.removeProperty('--surface-texture-alpha');
+    root.style.removeProperty('--surface-texture-chrome-alpha');
+  }
+  applyPersonalLayout(data.layout);
+}
+function clonePersonalizationDraft(){
+  return JSON.parse(JSON.stringify(personalizationDraft||defaultPersonalization()));
+}
+function pushPersonalHistory(){
+  if(!personalizationDraft)return;
+  personalUndoStack.push(clonePersonalizationDraft());
+  if(personalUndoStack.length>40)personalUndoStack.shift();
+  personalRedoStack=[];
+  updatePersonalHistoryButtons();
+}
+function updatePersonalHistoryButtons(){
+  const u=$('#personalUndoBtn'),r=$('#personalRedoBtn');
+  if(u)u.disabled=!personalUndoStack.length;
+  if(r)r.disabled=!personalRedoStack.length;
+}
+function updatePersonalSurfaceControls(){
+  const toggle=$('#surfaceTextureToggle'),range=$('#surfaceTextureIntensity'),value=$('#surfaceTextureValue'),sample=$('#surfaceTextureSample');
+  if(!toggle||!range)return;
+  const enabled=!!personalizationDraft?.surfaceTexture;
+  const intensity=Math.max(0,Math.min(60,Number(personalizationDraft?.surfaceTextureIntensity)||18));
+  toggle.checked=enabled;
+  range.value=String(intensity);
+  range.disabled=!enabled;
+  if(value)value.textContent=`${intensity}%`;
+  if(sample){
+    sample.dataset.enabled=enabled?'true':'false';
+    sample.style.opacity=enabled?'1':'.68';
+  }
+}
+function updatePersonalMotionControls(){
+  const toggle=$('#motionEffectsToggle');
+  if(toggle)toggle.checked=personalizationDraft?.motionEffects!==false;
+}
+function previewSettingsMotion(){
+  const card=$('#settingsFeedbackCard')||$('#settingsMenu');
+  if(card){
+    card.classList.remove('motion-preview-pulse');
+    void card.offsetWidth;
+    card.classList.add('motion-preview-pulse');
+    setTimeout(()=>card.classList.remove('motion-preview-pulse'),760);
+  }
+  setReactiveAmbientFromElement(card||$('#btnSettings'),{pulse:true});
+}
+function restorePersonalDraft(next){
+  personalizationDraft=JSON.parse(JSON.stringify(next));
+  $('#personalFontSelect')&&(($('#personalFontSelect').value=personalizationDraft.font||"'DM Sans',system-ui,sans-serif"));
+  updatePersonalSurfaceControls();
+  updatePersonalMotionControls();
+  renderColorWorkstation();
+  updatePersonalLayoutButtons();
+  previewPersonalization();
+  updatePersonalHistoryButtons();
+}
+function updatePersonalLayoutButtons(){
+  const chosen=normalizePersonalLayoutChoice(personalizationDraft?.layout);
+  $$('.layout-choice').forEach(btn=>{
+    const active=btn.dataset.layoutChoice===chosen;
+    btn.classList.toggle('active',active);
+    btn.setAttribute('aria-pressed',active?'true':'false');
+  });
+}
+function setPersonalLayoutChoice(value){
+  if(!personalizationDraft)return;
+  const next=normalizePersonalLayoutChoice(value);
+  if(normalizePersonalLayoutChoice(personalizationDraft.layout)===next)return;
+  pushPersonalHistory();
+  personalizationDraft.layout=next;
+  updatePersonalLayoutButtons();
+  previewPersonalization();
+}
+function undoPersonalDraft(){
+  if(!personalUndoStack.length)return;
+  personalRedoStack.push(clonePersonalizationDraft());
+  restorePersonalDraft(personalUndoStack.pop());
+}
+function redoPersonalDraft(){
+  if(!personalRedoStack.length)return;
+  personalUndoStack.push(clonePersonalizationDraft());
+  restorePersonalDraft(personalRedoStack.pop());
+}
+function renderColorWorkstation(){
+  const host=$('#colorWorkstation');if(!host||!personalizationDraft)return;
+  const count=Math.max(3,Math.min(4,Number(personalizationDraft.count)||3));
+  personalizationDraft.count=count;
+  const labels=['Primary','Secondary','Accent','Text'];
+  host.innerHTML=labels.slice(0,count).map((label,i)=>{
+    const color=personalizationDraft.colors[i]||{label,hex:'#D4924A',brightness:0};
+    return `<div class="color-card" data-color-index="${i}">
+      <label>${esc(label)}</label>
+      <div class="color-row">
+        <input type="color" class="personal-color" value="${esc(normalizeHex(color.hex))}">
+        <input type="text" class="personal-hex" value="${esc(normalizeHex(color.hex))}" spellcheck="false">
+      </div>
+      <div class="settings-range-row">
+        <input type="range" class="personal-brightness" min="-40" max="40" step="1" value="${Number(color.brightness)||0}">
+        <span class="settings-range-value">${Number(color.brightness)||0}</span>
+      </div>
+    </div>`;
+  }).join('');
+  $$('.color-card',host).forEach(card=>{
+    const i=Number(card.dataset.colorIndex),picker=card.querySelector('.personal-color'),hex=card.querySelector('.personal-hex'),bright=card.querySelector('.personal-brightness'),val=card.querySelector('.settings-range-value');
+    const arm=()=>{if(personalChangeArmed)return;pushPersonalHistory();personalChangeArmed=true;};
+    const done=()=>{personalChangeArmed=false;};
+    const update=()=>{personalizationDraft.colors[i]={label:labels[i],hex:normalizeHex(hex.value),brightness:Number(bright.value)||0};picker.value=normalizeHex(hex.value);val.textContent=bright.value;previewPersonalization();};
+    card.addEventListener('focusin',arm);
+    card.addEventListener('pointerdown',arm);
+    card.addEventListener('change',done);
+    card.addEventListener('focusout',done);
+    picker.oninput=()=>{hex.value=picker.value;update();};
+    hex.oninput=update;
+    bright.oninput=update;
+  });
+}
+function previewPersonalization(){
+  if(!personalizationDraft)return;
+  applyPersonalization(personalizationDraft);
+  localStorage.setItem(PERSONALIZATION_KEY,JSON.stringify(personalizationDraft));
+}
+function mountPreferencesSettings(){
+  const settingsMenu=$('#settingsMenu');
+  if(settingsMenu&&settingsMenu.parentElement!==document.body)document.body.appendChild(settingsMenu);
+  const grid=$('#personalizationModal .personalization-grid');
+  if(grid){
+    const panels=$$('.personal-panel',grid);
+    const themeMount=$('#settingsThemeMount');
+    const editorMount=$('#settingsEditorMount');
+    const layoutMount=$('#settingsLayoutMount');
+    const modMount=$('#settingsModMount');
+  if(themeMount&&panels[0]&&!themeMount.contains(panels[0]))themeMount.appendChild(panels[0]);
+    if(editorMount&&panels[1]&&!editorMount.contains(panels[1]))editorMount.appendChild(panels[1]);
+    if(layoutMount&&panels[2]&&!layoutMount.contains(panels[2]))layoutMount.appendChild(panels[2]);
+    if(modMount&&panels[3]&&!modMount.contains(panels[3]))modMount.appendChild(panels[3]);
+  }
+}
+function applyChristyTrustyPreferences(){
+  const prefs={...loadPersonalization(),font:"'Minecraft Normal','Minecraft','DM Sans',system-ui,sans-serif",layout:'canvas',motionEffects:true,surfaceTexture:true,surfaceTextureIntensity:24};
+  localStorage.setItem(LIGHT_THEME_CHOICE_KEY,'cherry-petal');
+  localStorage.setItem(DARK_THEME_CHOICE_KEY,'void');
+  applyTheme('void');
+  localStorage.setItem(PERSONALIZATION_KEY,JSON.stringify(prefs));
+  personalizationDraft=JSON.parse(JSON.stringify(prefs));
+  restorePersonalDraft(personalizationDraft);
+  applyPersonalization(prefs);
+  showMsg("ChristyTrusty's preferences applied.",true);
+}
+function preferenceTabFromHash(){
+  const hash=(location.hash||'').replace(/^#/,'');
+  if(hash==='preferencesProject')return'project';
+  if(hash==='preferencesHelp')return'help';
+  if(hash==='preferencesModSupport')return'mod';
+  if(hash==='preferencesDanger')return'danger';
+  return'preferences';
+}
+function setPreferenceTab(tab='preferences',updateHash=false){
+  const chosen=['preferences','project','help','mod','danger'].includes(tab)?tab:'preferences';
+  $$('[data-pref-tab]').forEach(btn=>{
+    const active=btn.dataset.prefTab===chosen;
+    btn.classList.toggle('active',active);
+    btn.setAttribute('aria-pressed',active?'true':'false');
+  });
+  $$('[data-pref-panel]').forEach(panel=>{
+    panel.classList.toggle('active',panel.dataset.prefPanel===chosen);
+  });
+  if(updateHash){
+    const ids={preferences:'preferencesAppearance',project:'preferencesProject',help:'preferencesHelp',mod:'preferencesModSupport',danger:'preferencesDanger'};
+    history.replaceState(null,'',`#${ids[chosen]||ids.preferences}`);
+  }
+}
+function setupPreferenceTabs(){
+  $$('[data-pref-tab]').forEach(btn=>{
+    if(btn.dataset.prefBound==='true')return;
+    btn.dataset.prefBound='true';
+    btn.addEventListener('click',e=>{
+      e.preventDefault();
+      setPreferenceTab(btn.dataset.prefTab,true);
+    });
+  });
+}
+function openPersonalizationModal(){
+  mountPreferencesSettings();
+  setupPreferenceTabs();
+  personalizationOriginalTheme=cTheme;
+  personalizationOriginalLight=chosenTheme('light');
+  personalizationOriginalDark=chosenTheme('dark');
+  personalizationOriginalLayout=currentPersonalLayout();
+  personalUndoStack=[];personalRedoStack=[];personalChangeArmed=false;
+  personalizationDraft=loadPersonalization();
+  personalizationDraft.count=Math.max(3,Math.min(4,Number(personalizationDraft.count)||3));
+  $('#personalLightThemePreset')&&(($('#personalLightThemePreset').value=chosenTheme('light')));
+  $('#personalDarkThemePreset')&&(($('#personalDarkThemePreset').value=chosenTheme('dark')));
+  $('#personalFontSelect')&&(($('#personalFontSelect').value=personalizationDraft.font||"'DM Sans',system-ui,sans-serif"));
+  updatePersonalSurfaceControls();
+  updatePersonalMotionControls();
+  personalizationDraft.layout=personalizationOriginalLayout;
+  renderModSupportControls();
+  updatePersonalLayoutButtons();
+  previewPersonalization();
+  setPreferenceTab(preferenceTabFromHash(),false);
+  $('#personalizationModal')?.classList.remove('open');
+  $('#settingsMenu')?.classList.add('open');
+  document.body?.classList.add('preferences-open');
+  playUiSound('panel');
+}
+function closePersonalizationModal(save=false){
+  const personalizationOpen=$('#personalizationModal')?.classList.contains('open')||$('#settingsMenu')?.classList.contains('open')||!!personalizationDraft;
+  if(!personalizationOpen)return;
+  if(!personalizationDraft){
+    $('#personalizationModal')?.classList.remove('open');
+    $('#settingsMenu')?.classList.remove('open');
+    document.body?.classList.remove('preferences-open');
+    playUiSound('panel');
+    return;
+  }
+  if(personalizationDraft){
+    localStorage.setItem(PERSONALIZATION_KEY,JSON.stringify(personalizationDraft));
+    applyPersonalization(personalizationDraft);
+  }
+  personalizationOriginalTheme=null;
+  personalizationOriginalLight=null;
+  personalizationOriginalDark=null;
+  personalizationOriginalLayout=null;
+  personalizationDraft=null;
+  personalUndoStack=[];personalRedoStack=[];personalChangeArmed=false;
+  $('#personalizationModal')?.classList.remove('open');
+  $('#settingsMenu')?.classList.remove('open');
+  document.body?.classList.remove('preferences-open');
+  playUiSound('panel');
+}
 function setupHelpInteractions(){
   const tip=$('#hoverTip');if(!tip)return;
-  const wait=1000,tolerance=5;
+  const wait=450,tolerance=5;
   let active=null,candidate=null,timer=null,last={x:0,y:0};
   const targetFrom=e=>e.target&&e.target.closest?e.target.closest('[data-tip]'):null;
   const clearTimer=()=>{if(timer){clearTimeout(timer);timer=null;}};
@@ -121,6 +1302,39 @@ function setupHelpInteractions(){
   document.addEventListener('focusout',e=>{if(targetFrom(e))hide();});
 }
 function getNs(){return($('#defaultNs')?.value||'questlog').trim();}
+const MINECRAFT_ID_SPACE_INPUT_SELECTOR=[
+  '[data-r="icon-itemv"]','[data-r="icon-strv"]','[data-r="chicon-itemv"]','[data-r="chicon-strv"]',
+  '#qf_completed_sound','#qf_triggered_sound',
+  '.obj-stat-custom','.obj-block','.obj-bitem','.obj-entity','.obj-item','.obj-biome','.obj-dim','.obj-structure',
+  '.obj-ench','.obj-effect','.obj-quest','.obj-read-quest','.obj-adv',
+  '.rw-item','.rw-loot','.rw-sound'
+].join(',');
+function normalizeTypedMinecraftId(value){
+  return String(value||'').replace(/\s+/g,'_');
+}
+function itemIdInputValue(input,fallback=''){
+  const value=normalizeTypedMinecraftId(input?.value||'').trim();
+  return value||fallback;
+}
+function normalizeMinecraftIdInputElement(input){
+  if(!input||typeof input.value!=='string')return;
+  const before=input.value;
+  const after=normalizeTypedMinecraftId(before);
+  if(after===before)return;
+  const start=input.selectionStart;
+  const end=input.selectionEnd;
+  input.value=after;
+  if(typeof start==='number'&&typeof end==='number'&&input.setSelectionRange){
+    input.setSelectionRange(
+      normalizeTypedMinecraftId(before.slice(0,start)).length,
+      normalizeTypedMinecraftId(before.slice(0,end)).length
+    );
+  }
+}
+document.addEventListener('input',e=>{
+  const input=e.target;
+  if(input?.matches?.(MINECRAFT_ID_SPACE_INPUT_SELECTOR))normalizeMinecraftIdInputElement(input);
+},true);
 function objectiveSupportsAmount(t){return !NO_AMOUNT_OBJECTIVES.has(t||'');}
 
 
@@ -129,7 +1343,34 @@ const AUTOSAVE_KEY='ql.project.autosave.v2';
 const PRE_V22_BACKUP_KEY='ql.project.autosave.before-v2.2';
 const AUTOSAVE_PREF_KEY='ql.autosave.enabled';
 const TOOLTIP_PREF_KEY='ql.tooltips.enabled';
+const UI_SOUND_PREF_KEY='ql.uiSounds.enabled';
+const UI_SOUND_MUTE_KEY='ql.uiSounds.muted';
+const UI_SOUND_VOLUME_KEY='ql.uiSounds.volume';
+const UI_TYPING_SOUND_PREF_KEY='ql.uiSounds.typing';
+const UI_FEEDBACK_SOUND_PREF_KEY='ql.uiSounds.feedback';
+const EXPORT_READINESS_OVERRIDE_KEY='ql.exportReadinessOverride.enabled';
+const PERSONALIZATION_KEY='ql.personalization.preview';
+const ID_SUGGESTION_RECENT_KEY='ql.idSuggestions.recent.v1';
+const MOD_SUGGESTION_VERSION_KEY='ql.modSuggestions.version';
+const MOD_SUGGESTION_ENABLED_KEY='ql.modSuggestions.enabled';
+const MOD_SUGGESTION_SORT_KEY='ql.modSuggestions.sort';
 const SIDEBAR_WIDTH_KEY='ql.sidebar.width';
+const FOCUSED_LEFT_OPEN_KEY='ql.focused.left.open';
+const FOCUSED_RIGHT_OPEN_KEY='ql.focused.right.open';
+const FOCUSED_LEFT_WIDTH_KEY='ql.focused.left.width';
+const FOCUSED_RIGHT_WIDTH_KEY='ql.focused.right.width';
+const WORKBENCH_LAYOUT_KEY='ql.workbench.layout';
+const WORKBENCH_TOOLBAR_KEY='ql.workbench.toolbar.open';
+const WORKBENCH_NOTES_KEY='ql.workbench.notes';
+const WORKBENCH_HIDDEN_KEY='ql.workbench.hiddenPanels';
+const WORKBENCH_LOCKED_KEY='ql.workbench.lockedPanels';
+const CANVAS_LAYOUT_KEY='ql.canvas.layout';
+const CANVAS_HIDDEN_KEY='ql.canvas.hiddenPanels';
+const CANVAS_LOCKED_KEY='ql.canvas.lockedPanels';
+const CANVAS_VIEW_KEY='ql.canvas.view';
+const CANVAS_ITEMS_KEY='ql.canvas.items';
+const CANVAS_DRAWINGS_KEY='ql.canvas.drawings';
+const CANVAS_LINKS_KEY='ql.canvas.links';
 const LIST_SORT_KEY='ql.list.sort';
 const TUTORIAL_SEEN_KEY='ql.tutorial.seen.v23';
 const ACTIVITY_LIMIT=80;
@@ -137,7 +1378,45 @@ let autosaveTimer=null;
 let suppressAutosave=false;
 let autosaveEnabled=localStorage.getItem(AUTOSAVE_PREF_KEY)!=='false';
 let tooltipsEnabled=localStorage.getItem(TOOLTIP_PREF_KEY)!=='false';
+let uiSoundsEnabled=localStorage.getItem(UI_SOUND_PREF_KEY)!=='false';
+let uiSoundsMuted=localStorage.getItem(UI_SOUND_MUTE_KEY)==='true';
+let uiTypingSoundsEnabled=localStorage.getItem(UI_TYPING_SOUND_PREF_KEY)!=='false';
+let uiFeedbackSoundsEnabled=localStorage.getItem(UI_FEEDBACK_SOUND_PREF_KEY)!=='false';
+let uiSoundVolume=Math.min(2,Math.max(0,parseFloat(localStorage.getItem(UI_SOUND_VOLUME_KEY)||'0.85')));
+let exportReadinessOverrideEnabled=localStorage.getItem(EXPORT_READINESS_OVERRIDE_KEY)==='true';
+let modSuggestionTarget=localStorage.getItem(MOD_SUGGESTION_VERSION_KEY)||window.MOD_ID_PACKS?.defaultTarget||'1.21.1';
+let enabledModSuggestions=new Set(JSON.parse(localStorage.getItem(MOD_SUGGESTION_ENABLED_KEY)||'[]'));
+let modSupportSearch='';
+let modSupportSort=['available','name','category','data'].includes(localStorage.getItem(MOD_SUGGESTION_SORT_KEY))?localStorage.getItem(MOD_SUGGESTION_SORT_KEY):'available';
+let personalizationDraft=null;
+let personalizationOriginalTheme=null;
+let personalUndoStack=[],personalRedoStack=[],personalChangeArmed=false;
 let listSort=['alpha','order','recent'].includes(localStorage.getItem(LIST_SORT_KEY))?localStorage.getItem(LIST_SORT_KEY):'alpha';
+let focusedLeftOpen=localStorage.getItem(FOCUSED_LEFT_OPEN_KEY)==='true';
+let focusedRightOpen=localStorage.getItem(FOCUSED_RIGHT_OPEN_KEY)==='true';
+let focusedLeftWidth=parseInt(localStorage.getItem(FOCUSED_LEFT_WIDTH_KEY),10);
+let focusedRightWidth=parseInt(localStorage.getItem(FOCUSED_RIGHT_WIDTH_KEY),10);
+let workbenchToolbarOpen=localStorage.getItem(WORKBENCH_TOOLBAR_KEY)!=='false';
+let workbenchPanelLayout={};
+let workbenchHiddenPanels=null;
+let workbenchLockedPanels=null;
+let activeFloatingPanelLayout=null;
+let canvasView={x:0,y:0,zoom:1};
+let canvasItems=[];
+let canvasDrawings=[];
+let canvasLinks=[];
+let canvasSpaceHeld=false;
+let canvasTool='hand';
+let canvasToolBeforeSpace=null;
+let canvasDrawColor='#38bdf8';
+let canvasDrawSize=3;
+let canvasLinkDraft=null;
+let canvasSelection=new Set();
+let canvasLayerFrame=0;
+let canvasContextPoint={x:160,y:160};
+let pendingCanvasImagePoint={x:160,y:160};
+let workbenchUndoStack=[];
+let workbenchRedoStack=[];
 let fileMeta={};
 let activityLog=[];
 let customTemplates=[];
@@ -146,6 +1425,7 @@ let lastEditActivity={key:'',time:0};
 const HISTORY_LIMIT=60;
 let undoStack=[],redoStack=[],historyRestoring=false;
 function autosavePayload(){
+  if(typeof guiStudioSaveActiveDraftToScope==='function')guiStudioSaveActiveDraftToScope();
   return {
     version:2,
     savedAt:new Date().toISOString(),
@@ -160,6 +1440,9 @@ function autosavePayload(){
     customTemplates,
     undoStack,
     redoStack,
+    guiStudioDraft:typeof cloneGuiStudioDraft==='function'?cloneGuiStudioDraft():null,
+    guiStudioDraftScopes:typeof guiStudioScopedDraftBundle==='function'?guiStudioScopedDraftBundle():null,
+    guiStudioHistoryScopes:typeof guiStudioHistoryBundle==='function'?guiStudioHistoryBundle():null,
     rawMode:!!$('#viewRaw')?.checked
   };
 }
@@ -185,8 +1468,14 @@ function stateSig(s){
 }
 function updateHistoryButtons(){
   const u=$('#btnUndo'),r=$('#btnRedo');
-  if(u)u.disabled=!undoStack.length;
-  if(r)r.disabled=!redoStack.length;
+  if(typeof guiStudioModalOpen==='function'&&guiStudioModalOpen()){
+    if(u)u.disabled=!guiStudioUndoStack.length;
+    if(r)r.disabled=!guiStudioRedoStack.length;
+    return;
+  }
+  const workbenchActive=isFloatingPanelLayout();
+  if(u)u.disabled=!(undoStack.length||(workbenchActive&&workbenchUndoStack.length));
+  if(r)r.disabled=!(redoStack.length||(workbenchActive&&workbenchRedoStack.length));
 }
 function pushHistorySnapshot(){
   if(historyRestoring)return;
@@ -244,13 +1533,8 @@ function autosaveHasWork(data){
   return !!(data && ((data.quests&&Object.keys(data.quests).length)||(data.chapters&&Object.keys(data.chapters).length)));
 }
 function updateAutosaveStatus(msg){
-  const el=$('#autosaveStatus');
   const saveBtn=$('#btnManualSaveHead');
   if(saveBtn)saveBtn.hidden=autosaveEnabled;
-  if(el){
-    el.hidden=!autosaveEnabled;
-    el.textContent=msg||'';
-  }
 }
 function saveAutosaveNow(reason='saved',force=false){
   if(suppressAutosave)return;
@@ -319,6 +1603,14 @@ function loadAutosave(){
       const q=Object.keys(quests).sort()[0],c=Object.keys(chapters).sort()[0];
       if(q){mode='quest';currentFile=q;}else if(c){mode='chapter';currentFile=c;}
     }
+    if(typeof restoreGuiStudioScopedDrafts==='function'){
+      restoreGuiStudioScopedDrafts(data.guiStudioDraftScopes,data.guiStudioDraft);
+      if(typeof restoreGuiStudioHistoryScopes==='function')restoreGuiStudioHistoryScopes(data.guiStudioHistoryScopes);
+      guiStudioRefreshAppliedPreviewsForCurrentSelection();
+    }else if(data.guiStudioDraft&&typeof data.guiStudioDraft==='object'&&typeof cloneGuiStudioDraft==='function'){
+      guiStudioDraft=cloneGuiStudioDraft(data.guiStudioDraft);
+      invalidateGuiStudioAllPreviews();
+    }
     const saved=data.savedAt?new Date(data.savedAt):null;
     updateAutosaveStatus(saved&&!Number.isNaN(saved.getTime())?'Restored autosave':'Restored autosave');
     return true;
@@ -339,6 +1631,12 @@ function performFullReset(){
   suppressAutosave=true;
   clearAutosaveStorage();
   quests={};chapters={};fileMeta={};activityLog=[];customTemplates=[];currentFile=null;mode='quest';rawMode=false;jsonFocused=false;
+  if(typeof createDefaultGuiStudioDraft==='function')guiStudioDraft=createDefaultGuiStudioDraft();
+  if(typeof resetGuiStudioScopedDrafts==='function')resetGuiStudioScopedDrafts();
+  if(typeof resetGuiStudioHistoryScopes==='function')resetGuiStudioHistoryScopes();
+  if(typeof invalidateGuiStudioAllPreviews==='function')invalidateGuiStudioAllPreviews();
+  guiStudioAppliedQuestPreview=null;
+  guiStudioAppliedQuestListPreview=null;
   if($('#viewRaw'))$('#viewRaw').checked=false;
   suppressAutosave=false;
   renderFileList();
@@ -375,6 +1673,17 @@ function saveOrder(){try{localStorage.setItem('ql.panelOrder',JSON.stringify(nor
 // ── Helpers ───────────────────────────────────────────────────────
 const defQ=()=>({title:'New Quest',requirements:[],objectives:[],rewards:[]});
 const defC=()=>({name:'New Chapter',icon:{item:'minecraft:knowledge_book'}});
+function defaultChapterFiles(){
+  return Object.entries(chapters).filter(([,c])=>c?.default_chapter&&!c?.hidden).map(([file])=>file);
+}
+function normalizeDefaultChapter(){
+  const names=Object.keys(chapters).sort();
+  if(!names.length)return;
+  const defaults=names.filter(n=>chapters[n]?.default_chapter);
+  if(defaults.length===1)return;
+  const keep=defaults[0]||names[0];
+  names.forEach(n=>{chapters[n].default_chapter=n===keep;touchFile('chapter',n);});
+}
 function getCD(){if(!currentFile)return null;return mode==='quest'?quests[currentFile]:chapters[currentFile];}
 function setCD(o){if(!currentFile)return;if(mode==='quest')quests[currentFile]=o;else chapters[currentFile]=o;}
 function fixQA(q){if(!Array.isArray(q.requirements))q.requirements=[];if(!Array.isArray(q.objectives))q.objectives=[];if(!Array.isArray(q.rewards))q.rewards=[];fixKnownLegacyIds(q);}
@@ -426,7 +1735,27 @@ function setListSort(value){
   listSort=['alpha','order','recent'].includes(value)?value:'alpha';
   localStorage.setItem(LIST_SORT_KEY,listSort);
   const sel=$('#questListSort');if(sel)sel.value=listSort;
+  updateSortMenu();
   renderFileList();
+}
+function sortLabel(value){return {alpha:'Alphabetical',order:'Quest order',recent:'Recently edited'}[value]||'Alphabetical';}
+const SORT_BUTTON_ICON='<svg class="ql-icon ql-icon-sort" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M4 12h7M4 17h5"></path><path d="M17 5v13"></path><path d="m14 15 3 3 3-3"></path></svg>';
+function updateSortMenu(){
+  const btn=$('#questListSortButton'),sel=$('#questListSort');
+  if(sel)sel.value=listSort;
+  if(btn){
+    btn.innerHTML=SORT_BUTTON_ICON;
+    btn.title=`Sort: ${sortLabel(listSort)}`;
+    btn.setAttribute('aria-label',`Sort: ${sortLabel(listSort)}`);
+    btn.dataset.sortMode=listSort;
+    const wrap=btn.closest('.sidebar-sort-icon-wrap');
+    if(wrap)wrap.setAttribute('data-tip',`Sort: ${sortLabel(listSort)}. Choose alphabetical, quest order, or recently edited.`);
+  }
+  $$('#questListSortMenu [data-sort-value]').forEach(item=>item.classList.toggle('active',item.dataset.sortValue===listSort));
+}
+function closeSortMenu(){
+  $('#questListSortMenu')?.classList.remove('open');
+  $('#questListSortButton')?.setAttribute('aria-expanded','false');
 }
 function sortFiles(names,kind){
   const fallback=(a,b)=>String(a).localeCompare(String(b));
@@ -474,9 +1803,55 @@ function unbindQ(qn){
   delete q.chapter;
   renderFileList();if(currentFile===qn&&mode==='quest'){renderMain();}
 }
+function questlogChapterRefCandidates(file){
+  const base=String(file||'').replace(/\.json$/i,'');
+  const ns=getNs()||'questlog';
+  return [`${ns}:${base}`,`questlog:${base}`,base];
+}
+function rewriteQuestChapterRefsForChapterRename(oldName,newName){
+  const oldBase=String(oldName||'').replace(/\.json$/i,'');
+  const newBase=String(newName||'').replace(/\.json$/i,'');
+  if(!oldBase||!newBase||oldBase===newBase)return 0;
+  const oldRefs=new Set(questlogChapterRefCandidates(oldName));
+  let changed=0;
+  Object.entries(quests||{}).forEach(([file,q])=>{
+    if(!q||typeof q!=='object')return;
+    const raw=q.chapter;
+    if(raw===undefined||raw===null||raw==='')return;
+    const ref=String(raw);
+    if(oldRefs.has(ref)){
+      q.chapter=ref.includes(':')?`${ref.split(':')[0]}:${newBase}`:newBase;
+      touchFile('quest',file);
+      changed++;
+    }
+  });
+  return changed;
+}
+function renameProjectFile(kind,oldName,newName){
+  if(kind==='quest'){
+    quests[newName]=quests[oldName];
+    delete quests[oldName];
+    moveFileMeta('quest',oldName,newName);
+    if(guiStudioDraftScopes?.questMenu?.[oldName]){
+      guiStudioDraftScopes.questMenu[newName]=guiStudioDraftScopes.questMenu[oldName];
+      delete guiStudioDraftScopes.questMenu[oldName];
+    }
+    if(guiStudioHistoryScopes?.questMenu?.[oldName]){
+      guiStudioHistoryScopes.questMenu[newName]=guiStudioHistoryScopes.questMenu[oldName];
+      delete guiStudioHistoryScopes.questMenu[oldName];
+    }
+  }else{
+    chapters[newName]=chapters[oldName];
+    delete chapters[oldName];
+    moveFileMeta('chapter',oldName,newName);
+    rewriteQuestChapterRefsForChapterRename(oldName,newName);
+  }
+  if(currentFile===oldName)currentFile=newName;
+}
 
 // ── Rename ────────────────────────────────────────────────────────
 function bindChapterDropTarget(el,cf){
+  el.dataset.chapterDrop=cf;
   el.ondragover=e=>{
     if(!draggedQuest)return;
     e.preventDefault();
@@ -492,6 +1867,92 @@ function bindChapterDropTarget(el,cf){
     draggedQuest=null;
   };
 }
+function clearQuestDragState(){
+  isDragging=false;
+  draggedQuest=null;
+  questSidebarPointerDrag=null;
+  $$('.drop-target').forEach(el=>el.classList.remove('drop-target'));
+  $$('.drop-zone-active').forEach(el=>el.classList.remove('drop-zone-active'));
+  $$('.fi.is-dragging').forEach(el=>el.classList.remove('is-dragging'));
+}
+function questDropTargetAt(x,y){
+  const el=document.elementFromPoint(x,y);
+  if(!el)return null;
+  const unbound=el.closest?.('[data-unbound-drop="true"]');
+  if(unbound)return {type:'unbound',el:unbound};
+  const chapter=el.closest?.('[data-chapter-drop]');
+  if(chapter?.dataset.chapterDrop)return {type:'chapter',chapter:chapter.dataset.chapterDrop,el:chapter};
+  return null;
+}
+function updateQuestPointerDropTarget(x,y){
+  $$('.drop-target').forEach(el=>el.classList.remove('drop-target'));
+  $$('.drop-zone-active').forEach(el=>el.classList.remove('drop-zone-active'));
+  const target=questDropTargetAt(x,y);
+  if(target?.el){
+    target.el.classList.add(target.el.classList.contains('fi')?'drop-target':'drop-zone-active');
+  }
+  return target;
+}
+function finishQuestPointerDrag(e,cancel=false){
+  const drag=questSidebarPointerDrag;
+  if(!drag)return;
+  const wasActive=drag.active;
+  const target=!cancel&&wasActive?updateQuestPointerDropTarget(e.clientX,e.clientY):null;
+  const quest=drag.quest;
+  clearQuestDragState();
+  if(wasActive)suppressNextQuestClick=true;
+  if(!target||!quest)return;
+  if(target.type==='chapter'&&questBoundCh(quest)!==target.chapter)bindQ(quest,target.chapter);
+  else if(target.type==='unbound'&&questBoundCh(quest))unbindQ(quest);
+}
+function bindQuestDragRow(row,qn){
+  row.draggable=false;
+  row.dataset.questDrag='true';
+  row.ondragstart=e=>e.preventDefault();
+  row.onmousedown=e=>{
+    if(questSidebarPointerDrag||e.button!==0||e.target.closest?.('button,input,textarea,select,a,[contenteditable="true"]'))return;
+    questSidebarPointerDrag={quest:qn,row,startX:e.clientX,startY:e.clientY,pointerId:null,active:false};
+  };
+  row.onclick=e=>{
+    if(suppressNextQuestClick){
+      suppressNextQuestClick=false;
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if(e.detail>1||e.target.closest?.('.fi-name,.fi-tag,button,input,textarea,select,a,[contenteditable="true"]'))return;
+    clearTimeout(row._questClickTimer);
+    row._questClickTimer=setTimeout(()=>{
+      if(!isDragging&&!row.querySelector('.fi-name-input'))selectFile(qn,'quest');
+    },220);
+  };
+  row.ondblclick=e=>{
+    if(e.target.closest?.('button,input,textarea,select,a,[contenteditable="true"]'))return;
+    clearTimeout(row._questClickTimer);
+    e.preventDefault();
+    e.stopPropagation();
+    startRename(row,qn,'quest');
+  };
+}
+document.addEventListener('mousemove',e=>{
+  const drag=questSidebarPointerDrag;
+  if(!drag||drag.pointerId!==null)return;
+  const dx=e.clientX-drag.startX,dy=e.clientY-drag.startY;
+  if(!drag.active&&Math.hypot(dx,dy)<8)return;
+  if(!drag.active){
+    drag.active=true;
+    isDragging=true;
+    draggedQuest=drag.quest;
+    drag.row?.classList.add('is-dragging');
+  }
+  e.preventDefault();
+  updateQuestPointerDropTarget(e.clientX,e.clientY);
+},true);
+document.addEventListener('mouseup',e=>{
+  const drag=questSidebarPointerDrag;
+  if(!drag||drag.pointerId!==null)return;
+  finishQuestPointerDrag(e,false);
+},true);
 
 function itemKindLabel(kind){return kind==='chapter'?'chapter':'quest';}
 function setRenameModalError(t){
@@ -520,8 +1981,8 @@ function startRename(row,oldName,kind){
     }
     if(nv===base){done=true;renderFileList();return;}
     const nn=nv+'.json';
-    if(kind==='quest'){if(quests[nn]&&nn!==oldName){showMsg('Name taken.',false);return;}quests[nn]=quests[oldName];delete quests[oldName];moveFileMeta('quest',oldName,nn);if(currentFile===oldName)currentFile=nn;}
-    else{if(chapters[nn]&&nn!==oldName){showMsg('Name taken.',false);return;}chapters[nn]=chapters[oldName];delete chapters[oldName];moveFileMeta('chapter',oldName,nn);if(currentFile===oldName)currentFile=nn;}
+    if(kind==='quest'){if(quests[nn]&&nn!==oldName){showMsg('Name taken.',false);return;}renameProjectFile('quest',oldName,nn);}
+    else{if(chapters[nn]&&nn!==oldName){showMsg('Name taken.',false);return;}renameProjectFile('chapter',oldName,nn);}
     done=true;
     renderFileList();if(currentFile===nn)renderMain();
   };
@@ -538,13 +1999,15 @@ function bindFileNameRename(row,name,kind){
   nameEl.onclick=e=>{
     clearTimeout(clickTimer);
     if(e.detail>1)return;
+    e.stopPropagation();
     clickTimer=setTimeout(()=>{
       if(!isDragging&&!nameEl.querySelector('input'))selectFile(name,kind);
-    },180);
+    },240);
   };
 
   nameEl.ondblclick=e=>{
     clearTimeout(clickTimer);
+    clearTimeout(row._questClickTimer);
     e.preventDefault();
     e.stopPropagation();
     startRename(row,name,kind);
@@ -552,11 +2015,27 @@ function bindFileNameRename(row,name,kind){
 }
 
 // ── File list ─────────────────────────────────────────────────────
+function loadCollapsedChapters(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(CHAPTER_COLLAPSE_KEY)||'[]');
+    return new Set(Array.isArray(saved)?saved:[]);
+  }catch{return new Set();}
+}
+function saveCollapsedChapters(){
+  localStorage.setItem(CHAPTER_COLLAPSE_KEY,JSON.stringify([...collapsedChapters]));
+}
+function toggleChapterCollapse(fileName){
+  if(collapsedChapters.has(fileName))collapsedChapters.delete(fileName);
+  else collapsedChapters.add(fileName);
+  saveCollapsedChapters();
+  renderFileList();
+}
 function renderFileList(){
   if(isDragging)return;
   const list=$('#fileList');list.innerHTML='';
   ensureFileMeta();
   const sortSel=$('#questListSort');if(sortSel)sortSel.value=listSort;
+  updateSortMenu();
   const searchEl=$('#questSearch');if(searchEl&&searchEl.value!==questSearch)searchEl.value=questSearch;
   const qNames=sortFiles(Object.keys(quests),'quest');
   const cNames=sortFiles(Object.keys(chapters),'chapter');
@@ -564,56 +2043,71 @@ function renderFileList(){
   qNames.forEach(qn=>{const cf=questBoundCh(qn);if(cf){if(!boundTo[cf])boundTo[cf]=[];boundTo[cf].push(qn);}else unbound.push(qn);});
   const visibleUnbound=unbound.filter(qn=>matchesSearch(qn,'quest'));
 
-  // Chapters
-  const cl=document.createElement('div');cl.className='sb-group';cl.textContent='Chapters';list.appendChild(cl);
   let visibleChapters=0;
-  if(!cNames.length){const e=document.createElement('div');e.className='sb-empty';e.textContent='No chapters';list.appendChild(e);}
+  if(!cNames.length&&!qNames.length){const e=document.createElement('div');e.className='sb-empty';e.textContent='No chapters or quests yet';list.appendChild(e);}
+  else if(!cNames.length){const e=document.createElement('div');e.className='sb-empty';e.textContent='No chapters yet';list.appendChild(e);}
   cNames.forEach(cf=>{
     const chapterMatches=matchesSearch(cf,'chapter');
     const visibleKids=(boundTo[cf]||[]).filter(qn=>chapterMatches||matchesSearch(qn,'quest'));
     if(questSearch.trim()&&!chapterMatches&&!visibleKids.length)return;
     visibleChapters++;
     const wrap=document.createElement('div');
+    const isCollapsed=!questSearch.trim()&&collapsedChapters.has(cf);
+    const chapterQuestCount=(boundTo[cf]||[]).length;
+    wrap.className='fi-chapter-wrap'+(isCollapsed?' is-collapsed':'');
     const cRow=makeFiRow(cf,'C',cf===currentFile&&mode==='chapter');
+    cRow.classList.add('fi-chapter');
     bindFileNameRename(cRow,cf,'chapter');
     cRow.oncontextmenu=e=>showCtxMenu(e,cf,'chapter');
-    cRow.querySelector('.fi-tag').onclick=()=>selectFile(cf,'chapter');
+    cRow.querySelector('.fi-tag').onclick=e=>{e.stopPropagation();selectFile(cf,'chapter');};
+    cRow.querySelector('.fi-tag').title='Select chapter';
+    if(chapterQuestCount){
+      const arrow=document.createElement('button');
+      arrow.type='button';
+      arrow.className='fi-collapse-arrow';
+      arrow.innerHTML='<svg class="ql-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"></path></svg>';
+      arrow.setAttribute('aria-label',isCollapsed?'Expand chapter quests':'Collapse chapter quests');
+      arrow.title=isCollapsed?'Expand chapter quests':'Collapse chapter quests';
+      arrow.onclick=e=>{e.preventDefault();e.stopPropagation();toggleChapterCollapse(cf);};
+      cRow.appendChild(arrow);
+    }
     bindChapterDropTarget(cRow,cf);
     wrap.appendChild(cRow);
     const kids=document.createElement('div');kids.className='fi-children chapter-drop-zone';
+    if(isCollapsed)kids.classList.add('collapsed');
     bindChapterDropTarget(kids,cf);
-    visibleKids.forEach(qn=>{
+    visibleKids.forEach((qn,idx)=>{
       const qRow=makeFiRow(qn,'Q',qn===currentFile&&mode==='quest',true);
-      qRow.draggable=true;
+      qRow.classList.add('fi-child-quest');
+      if(idx===visibleKids.length-1)qRow.classList.add('is-last-child');
+      bindQuestDragRow(qRow,qn);
       bindFileNameRename(qRow,qn,'quest');
       qRow.oncontextmenu=e=>showCtxMenu(e,qn,'quest');
       qRow.querySelector('.fi-tag').onclick=()=>selectFile(qn,'quest');
-      qRow.ondragstart=e=>{isDragging=true;draggedQuest=qn;e.dataTransfer.effectAllowed='move';};
-      qRow.ondragend=()=>{isDragging=false;draggedQuest=null;$$('.drop-target').forEach(el=>el.classList.remove('drop-target'));$$('.drop-zone-active').forEach(el=>el.classList.remove('drop-zone-active'));renderFileList();};
       kids.appendChild(qRow);
     });
     wrap.appendChild(kids);list.appendChild(wrap);
   });
   if(cNames.length&&!visibleChapters){const e=document.createElement('div');e.className='sb-empty';e.textContent='No matching chapters';list.appendChild(e);}
 
-  // Quests
-  const ql=document.createElement('div');ql.className='sb-group';ql.style.marginTop='10px';ql.textContent='Quests';list.appendChild(ql);
   const uz=document.createElement('div');
+  uz.dataset.unboundDrop='true';
   uz.ondragover=e=>{e.preventDefault();if(draggedQuest)uz.classList.add('drop-zone-active');};
   uz.ondragleave=()=>uz.classList.remove('drop-zone-active');
   uz.ondrop=e=>{e.preventDefault();uz.classList.remove('drop-zone-active');if(draggedQuest){unbindQ(draggedQuest);draggedQuest=null;}};
-  if(!visibleUnbound.length){const e=document.createElement('div');e.className='sb-empty';e.textContent=questSearch.trim()?'No matching unbound quests':qNames.length?'All bound':'No quests';uz.appendChild(e);}
+  if(visibleUnbound.length||questSearch.trim()){
+    const ql=document.createElement('div');ql.className='sb-group sb-group-subtle';ql.textContent='Unbound quests';list.appendChild(ql);
+  }
+  if(!visibleUnbound.length&&questSearch.trim()){const e=document.createElement('div');e.className='sb-empty';e.textContent='No matching unbound quests';uz.appendChild(e);}
   visibleUnbound.forEach(qn=>{
     const qRow=makeFiRow(qn,'Q',qn===currentFile&&mode==='quest');
-    qRow.draggable=true;
+    bindQuestDragRow(qRow,qn);
     bindFileNameRename(qRow,qn,'quest');
     qRow.oncontextmenu=e=>showCtxMenu(e,qn,'quest');
     qRow.querySelector('.fi-tag').onclick=()=>selectFile(qn,'quest');
-    qRow.ondragstart=e=>{isDragging=true;draggedQuest=qn;e.dataTransfer.effectAllowed='move';};
-    qRow.ondragend=()=>{isDragging=false;draggedQuest=null;$$('.drop-target').forEach(el=>el.classList.remove('drop-target'));$$('.drop-zone-active').forEach(el=>el.classList.remove('drop-zone-active'));renderFileList();};
     uz.appendChild(qRow);
   });
-  list.appendChild(uz);
+  if(visibleUnbound.length||questSearch.trim())list.appendChild(uz);
 }
 
 function makeFiRow(name,tag,active,hasUnlink){
@@ -622,13 +2116,25 @@ function makeFiRow(name,tag,active,hasUnlink){
   row.dataset.fileName=name;
   row.dataset.kind=tag==='C'?'chapter':'quest';
   const dispName=name.replace(/\.json$/i,'');
-  row.innerHTML=`<span class="fi-tag">${tag}</span><span class="fi-name" title="Double-click to rename">${esc(dispName)}</span>`;
+  row.innerHTML=`${fileListTagHtml(name,tag)}<span class="fi-name" title="Double-click to rename">${esc(dispName)}</span><span class="fi-active-dot" aria-hidden="true"></span>`;
   return row;
+}
+function fileListTagHtml(name,tag){
+  const isChapter=tag==='C';
+  const data=isChapter?chapters[name]:quests[name];
+  const fallback=isChapter?{item:'minecraft:knowledge_book'}:{item:'minecraft:book'};
+  const icon=data?.icon||fallback;
+  const tile=previewIconTile(icon,'fi-icon-tile');
+  if(tile)return `<span class="fi-tag fi-tag-icon" aria-label="${isChapter?'Chapter':'Quest'} icon">${tile}</span>`;
+  return `<span class="fi-tag">${esc(tag)}</span>`;
 }
 
 function selectFile(name,kind,panelKey){
+  if(typeof guiStudioSaveActiveDraftToScope==='function')guiStudioSaveActiveDraftToScope();
   currentFile=name;
   mode=kind;
+  if(kind==='quest'&&typeof guiStudioSyncActiveScopeForSelection==='function')guiStudioSyncActiveScopeForSelection();
+  if(typeof guiStudioRefreshAppliedPreviewsForCurrentSelection==='function')guiStudioRefreshAppliedPreviewsForCurrentSelection();
   if(kind==='quest'&&panelKey)setTab(panelKey);
   renderFileList();
   renderMain();
@@ -694,6 +2200,11 @@ const QUEST_TEMPLATES=[
   tpl({cat:'Examples',complexity:'Advanced',tags:['questlog:or','questlog:not'],file:'plan_b_or_no_plan.json',title:'Plan B, Or No Plan',icon:{item:'minecraft:compass'},description:'Choose the clean route or the cave route. Make a compass, or drag enough redstone out of the dark. Just keep breathing while you improvise.\n\n§8§oPlans are nicer after they survive contact with stone.',requirements:[qObj('questlog:not',{objective:qObj('questlog:entity_death',{entity:'minecraft:player',required_amount:1})})],objectives:[qObj('questlog:or',{objectives:[qObj('questlog:item_craft',{name:'Craft a Compass',item:'minecraft:compass',required_amount:1}),qObj('questlog:item_obtain',{name:'Find Redstone',item:'minecraft:redstone',required_amount:16})]})],rewards:[qReward('questlog:item',{name:'Map Desk Starter',item:'minecraft:cartography_table',count:1,claim_sound:'minecraft:ui.cartography_table.take_result'})],triggered_sound:'minecraft:ui.button.click',completed_sound:'minecraft:ui.toast.challenge_complete'}),
   tpl({cat:'Examples',complexity:'Advanced',tags:['questlog:command','questlog:loot_table','questlog:unobtainable'],file:'admin_chest_example.json',title:'Admin Chest Example',icon:{item:'minecraft:chest'},description:'A pack-maker example with a locked trigger, a chest interaction, loot payout, and command reward. Use it for events, shops, secrets, or anything that needs a velvet rope.\n\n§8§oNot every quest is meant to open itself.',requirements:[qObj('questlog:unobtainable',{name:'Locked by Pack Logic'})],objectives:[qObj('questlog:block_interact',{name:'Open a Chest',block:'minecraft:chest',required_amount:1})],rewards:[qReward('questlog:loot_table',{name:'Example Loot Table',loot_table:'minecraft:chests/simple_dungeon',claim_sound:'minecraft:block.chest.open'}),qReward('questlog:command',{name:'Announce Completion',command:'tellraw @s {"text":"Quest complete.","color":"gold"}',permission_level:2})],triggered_sound:'minecraft:block.chest.open',completed_sound:'minecraft:ui.toast.challenge_complete'}),
   tpl({cat:'Examples',complexity:'Intermediate',tags:['questlog:advancement','questlog:quest_complete'],file:'story_checkpoint.json',title:'Story Checkpoint',icon:{item:'minecraft:knowledge_book'},description:'Finish the earlier work, claim the advancement, and let this mark the point where the path starts branching.\n\n§8§oGood chapters need hinges.',requirements:[qObj('questlog:quest_complete',{quest:'questlog:stone_and_sparks'})],objectives:[qObj('questlog:quest_complete',{name:'Complete Stone and Sparks',quest:'questlog:stone_and_sparks'}),qObj('questlog:advancement',{name:'Stone Age Advancement',advancement:'minecraft:story/mine_stone'})],rewards:[qReward('questlog:experience',{name:'Checkpoint XP',experience:75,claim_sound:'minecraft:entity.experience_orb.pickup'})],triggered_sound:'minecraft:ui.toast.in',completed_sound:'minecraft:ui.toast.out'}),
+  tpl({cat:'Pack Patterns',complexity:'Intermediate',tags:['questlog:item_obtain','questlog:quest_complete'],file:'keyed_gate.json',title:'Keyed Gate',icon:{item:'minecraft:tripwire_hook'},description:'A practical progression gate: finish the prerequisite, recover the key item, and use this quest as the clean unlock point for the next chapter or recipe stage.\n\n§8§oUseful for modpacks that need a clear yes-or-no checkpoint.',requirements:[qObj('questlog:quest_complete',{quest:'questlog:story_checkpoint'})],objectives:[qObj('questlog:quest_complete',{name:'Complete the Prerequisite',quest:'questlog:story_checkpoint'}),qObj('questlog:item_obtain',{name:'Recover the Gate Key',item:'minecraft:tripwire_hook',required_amount:1})],rewards:[qReward('questlog:experience',{name:'Gate Opened',experience:100,claim_sound:'minecraft:block.iron_door.open'})],triggered_sound:'minecraft:block.iron_door.close',completed_sound:'minecraft:block.iron_door.open'}),
+  tpl({cat:'Pack Patterns',complexity:'Intermediate',tags:['questlog:visit_structure','questlog:block_interact'],file:'landmark_survey.json',title:'Landmark Survey',icon:{item:'minecraft:spyglass'},description:'Send players to a structure, ask for one grounded interaction, and reward exploration without requiring custom code.\n\n§8§oGood for towns, ruins, dungeons, and server landmarks.',objectives:[qObj('questlog:visit_structure',{name:'Find the Landmark',structure:'minecraft:village'}),qObj('questlog:block_interact',{name:'Inspect the Marker',block:'minecraft:bell',required_amount:1})],rewards:[qReward('questlog:item',{name:'Survey Notes',item:'minecraft:map',count:1,claim_sound:'minecraft:ui.cartography_table.take_result'})],triggered_sound:'minecraft:item.spyglass.use',completed_sound:'minecraft:ui.toast.challenge_complete'}),
+  tpl({cat:'Pack Patterns',complexity:'Intermediate',tags:['questlog:item_craft','questlog:quest_complete'],file:'station_unlock.json',title:'Station Unlock',icon:{item:'minecraft:smithing_table'},description:'A compact station-unlock quest for tech, magic, or progression packs: prove the previous step, craft the table, then touch it in-world.\n\n§8§oKeeps recipe gates readable without adding extra schema.',requirements:[qObj('questlog:quest_complete',{quest:'questlog:keyed_gate'})],objectives:[qObj('questlog:item_craft',{name:'Craft the Station',item:'minecraft:smithing_table',required_amount:1}),qObj('questlog:block_interact',{name:'Open the Station',block:'minecraft:smithing_table',required_amount:1})],rewards:[qReward('questlog:item',{name:'Upgrade Material',item:'minecraft:iron_ingot',count:8,claim_sound:'minecraft:block.smithing_table.use'})],triggered_sound:'minecraft:block.smithing_table.use',completed_sound:'minecraft:block.smithing_table.use'}),
+  tpl({cat:'Pack Patterns',complexity:'Advanced',tags:['questlog:entity_kill','questlog:item_obtain'],file:'boss_trophy_turn_in.json',title:'Boss Trophy Turn-In',icon:{item:'minecraft:dragon_head'},description:'A source-safe boss pattern: defeat the target, collect a trophy item, and pay out loot without inventing custom turn-in fields.\n\n§8§oSwap the entity, item, and loot table for your pack boss.',requirements:[qObj('questlog:quest_complete',{quest:'questlog:station_unlock'})],objectives:[qObj('questlog:entity_kill',{name:'Defeat the Boss',entity:'minecraft:ender_dragon',required_amount:1}),qObj('questlog:item_obtain',{name:'Claim the Trophy',item:'minecraft:dragon_head',required_amount:1})],rewards:[qReward('questlog:loot_table',{name:'Boss Reward Cache',loot_table:'minecraft:chests/end_city_treasure',claim_sound:'minecraft:entity.player.levelup'})],triggered_sound:'minecraft:entity.ender_dragon.growl',completed_sound:'minecraft:ui.toast.challenge_complete'}),
+  tpl({cat:'Pack Patterns',complexity:'Simple',tags:['questlog:item_obtain','questlog:item_drop'],file:'delivery_hand_in.json',title:'Delivery Hand-In',icon:{item:'minecraft:bundle'},description:'A simple hand-in shaped quest using supported objectives only: gather the delivery item, then drop one as the visible handoff action.\n\n§8§oGood for contracts, courier jobs, and starter town errands.',objectives:[qObj('questlog:item_obtain',{name:'Gather the Delivery',item:'minecraft:paper',required_amount:8}),qObj('questlog:item_drop',{name:'Hand In One Delivery',item:'minecraft:paper',required_amount:1})],rewards:[qReward('questlog:item',{name:'Payment',item:'minecraft:emerald',count:3,claim_sound:'minecraft:entity.villager.yes'})],triggered_sound:'minecraft:item.bundle.insert',completed_sound:'minecraft:entity.villager.yes'}),
   tpl({cat:'Examples',complexity:'Simple',tags:['questlog:read','questlog:unobtainable'],file:'quest_noticeboard.json',title:'Quest Noticeboard',icon:{item:'minecraft:lectern'},description:'A noticeboard quest for instructions, rumors, server rules, or locked story beats. Read it, file it away, and let the world feel a little more intentional.\n\n§8§oSome quests are signs pretending to be doors.',objectives:[qObj('questlog:read',{name:'Read This Notice',quest:'questlog:quest_noticeboard'}),qObj('questlog:unobtainable',{name:'Manual Unlock Placeholder'})],rewards:[qReward('questlog:item',{name:'Bookmark',item:'minecraft:paper',count:1,claim_sound:'minecraft:item.book.page_turn'})],triggered_sound:'minecraft:item.book.page_turn',completed_sound:'minecraft:ui.toast.out'}),
   tpl({cat:'Examples',complexity:'Intermediate',tags:['questlog:block_mine','questlog:block_place'],file:'quarry_marker.json',title:'Quarry Marker',icon:{item:'minecraft:stonecutter'},description:'Mine enough stone to make the hole official, then place a stonecutter like a little flag in the dust.\n\n§8§oA quarry is just a mess with a title.',objectives:[qObj('questlog:block_mine',{name:'Mine Stone',block:'minecraft:stone',required_amount:64}),qObj('questlog:block_place',{name:'Place a Stonecutter',block:'minecraft:stonecutter',required_amount:1})],rewards:[qReward('questlog:item',{name:'Work Lights',item:'minecraft:torch',count:48,claim_sound:'minecraft:ui.stonecutter.take_result'})],triggered_sound:'minecraft:block.stone.break',completed_sound:'minecraft:ui.stonecutter.take_result'}),
   tpl({cat:'Progression',complexity:'Advanced',tags:['questlog:item_equip','questlog:visit_dimension'],file:'end_ready_uniform.json',title:'End-Ready Uniform',icon:{item:'minecraft:diamond_boots'},description:'Put on the boots, carry the eyes, and step into the End dressed like gravity is about to get personal.\n\n§8§oThe void notices loose footing.',requirements:[qObj('questlog:item_obtain',{item:'minecraft:ender_eye',required_amount:12})],objectives:[qObj('questlog:item_equip',{name:'Equip Diamond Boots',item:'minecraft:diamond_boots',slot:'feet',required_amount:1}),qObj('questlog:visit_dimension',{name:'Enter the End',dimension:'minecraft:the_end'})],rewards:[qReward('questlog:item',{name:'Soft Landing Maybe',item:'minecraft:ender_pearl',count:4,claim_sound:'minecraft:entity.ender_pearl.throw'})],triggered_sound:'minecraft:block.end_portal.spawn',completed_sound:'minecraft:music.end'}),
@@ -706,6 +2217,7 @@ function templateComplexities(){return ['Simple','Intermediate','Advanced'];}
 function templateTags(){return OBJ_TYPES.slice();}
 function slugFile(s){return String(s||'quest').toLowerCase().replace(/[^a-z0-9_./-]+/g,'_').replace(/^_+|_+$/g,'')+'.json';}
 function uniqueFileName(base,map){let n=base.endsWith('.json')?base:base+'.json';let i=2;const stem=n.replace(/\.json$/i,'');while(map[n])n=`${stem}_${i++}.json`;return n;}
+function uniqueTemplateTitle(base){let title=String(base||'Custom quest').trim()||'Custom quest';let n=title,i=2;const used=new Set(customTemplates.map(t=>String(t.title||'').toLowerCase()));while(used.has(n.toLowerCase()))n=`${title} ${i++}`;return n;}
 function cloneTemplateQuest(t){const q={title:t.title,description:t.description||'',icon:t.icon||{item:'minecraft:book'},objectives:JSON.parse(JSON.stringify(t.objectives||[])),requirements:JSON.parse(JSON.stringify(t.requirements||[])),rewards:JSON.parse(JSON.stringify(t.rewards||[]))};if(t.completed_sound)q.completed_sound=t.completed_sound;if(t.triggered_sound)q.triggered_sound=t.triggered_sound;if(t.toast_on_unlock!==undefined)q.toast_on_unlock=t.toast_on_unlock;if(t.toast_on_complete!==undefined)q.toast_on_complete=t.toast_on_complete;fixQA(q);return q;}
 function createQuestFromTemplate(t){const fn=uniqueFileName(t.file||slugFile(t.title),quests);const q=cloneTemplateQuest(t);quests[fn]=q;touchFile('quest',fn);recordActivity('Created from template','quest',fn,t.title);selectFile(fn,'quest');showMsg(`Created template: ${t.title}`,true);scheduleAutosave();}
 function deleteCustomTemplate(index){
@@ -726,8 +2238,8 @@ function deleteCustomTemplate(index){
 }
 function makeTemplateFromQuest(file){
   const q=quests[file];if(!q)return;
-  const title=(q.title||file.replace(/\.json$/i,'')).trim()||'Custom quest';
-  const tpl={cat:'Custom',complexity:'Custom',tags:[...new Set([...(q.requirements||[]),...(q.objectives||[]),...(q.failures||[])].map(o=>o?.type).filter(Boolean))],file:slugFile(title),title,description:q.description||'',icon:q.icon||{item:'minecraft:book'},requirements:JSON.parse(JSON.stringify(q.requirements||[])),objectives:JSON.parse(JSON.stringify(q.objectives||[])),rewards:JSON.parse(JSON.stringify(q.rewards||[]))};
+  const title=uniqueTemplateTitle((q.title||file.replace(/\.json$/i,'')).trim()||'Custom quest');
+  const tpl={cat:'Custom',complexity:'Custom',source_file:file,created_at:new Date().toISOString(),tags:[...new Set([...(q.requirements||[]),...(q.objectives||[]),...(q.failures||[])].map(o=>o?.type).filter(Boolean))],file:slugFile(title),title,description:q.description||'',icon:q.icon||{item:'minecraft:book'},requirements:JSON.parse(JSON.stringify(q.requirements||[])),objectives:JSON.parse(JSON.stringify(q.objectives||[])),rewards:JSON.parse(JSON.stringify(q.rewards||[]))};
   if(q.completed_sound)tpl.completed_sound=q.completed_sound;
   if(q.triggered_sound)tpl.triggered_sound=q.triggered_sound;
   customTemplates.unshift(tpl);
@@ -740,20 +2252,88 @@ function ensureTemplateChapter(){const fn='vanilla_starter.json';if(!chapters[fn
 function createStarterPack(){const ch=ensureTemplateChapter();touchFile('chapter',ch);const ns=getNs()||'questlog';const made=[];QUEST_TEMPLATES.forEach((t,i)=>{const fn=uniqueFileName(t.file||slugFile(t.title),quests);const q=cloneTemplateQuest(t);q.chapter=`${ns}:${ch.replace(/\.json$/i,'')}`;q.sort_order=i;quests[fn]=q;touchFile('quest',fn);made.push(fn);});renderFileList();selectFile(made[0]||ch,made[0]?'quest':'chapter');renderValidation();showMsg(`Created ${made.length} vanilla starter quests.`,true);scheduleAutosave();}
 function openTemplateModal(){const modal=$('#templateModal');if(!modal)return;modal.classList.add('open');renderTemplateModal();setTimeout(()=>$('#templateSearch')?.focus(),50);}
 function closeTemplateModal(){$('#templateModal')?.classList.remove('open');}
-function renderTemplateModal(){const list=$('#templateList'),cat=$('#templateCategory'),search=$('#templateSearch'),cx=$('#templateComplexity'),tag=$('#templateTag');if(!list||!cat)return;const keepCat=cat.value||'all';cat.innerHTML='<option value="all">All categories</option>'+templateCategories().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');cat.value=[...cat.options].some(o=>o.value===keepCat)?keepCat:'all';if(cx&&!cx.dataset.ready){cx.innerHTML='<option value="all">All complexity</option>'+templateComplexities().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');cx.dataset.ready='1';}if(tag&&!tag.dataset.ready){tag.innerHTML='<option value="all">All objective tags</option>'+templateTags().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');tag.dataset.ready='1';}
+function renderTemplateModal(){const list=$('#templateList'),cat=$('#templateCategory'),search=$('#templateSearch'),cx=$('#templateComplexity'),tag=$('#templateTag'),summary=$('#templateSummary');if(!list||!cat)return;const keepCat=cat.value||'all';cat.innerHTML='<option value="all">All categories</option>'+templateCategories().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');cat.value=[...cat.options].some(o=>o.value===keepCat)?keepCat:'all';if(cx&&!cx.dataset.ready){cx.innerHTML='<option value="all">All complexity</option>'+templateComplexities().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');cx.dataset.ready='1';}if(tag&&!tag.dataset.ready){tag.innerHTML='<option value="all">All objective tags</option>'+templateTags().map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');tag.dataset.ready='1';}
   const q=String(search?.value||'').trim().toLowerCase();const cv=cat.value||'all';const xv=cx?.value||'all';const tv=tag?.value||'all';
   const customOnly=!!$('#templateCustomOnly')?.checked;
   const pool=allTemplates();
-  const rows=pool.filter(t=>(!customOnly||t.customIndex!==undefined)&&(customOnly||cv==='all'||t.cat===cv)&&(customOnly||xv==='all'||t.complexity===xv)&&(tv==='all'||(t.tags||[]).includes(tv))&&(!q||`${t.title} ${t.cat} ${t.complexity} ${(t.tags||[]).join(' ')} ${t.description}`.toLowerCase().includes(q)));
-  list.innerHTML=rows.map((t,i)=>`<div class="template-row" data-tpl="${esc(t.title)}"><div class="template-main"><div class="template-name">${esc(t.title)}</div><div class="template-desc">${esc(t.description||'')}</div><div class="template-meta"><span>${esc(t.cat)}</span><span>${esc(t.complexity||'Simple')}</span><span>${esc((t.objectives||[]).length)} objective${(t.objectives||[]).length===1?'':'s'}</span><span>${esc((t.requirements||[]).length)} req</span><span>${esc((t.tags||[]).slice(0,2).join(', '))}</span></div></div><div class="template-row-actions"><button class="btn btn-primary btn-sm template-create" data-index="${pool.indexOf(t)}">Create</button>${t.customIndex!==undefined?`<button class="btn btn-danger-soft btn-sm template-delete" data-custom-index="${t.customIndex}">Delete</button>`:''}</div></div>`).join('')||'<div class="template-empty">No templates match that search.</div>';
+  const rows=pool.map((t,index)=>({t,index})).filter(({t})=>(!customOnly||t.customIndex!==undefined)&&(customOnly||cv==='all'||t.cat===cv)&&(customOnly||xv==='all'||t.complexity===xv)&&(tv==='all'||(t.tags||[]).includes(tv))&&(!q||`${t.title} ${t.cat} ${t.complexity} ${(t.tags||[]).join(' ')} ${t.description} ${t.source_file||''}`.toLowerCase().includes(q))).sort((a,b)=>(b.t.customIndex!==undefined)-(a.t.customIndex!==undefined)||String(a.t.title).localeCompare(String(b.t.title)));
+  if(summary)summary.innerHTML=`<strong>${rows.length}</strong> shown <span>${customTemplates.length} custom</span> <span>${QUEST_TEMPLATES.length} built-in</span>`;
+  list.innerHTML=rows.map(({t,index})=>`<div class="template-row ${t.customIndex!==undefined?'is-custom':''}" data-tpl="${esc(t.title)}"><div class="template-main"><div class="template-name">${esc(t.title)}</div><div class="template-desc">${esc(t.description||'')}</div><div class="template-meta">${t.customIndex!==undefined?'<span class="custom-pill">Custom</span>':''}<span>${esc(t.cat)}</span><span>${esc(t.complexity||'Simple')}</span><span>${esc((t.objectives||[]).length)} objective${(t.objectives||[]).length===1?'':'s'}</span><span>${esc((t.requirements||[]).length)} req</span>${t.source_file?`<span>From ${esc(t.source_file.replace(/\.json$/i,''))}</span>`:''}<span>${esc((t.tags||[]).slice(0,2).join(', ')||'No tags')}</span></div></div><div class="template-row-actions"><button class="btn btn-primary btn-sm template-create" data-index="${index}">Use template</button>${t.customIndex!==undefined?`<button class="btn btn-danger-soft btn-sm template-delete" data-custom-index="${t.customIndex}">Delete</button>`:''}</div></div>`).join('')||'<div class="template-empty">No templates match that search.</div>';
   $$('.template-create',list).forEach(btn=>btn.onclick=()=>createQuestFromTemplate(pool[Number(btn.dataset.index)]));
   $$('.template-delete',list).forEach(btn=>btn.onclick=()=>deleteCustomTemplate(Number(btn.dataset.customIndex)));
 }
 const CHANGELOGS=[
   {
+    version:'3.0',
+    title:'Version 3.0',
+    status:'Major GUI editor and release workflow update',
+    sections:[
+      {title:'Added',items:[
+        'GUI Studio now covers both QuestDetails and the global QuestList, with Create, Layout & Position, and Final screens built around Questlog source-backed texture pieces.',
+        'QuestDetails GUI edits are scoped per quest, while QuestList edits are applied globally to match Questlog\'s real list-menu behavior.',
+        'Project ZIP export now includes quest/chapter JSON, a Builder manifest, generated resource-pack textures, per-quest QuestDetails assets, global QuestList atlas output, and QuestList client config files.',
+        'Workbench and Canvas layouts add movable panels, fitting Questlog previews, GUI Editor launch buttons, resources panels, drawing/hand tools, and recoverable saved panel layouts.',
+        'Mod Support adds searchable source-verified autocomplete packs, target availability for Minecraft 1.21.1/1.20.1, verified ID counts, and support for large packs such as Mekanism, Immersive Engineering, Ars Nouveau, Twilight Forest, The Aether, Enderscape, and many more.',
+        'Minecraft preview icons now use bundled vanilla texture data for items, blocks, quest/chapter badges, objective/reward rows, and entity face previews when available.',
+        'Website personalization adds Minecraft-inspired and regular themes, font choices, grouped UI sound controls, a surface gradient option, motion effects, and the hidden Press It preference.',
+        'Quest templates now include practical Pack Patterns for gates, landmarks, station unlocks, boss trophy turn-ins, and delivery hand-ins.',
+        'The guided tutorial now covers the current chapter, quest, preview, GUI editor, Mod Support, settings, resources, and export workflow.'
+      ]},
+      {title:'Reworked',items:[
+        'QuestDetails and QuestList previews were rebuilt around verified Questlog source boundaries, so exported fields stay honest and preview-only child movement is not presented as real Questlog JSON support.',
+        'The Export preview was redesigned with left-side metadata, readiness checks, ZIP actions, a fixed-height scrollable project tree, themed surfaces, and clearer blocked/ready states.',
+        'Settings was reorganized into Preferences, Project, Help & Support, Mod Support, and Danger Zone, with preference changes autosaving instead of using a bottom Apply/Cancel bar.',
+        'Advanced Layout is now Textures & Overlay, preserving loaded JSON fields while moving visual panel placement into GUI Studio.',
+        'Progress editing now uses clearer section cards, live add/remove counts, boxed File/Notify toggles, and lucide-style section icons.',
+        'ID entry was improved with live space-to-underscore cleanup, recent per-field suggestions, and existing quest-ID suggestions for reference fields.',
+        'The in-app changelog, release checklist, and current workflow docs were updated to describe the finished v3.0 behavior instead of older prototype assumptions.'
+      ]},
+      {title:'Polished',items:[
+        'Lucide SVG icons now cover common app chrome, Settings, Focused/Workbench/Canvas controls, context menus, Export readiness, side-panel tabs, Progress actions, and GUI Studio controls.',
+        'Motion effects, theme/sound button animations, modal entry effects, and reactive ambient lighting now give feedback without touching Canvas or Workbench backgrounds.',
+        'Canvas and Workbench toolbars remain visually stable and are excluded from the ambient/gradient lighting treatment.',
+        'QuestList Layout and Final previews now use real search tab, chapter tab, scrollbar, row divider, hover, and progress-color preview behavior.',
+        'The global QuestList Apply action is a single compact path, and the Final screen keeps export access separate from applying the GUI draft.',
+        'The Mod Support search area is cleaner, with compact sort/select/clear-shown actions integrated into the search bar.',
+        'GUI Studio and export preview rendering are more responsive through coalesced refreshes, targeted preview-cache warming, and closed-preview rerender culling.',
+        'Export preview download controls, title icon spacing, project tree scrolling, and ZIP readiness messaging were tightened for dense projects.',
+        'Navigator badges, Settings preview rows, default Display icons, block icons, and entity icons now use texture-backed previews instead of old letter placeholders.',
+        'The remaining screenshot scene options in GUI Studio now match the current available scene files.'
+      ]},
+      {title:'Fixed',items:[
+        'Fixed non-editor QuestDetails previews showing a Back button where Questlog should not show one.',
+        'Fixed Progress add/remove counts staying stale after deleting requirements, objectives, failures, or rewards.',
+        'Fixed Canvas panel zoom/pan behavior that forced panels back into frame or stacked them together instead of allowing free canvas space.',
+        'Fixed Workbench/Canvas preview panels becoming clipped, too small, or unrecoverable after aggressive resizing and dragging.',
+        'Fixed QuestList chapter connector lines, default minimized-search placement, row text sizing, icon spacing, and duplicate Final apply paths.',
+        'Fixed GUI Studio texture zones so default edit bounds stay locked to the real texture dimensions while Questlog child layers remain fixed.',
+        'Fixed Export preview stretching vertically when many files were listed by making the project ZIP tree scroll internally.',
+        'Fixed Mod Support data/status issues including removing Macaw\'s Paintings and marking the Alex\'s Mobs 1.21.1 CurseForge port as available.',
+        'Fixed multiple old glyph/letter icon fallbacks across Progress, file badges, Settings preview, GUI Studio thumbnails, and toolbars.'
+      ]}
+    ]
+  },
+  {
+    version:'2.8',
+    title:'Version 2.8',
+    status:'Advanced creator tools',
+    sections:[
+      {title:'Updated',items:[
+        'Advanced editor fields are grouped into clearer texture, overlay, panel, label, color, and badge sections.',
+        'JSON and ZIP files can be dropped onto the editor to import them through the same safe import path as the menu.',
+        'Quest templates show custom counts, clearer Use template buttons, custom highlighting, and source-file info for templates made from quests.',
+        'Export preview now gives a cleaner readiness check before downloading the project ZIP.',
+        'Optional UI sounds now play replaceable files from ui-sounds, with typing sounds, volume control, and a mute button.',
+        'Website personalization now has premade themes, font choices, editor toggles, and sound feel settings.',
+        'Vanilla Minecraft 1.21.1 biome, block, item, and sound suggestions were refreshed.',
+        'Mod ID suggestion support was added for popular packs, with a simple picker that shows the mod name, mod ID, and short description.'
+      ]}
+    ]
+  },
+  {
     version:'2.5',
     title:'Version 2.5',
-    status:'Sandbox tested; waiting for release approval',
+    status:'Project workflow tools',
     sections:[
       {title:'Updated',items:[
         'Export preview focuses on warnings/missing data and a short install-location note.',
@@ -765,16 +2345,13 @@ const CHANGELOGS=[
         'Custom template deletion, file deletion, and bulk delete use in-app confirmation instead of browser popups.',
         'Settings was reorganized so status, tutorial, changelog, and reset controls are grouped together.',
         'Manual Save now lives in the right panel only when autosave is off.'
-      ]},
-      {title:'Remaining focus',items:[
-        'Sandbox replacement testing passed locally. GitHub/Neocities release is waiting for approval.'
       ]}
     ]
   },
   {
     version:'2.3',
     title:'Version 2.3',
-    status:'Completed creator usability release',
+    status:'Creator usability and onboarding',
     sections:[
       {title:'Updated',items:[
         'Changelog moved into a full-screen overlay with a version selector.',
@@ -793,7 +2370,7 @@ const CHANGELOGS=[
   {
     version:'2.2',
     title:'Version 2.2',
-    status:'Completed safety and cleanup release',
+    status:'Safety, recovery, and cleaner controls',
     sections:[
       {title:'Updated',items:[
         'Top toast notifications for status and errors.',
@@ -809,7 +2386,7 @@ const CHANGELOGS=[
   {
     version:'2.0',
     title:'Version 2.0',
-    status:'Older officially completed version',
+    status:'Early editor update',
     sections:[
       {title:'Updated',items:[
         'Added more features, but needed decluttering so the UI changed a good amount.',
@@ -848,28 +2425,37 @@ function openChangelogModal(){
   const modal=$('#changelogModal');if(!modal)return;
   renderChangelog(APP_VERSION);
   modal.classList.add('open');
+  playUiSound('panel');
 }
-function closeChangelogModal(){$('#changelogModal')?.classList.remove('open');}
+function closeChangelogModal(){
+  const modal=$('#changelogModal');
+  const wasOpen=modal?.classList.contains('open');
+  modal?.classList.remove('open');
+  if(wasOpen)playUiSound('panel');
+}
 
 const TUTORIAL_STEPS=[
-  {target:'#questSearch',title:'Search the project',text:'Type here to temporarily filter the quest and chapter list. It only changes what you see; clearing the box brings the full list back.',pad:5},
-  {target:'#questListSort',title:'Sort without changing files',text:'Use this to view quests alphabetically, by Questlog order, or by recently updated. Sorting does not rename files or change exported JSON.',pad:5},
-  {target:'#fileList',title:'Quest and chapter files',text:'Questlog IDs come from file names. Double-click a file name to rename it, right-click for file actions, and drag quests onto chapters to link them.',pad:5},
-  {target:'#btnAddMenu',title:'Create content',text:'Add creates quests, chapters, or starter templates. Templates are working examples you can edit into your own modpack quests.',pad:5},
-  {target:'#btnImportExportMenu',title:'Import and export safely',text:'Import existing Questlog JSON or ZIP projects here. Export selected file downloads one JSON file; Export project ZIP is usually what you want for a full pack project.',pad:5},
-  {target:'#formTabs',tab:'display',title:'Editor sections overview',text:'The center editor is split into Display, Progress, Sounds, and Advanced. Display is text and appearance, Progress is requirements/objectives/rewards, Sounds is notifications, and Advanced is mostly layout/resource-pack options.',pad:5},
-  {target:'#qf_title',tab:'display',title:'Display: identity and placement',text:'Title is what players read. Sort order controls quest position inside a chapter. Chapter ID links this quest to a chapter file, usually namespace:chapter_file_name.',pad:7},
-  {target:'#qf_description',tab:'display',title:'Display: description and icon',text:'Description is the main quest text and supports Questlog rich text links. The icon controls what players see beside the quest in the Questlog UI.',pad:7},
-  {target:'#addReq',tab:'progress',title:'Progress: requirements',text:'Requirements gate or unlock a quest. Use them for “complete this first” or “own this item first” style logic. You usually do not need hidden:true when requirements already gate the quest.',pad:5},
-  {target:'#addObj',tab:'progress',title:'Progress: objectives',text:'Objectives are what the player must do to complete the quest. Item obtain, block mine, advancement, quest complete, and similar types live here.',pad:5},
-  {target:'#addRew',tab:'progress',title:'Progress: rewards and failures',text:'Rewards are what the player can claim after completion. Failures are optional and only needed for special quest designs.',pad:5},
-  {target:'#qf_completed_sound',tab:'sounds',title:'Sounds and notifications',text:'Use this section for completed/triggered sounds, unlock toasts, completion toasts, and popup behavior. Sound fields expect Minecraft sound IDs.',pad:7},
-  {target:'.adv-wrap',tab:'layout',title:'Advanced is for polish',text:'Advanced sections cover layout, textures, labels, colors, and badges. Most quests do not need these at first, but they help packs with custom resource-pack styling.',pad:5},
-  {target:'#validationList',title:'Validation catches mistakes',text:'Validation catches missing objectives, broken IDs, and risky references. Click a warning to jump to the likely field and highlight it.',pad:5},
-  {target:'#liveJson',title:'Live JSON preview',text:'The right panel shows the selected file as Questlog JSON. Power users can enable raw JSON editing in Settings, but the forms are safer for normal work.',pad:5},
-  {target:'.tb-links',title:'Top-left resources',text:'These links go to Modrinth, the Questlog wiki, and examples. Use the wiki for deeper Questlog behavior once the editor basics make sense.',pad:5},
-  {targets:['.history-actions','#themeToggle'],title:'Undo, redo, and theme',text:'Undo and redo help recover accidental edits, and the theme button switches light/dark mode. Undo history is saved with the browser project.',pad:5},
-  {target:'#settingsMenu',openSettings:true,title:'Settings recap',text:'Settings contains namespace, project-wide validation, raw JSON mode, autosave, minified export, tooltips, project status, changelog, this tutorial, and reset saved progress.',pad:5}
+  {target:'#btnAddMenu',title:'Create quests and chapters',text:'Use Add to create a quest, create a chapter, or start from a template. Chapters organize quest files, while quest file names become Questlog IDs.',pad:5},
+  {target:'#fileList',title:'Project file list',text:'Double-click file names to rename them, right-click for file actions, and drag quests onto chapters to link them. If you rename a chapter, linked quest chapter refs are updated.',pad:5},
+  {target:'#questSearch',title:'Find project files',text:'Search filters the visible quest and chapter list without changing export order or saved JSON.',pad:5},
+  {targets:['#questSearch','#questListSortButton'],title:'Filter and sort your view',text:'The search box filters visible files, and the sort button changes how the sidebar is displayed. Neither one renames files or changes exported Questlog JSON.',pad:5},
+  {target:'#formTabs',tab:'display',title:'Quest editor sections',text:'Display handles title, descriptions, icon, sounds, notifications, and preview. Progress handles requirements, objectives, failures, and rewards. Advanced is for textures, overlay fields, labels, colors, and badges.',pad:5},
+  {target:'#qf_title',tab:'display',title:'Quest identity',text:'Title is what players read. Sort order controls chapter order. Chapter ID links the quest to a chapter, usually namespace:chapter_file_name.',pad:7},
+  {target:'#qf_description',tab:'display',title:'Descriptions and icon',text:'Write the main quest text here, then optionally add completed and failed descriptions. The icon fields control the item or texture shown in Questlog previews and exported JSON.',pad:7},
+  {targets:['#qf_completed_sound','#qf_triggered_sound'],tab:'display',title:'Sounds and notifications',text:'Completed sound and Triggered sound both expect Minecraft sound IDs. Toast and popup toggles live with the Display identity controls.',pad:7},
+  {target:'#displayQuestPreviewMount',tab:'display',title:'Preview the quest',text:'The embedded Questlog preview shows the current quest with Minecraft-style text, real GUI textures, current objectives, and reward state.',pad:5},
+  {target:'#displayQuestPreviewMount',tab:'display',title:'Quest Menu GUI editor',text:'Use the GUI Editor button inside the quest preview when you are ready to customize the quest menu for this quest.',pad:5},
+  {target:'#addReq',tab:'progress',title:'Requirements',text:'Requirements unlock or gate a quest. Use them for prerequisite quests, required items, or other conditions before objectives should matter.',pad:5},
+  {target:'#addObj',tab:'progress',title:'Objectives',text:'Objectives are what the player must do to complete the quest: obtain items, mine blocks, visit places, complete quests, earn advancements, and more.',pad:5},
+  {targets:['#addFail','#addRew'],tab:'progress',title:'Failures and rewards',text:'Failures are optional conditions that can fail a quest. Rewards are claimed after completion, and both sections support the same edit/delete card workflow as objectives.',pad:5},
+  {target:'.adv-wrap',tab:'layout',title:'Textures and overlay',text:'Advanced now focuses on texture paths, overlay fields, badges, and source-backed JSON details. Panel placement lives in the GUI Editor so duplicate layout controls are not repeated here.',pad:5},
+  {target:'#validationList',rightMode:'validation',title:'Check for mistakes',text:'The Checks panel catches missing objectives, invalid IDs, broken references, and risky output. Click an issue to jump to the likely field.',pad:5},
+  {target:'#liveJson',rightMode:'json',title:'Review JSON output',text:'The JSON panel shows the selected file as Questlog JSON. Raw JSON mode exists for power users, but the form editor is safer for most edits.',pad:5},
+  {target:'#btnImportExportMenu',title:'Export the project',text:'Use Export project ZIP for a full pack-style export. The export preview shows readiness checks, generated file paths, resource-pack metadata, and the ZIP tree.',pad:5},
+  {target:'.history-actions',title:'Undo and redo',text:'Undo and redo sit beside the editor tabs and include normal editor changes. GUI Studio also keeps its own undo/redo while the Studio is open.',pad:5},
+  {target:'#settingsMenu',openSettings:true,preferenceTab:'preferences',title:'Settings and appearance',text:'Settings contains themes, fonts, layout choices, editor controls, sound groups, export metadata, and the live appearance preview.',pad:5},
+  {target:'#settingsModMount',openSettings:true,preferenceTab:'mod',title:'Mod support',text:'Mod Support controls which generated ID packs can appear in suggestions for items, blocks, biomes, and sounds.',pad:5},
+  {target:'#questListGuiStudioLogoBtn',title:'QuestList GUI editor and resources',text:'The Questlog logo opens the global QuestList GUI Editor. It uses the same Create, Layout, and Final idea as the Quest Menu GUI Editor, but QuestList textures and layout are global. Help and Support also keeps Questlog docs, source examples, the changelog, and this tutorial replay.',pad:5}
 ];
 let tutorialIndex=0,tutorialResizeBound=false;
 function markTutorialSeen(){try{localStorage.setItem(TUTORIAL_SEEN_KEY,'true');}catch{}}
@@ -877,7 +2463,12 @@ function openTutorialPrompt(force=false){
   if(!force&&localStorage.getItem(TUTORIAL_SEEN_KEY)==='true')return;
   $('#tutorialPrompt')?.classList.add('open');
 }
-function closeTutorialPrompt(){$('#tutorialPrompt')?.classList.remove('open');}
+function closeTutorialPrompt(){
+  const modal=$('#tutorialPrompt');
+  const wasOpen=modal?.classList.contains('open');
+  modal?.classList.remove('open');
+  if(wasOpen)playUiSound('panel');
+}
 function tutorialTargetRect(step){
   const selectors=step?.targets||(step?.target?[step.target]:[]);
   const rects=selectors.map(sel=>document.querySelector(sel)).filter(Boolean).map(el=>{
@@ -890,12 +2481,15 @@ function tutorialTargetRect(step){
   return {left,top,right,bottom,width:right-left,height:bottom-top};
 }
 function prepareTutorialStep(step){
+  if(step?.rightMode)setRightPanelMode(step.rightMode);
   if(step?.tab&&mode==='quest'){
     setTab(step.tab);
     renderMain();
   }
-  if(step?.openSettings)$('#settingsMenu')?.classList.add('open');
-  else closeSettingsMenu();
+  if(step?.openSettings){
+    openPersonalizationModal();
+    if(step.preferenceTab)setPreferenceTab(step.preferenceTab,true);
+  }else closeSettingsMenu();
 }
 function placeTutorial(){
   const layer=$('#tutorialLayer'),spot=$('#tutorialSpotlight'),pop=$('#tutorialPop');
@@ -966,20 +2560,408 @@ function endTutorial(markSeen=true){
 function jsonSpace(){return $('#compactJson')?.checked?0:2;}
 function stringifyJson(obj){return JSON.stringify(obj,null,jsonSpace());}
 function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href);}
-function classifyImportedJson(name,data){const norm=String(name||'import.json').split('/').pop()||'import.json';const isQ=data&&typeof data==='object'&&(data.objectives!==undefined||data.requirements!==undefined||data.rewards!==undefined||data.title!==undefined);if(isQ){fixQA(data);nqbd(data);const fn=uniqueFileName(norm.replace(/\.json$/i,'')+'.json',quests);quests[fn]=data;touchFile('quest',fn);return {kind:'quest',file:fn};}const fn=uniqueFileName(norm.replace(/\.json$/i,'')+'.json',chapters);chapters[fn]=data;touchFile('chapter',fn);return {kind:'chapter',file:fn};}
-async function importZipFile(file){if(typeof JSZip==='undefined')throw new Error('JSZip failed to load.');const zip=await JSZip.loadAsync(file);const imported=[];const entries=Object.values(zip.files).filter(z=>!z.dir&&z.name.toLowerCase().endsWith('.json'));
-  for(const ent of entries){try{const txt=await ent.async('string');const data=JSON.parse(txt);let rel=ent.name.replace(/^.*config\/questlog\//i,'');let kind=null;if(/(^|\/)quests\//i.test(rel))kind='quest';if(/(^|\/)chapters\//i.test(rel))kind='chapter';let base=rel.split('/').pop()||'import.json';if(kind==='quest'){fixQA(data);nqbd(data);const fn=uniqueFileName(base,quests);quests[fn]=data;touchFile('quest',fn);imported.push({kind,file:fn});}else if(kind==='chapter'){const fn=uniqueFileName(base,chapters);chapters[fn]=data;touchFile('chapter',fn);imported.push({kind,file:fn});}else imported.push(classifyImportedJson(base,data));}catch(err){console.warn('[zip import]',ent.name,err);}}
-  if(!imported.length)throw new Error('No JSON quest/chapter files found in that ZIP.');renderFileList();selectFile(imported[0].file,imported[0].kind);renderValidation();scheduleAutosave();return imported.length;}
+function classifyImportedJson(name,data){const norm=String(name||'import.json').split('/').pop()||'import.json';const isQ=data&&typeof data==='object'&&(data.objectives!==undefined||data.requirements!==undefined||data.rewards!==undefined||data.title!==undefined);if(isQ){fixQA(data);nqbd(data);const fn=uniqueFileName(norm.replace(/\.json$/i,'')+'.json',quests);quests[fn]=data;touchFile('quest',fn);return {kind:'quest',file:fn,source:norm};}const fn=uniqueFileName(norm.replace(/\.json$/i,'')+'.json',chapters);chapters[fn]=data;touchFile('chapter',fn);return {kind:'chapter',file:fn,source:norm};}
+function normalizeZipPath(name){return String(name||'').replace(/\\/g,'/');}
+function questlogConfigImportKind(path){
+  const norm=normalizeZipPath(path);
+  const rel=norm.replace(/^.*config\/questlog\//i,'');
+  if(/(^|\/)quests\/[^/]+\.json$/i.test(rel))return 'quest';
+  if(/(^|\/)chapters\/[^/]+\.json$/i.test(rel))return 'chapter';
+  return null;
+}
+function shouldSkipZipJsonImport(path){
+  const lower=normalizeZipPath(path).toLowerCase();
+  return lower==='questlog_export_manifest.json'
+    || lower.endsWith('/questlog_export_manifest.json')
+    || lower.endsWith('.manifest.json')
+    || lower.startsWith('assets/')
+    || lower.includes('/assets/');
+}
+async function readZipJson(zip,path){
+  const entry=zip.file(path);
+  if(!entry)return null;
+  return JSON.parse(await entry.async('string'));
+}
+function remapImportedGuiStudioScopes(scopes,questNameMap={}){
+  if(!scopes||typeof scopes!=='object')return scopes;
+  const copy=cloneGuiStudioDraft(scopes);
+  const mappedQuests={};
+  Object.entries(copy.quests||{}).forEach(([file,draft])=>{
+    const next=questNameMap[file]||file;
+    if(next==='__unsaved__'||quests[next])mappedQuests[next]=draft;
+  });
+  copy.quests=mappedQuests;
+  if(typeof copy.activeKey==='string'&&copy.activeKey.startsWith('quest:')){
+    const file=copy.activeKey.slice(6);
+    copy.activeKey=`quest:${questNameMap[file]||file}`;
+  }
+  return copy;
+}
+function restoreImportedBuilderProjectState(manifest,imported=[]){
+  const project=manifest?.builder_project||manifest?.project_state;
+  if(!project||typeof project!=='object')return false;
+  const questNameMap={};
+  imported.forEach(item=>{if(item.kind==='quest'&&item.source)questNameMap[item.source]=item.file;});
+  if(project.namespace&&$('#defaultNs'))$('#defaultNs').value=String(project.namespace).slice(0,48);
+  if(project.export_metadata&&typeof saveExportMetadata==='function')saveExportMetadata(project.export_metadata);
+  const scopes=project.gui_studio_draft_scopes||project.guiStudioDraftScopes;
+  if(scopes&&typeof restoreGuiStudioScopedDrafts==='function'){
+    restoreGuiStudioScopedDrafts(remapImportedGuiStudioScopes(scopes,questNameMap),project.guiStudioDraft||null);
+    guiStudioRefreshAppliedPreviewsForCurrentSelection();
+  }
+  if(project.currentFile){
+    const mapped=questNameMap[project.currentFile]||project.currentFile;
+    if(project.mode==='quest'&&quests[mapped]){currentFile=mapped;mode='quest';}
+    else if(project.mode==='chapter'&&chapters[project.currentFile]){currentFile=project.currentFile;mode='chapter';}
+  }
+  return true;
+}
+async function importZipFile(file){if(typeof JSZip==='undefined')throw new Error('JSZip failed to load.');const zip=await JSZip.loadAsync(file);const imported=[];let restoredBuilderState=false;let builderManifest=null;
+  try{builderManifest=await readZipJson(zip,'questlog_export_manifest.json');}catch(err){console.warn('[zip import manifest]',err);}
+  const entries=Object.values(zip.files).filter(z=>!z.dir&&z.name.toLowerCase().endsWith('.json'));
+  const hasQuestlogConfigEntries=entries.some(ent=>questlogConfigImportKind(ent.name));
+  const builderExport=!!builderManifest||hasQuestlogConfigEntries;
+  for(const ent of entries){
+    try{
+      const kind=questlogConfigImportKind(ent.name);
+      if(!kind){
+        if(builderExport||shouldSkipZipJsonImport(ent.name))continue;
+        const txt=await ent.async('string');
+        const data=JSON.parse(txt);
+        imported.push(classifyImportedJson(ent.name,data));
+        continue;
+      }
+      const txt=await ent.async('string');
+      const data=JSON.parse(txt);
+      const rel=normalizeZipPath(ent.name).replace(/^.*config\/questlog\//i,'');
+      const base=rel.split('/').pop()||'import.json';
+      if(kind==='quest'){fixQA(data);nqbd(data);const fn=uniqueFileName(base,quests);quests[fn]=data;touchFile('quest',fn);imported.push({kind,file:fn,source:base});}
+      else{const fn=uniqueFileName(base,chapters);chapters[fn]=data;touchFile('chapter',fn);imported.push({kind,file:fn,source:base});}
+    }catch(err){console.warn('[zip import]',ent.name,err);}
+  }
+  if(builderManifest)restoredBuilderState=restoreImportedBuilderProjectState(builderManifest,imported);
+  if(!imported.length&&!restoredBuilderState)throw new Error('No JSON quest/chapter files found in that ZIP.');
+  ensureFileMeta();
+  renderFileList();
+  const first=restoredBuilderState&&currentFile?{file:currentFile,kind:mode}:imported[0];
+  if(first)selectFile(first.file,first.kind);else if(currentFile)selectFile(currentFile,mode);else renderMain();
+  if(restoredBuilderState)guiStudioRefreshAppliedPreviewsForCurrentSelection();
+  renderValidation();scheduleAutosave();return imported.length;}
+async function handleImportFiles(fileList,source='Imported'){
+  const arr=Array.from(fileList||[]);if(!arr.length)return 0;
+  let first=null,ok=0,skipped=0;
+  for(const file of arr){
+    const name=(file.name||'').toLowerCase();
+    try{
+      if(name.endsWith('.zip')){ok+=await importZipFile(file);if(!first&&currentFile)first={file:currentFile,kind:mode};continue;}
+      if(!name.endsWith('.json')){skipped++;continue;}
+      const text=await file.text();
+      const data=JSON.parse(text);
+      const res=classifyImportedJson(file.name,data);
+      ok++;
+      if(!first)first=res;
+    }catch(err){showMsg(`${file.name}: ${err.message||String(err)}`,false);}
+  }
+  renderFileList();
+  if(first)selectFile(first.file,first.kind);else renderMain();
+  renderValidation();
+  if(ok)recordActivity(source,'project','',`${ok} files`);
+  scheduleAutosave();
+  if(ok)showMsg(`${source} ${ok} file${ok===1?'':'s'}.`,true);
+  if(skipped)showMsg(`Skipped ${skipped} unsupported file${skipped===1?'':'s'}. Drop .json or .zip files.`,false);
+  return ok;
+}
+function setupDropImport(){
+  const overlay=$('#importDropOverlay');let depth=0;
+  const hasFiles=e=>Array.from(e.dataTransfer?.types||[]).includes('Files');
+  const show=()=>overlay?.classList.add('open');
+  const hide=()=>{depth=0;overlay?.classList.remove('open');};
+  document.addEventListener('dragenter',e=>{if(!hasFiles(e))return;depth++;show();});
+  document.addEventListener('dragover',e=>{if(!hasFiles(e))return;e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='copy';show();});
+  document.addEventListener('dragleave',e=>{if(!hasFiles(e))return;depth=Math.max(0,depth-1);if(depth===0)overlay?.classList.remove('open');});
+  document.addEventListener('drop',async e=>{if(!hasFiles(e))return;e.preventDefault();const files=e.dataTransfer?.files;hide();await handleImportFiles(files,'Dropped');});
+  window.addEventListener('blur',hide);
+}
 
 function syncCurrentForExport(){
   if(mode==='quest')syncQ();
   else if($('#cf_name'))$('#cf_name').oninput?.();
 }
+function questlogClientConfigExportPaths(){
+  return [
+    'config/questlog-client.toml',
+    'overrides/config/questlog-client.toml'
+  ];
+}
 function projectZipPaths(){
+  const config=typeof guiStudioQuestListConfigPatch==='function'&&guiStudioQuestListConfigPatch().changed.length
+    ? questlogClientConfigExportPaths()
+    : [];
   return {
     quests:Object.keys(quests).sort().map(n=>`config/questlog/quests/${n}`),
-    chapters:Object.keys(chapters).sort().map(n=>`config/questlog/chapters/${n}`)
+    chapters:Object.keys(chapters).sort().map(n=>`config/questlog/chapters/${n}`),
+    config
   };
+}
+function guiStudioPendingQuestExportLayoutInfo(){
+  if(typeof guiStudioQuestlogLayoutPatch!=='function')return {patch:{},targets:[],source:'none'};
+  if(typeof guiStudioModalTarget==='function'&&guiStudioModalTarget()==='quest-list')return {patch:{},targets:[],source:'quest-list'};
+  const result=guiStudioQuestlogLayoutPatch();
+  const patch=result?.patch||{};
+  if(!Object.keys(patch).length)return {patch:{},targets:[],source:'default'};
+  const applied=guiStudioDraft?.appliedPreview;
+  if(applied&&applied.scope!=='global-questlist'){
+    if(applied.scope==='multiple'||applied.scope==='selected'){
+      const targets=(Array.isArray(applied.targetFiles)?applied.targetFiles:[]).filter(file=>quests[file]);
+      return {patch,targets,source:'applied-multiple'};
+    }
+    if(applied.currentFile&&quests[applied.currentFile])return {patch,targets:[applied.currentFile],source:'applied-current'};
+  }
+  if(mode==='quest'&&currentFile&&quests[currentFile])return {patch,targets:[currentFile],source:'pending-current'};
+  return {patch:{},targets:[],source:'none'};
+}
+function guiStudioProjectLayoutExportInfo(){
+  if(typeof guiStudioQuestExportLayoutInfoForFile!=='function')return guiStudioPendingQuestExportLayoutInfo();
+  const fields=new Set();
+  const targets=[];
+  Object.keys(quests||{}).forEach(file=>{
+    const info=guiStudioQuestExportLayoutInfoForFile(file);
+    const patch=info?.patch||{};
+    if(Object.keys(patch).length){
+      targets.push(file);
+      Object.keys(patch).forEach(key=>fields.add(key));
+    }
+  });
+  return {patch:{},fields:[...fields],targets,source:targets.length?'scoped-quest-drafts':'none'};
+}
+function buildQuestExportObject(name,data,options={}){
+  const out=JSON.parse(JSON.stringify(data||{}));
+  const info=options.layoutInfo||guiStudioQuestExportLayoutInfoForFile(name)||guiStudioPendingQuestExportLayoutInfo();
+  if(info?.patch&&info.targets?.includes(name)){
+    GUI_STUDIO_QUESTLOG_LAYOUT_FIELDS.forEach(key=>delete out[key]);
+    Object.assign(out,info.patch);
+  }
+  Object.assign(out,guiStudioQuestTexturePatchForFile(name,options.meta||loadExportMetadata()));
+  return buildQOut(out);
+}
+const EXPORT_METADATA_KEY='ql.export.metadata.v1';
+function defaultExportMetadata(){
+  const ns=(typeof getNs==='function'?getNs():'questlog')||'questlog';
+  return {
+    packName:'Global QuestLog Builder GUI',
+    author:'',
+    namespace:ns,
+    description:'Questlog GUI resource pack'
+  };
+}
+function loadExportMetadata(){
+  let saved=null;
+  try{saved=JSON.parse(localStorage.getItem(EXPORT_METADATA_KEY)||'null');}catch(_err){}
+  const meta=Object.assign(defaultExportMetadata(),saved&&typeof saved==='object'?saved:{});
+  meta.packName=String(meta.packName||'Global QuestLog Builder GUI').slice(0,80);
+  meta.author=String(meta.author||'').slice(0,80);
+  meta.namespace=String(meta.namespace||getNs()||'questlog').replace(/[^a-z0-9_.-]/gi,'_').slice(0,48)||'questlog';
+  meta.description=String(meta.description||'Questlog GUI resource pack').slice(0,140);
+  return meta;
+}
+function saveExportMetadata(meta){
+  try{localStorage.setItem(EXPORT_METADATA_KEY,JSON.stringify(Object.assign(loadExportMetadata(),meta||{})));}catch(_err){}
+}
+function exportMetadataFromDom(){
+  const data={};
+  $$('[data-export-meta]').forEach(input=>{
+    data[input.dataset.exportMeta]=input.value;
+  });
+  return Object.assign(loadExportMetadata(),data);
+}
+function exportResourcePackZipName(meta=loadExportMetadata()){
+  const base=String(meta.packName||'Global QuestLog Builder GUI')
+    .trim()
+    .replace(/[\\/:*?"<>|]+/g,'-')
+    .replace(/\s+/g,' ')
+    .slice(0,64)||'Global QuestLog Builder GUI';
+  return `${base}.zip`;
+}
+function exportBuilderProjectState(meta){
+  return {
+    schema_version:1,
+    app:'QuestLog Builder',
+    exported_at:new Date().toISOString(),
+    namespace:getNs(),
+    mode,
+    currentFile,
+    export_metadata:{
+      packName:meta.packName,
+      author:meta.author,
+      namespace:meta.namespace,
+      description:meta.description
+    },
+    gui_studio_draft_scopes:typeof guiStudioScopedDraftBundle==='function'?guiStudioScopedDraftBundle():null
+  };
+}
+function exportLucide(name,classes=''){
+  return guiStudioLucideIcon(name,`export-lucide ${classes}`);
+}
+function exportTreeIcon(type,open=false){
+  const icon=type==='folder'?(open?'folder-open':'folder'):type==='zip'?'package':type==='file'?'file-code-2':type==='piece'?'image':'info';
+  return exportLucide(icon,'export-tree-icon-svg');
+}
+const EXPORT_PREVIEW_TREE_DEFAULT_OPEN={root:true,config:true,questlog:true,quests:true,chapters:true,resourcepacks:true,resourcepack:true,assets:true,questlogAssets:true,textures:true,gui:true,lang:true};
+let exportPreviewTreeOpen={...EXPORT_PREVIEW_TREE_DEFAULT_OPEN};
+function exportPreviewTreeIsOpen(key){
+  if(!key)return true;
+  return exportPreviewTreeOpen[key]!==false;
+}
+function exportTreeRow(type,label,level=0,detail='',options={}){
+  const toggleKey=options.toggleKey||'';
+  const open=exportPreviewTreeIsOpen(toggleKey);
+  const tip=detail?` title="${esc(detail)}" data-tip="${esc(detail)}"`:'';
+  const toggle=toggleKey
+    ?`<button class="export-tree-toggle" type="button" data-export-toggle="${esc(toggleKey)}" aria-expanded="${open?'true':'false'}" aria-label="${esc((open?'Collapse ':'Expand ')+label)}">${exportTreeIcon(type,open)}</button>`
+    :`<span class="export-tree-icon" aria-hidden="true">${exportTreeIcon(type,false)}</span>`;
+  return `<div class="export-tree-row ${esc(type)} ${toggleKey?(open?'open':'closed'):''}" style="--export-indent:${level}" data-export-level="${level}"${tip}>
+    ${toggle}
+    <span class="export-tree-label">${esc(label)}</span>
+  </div>`;
+}
+function exportPreviewFileRows(paths,prefix,level,limit=12){
+  const files=(Array.isArray(paths)?paths:[]).filter(path=>path.startsWith(prefix)).map(path=>path.slice(prefix.length));
+  const rows=files.slice(0,limit).map(file=>exportTreeRow('file',file,level));
+  if(files.length>limit)rows.push(exportTreeRow('more',`${files.length-limit} more file${files.length-limit===1?'':'s'}`,level));
+  return rows.join('');
+}
+function exportResourcePackPreviewRows(meta=loadExportMetadata()){
+  const edited=typeof guiStudioExportTextureJobs==='function'?guiStudioExportTextureJobs(meta):[];
+  const editedPieceCount=edited.reduce((sum,file)=>sum+(file.pieces||[]).length,0);
+  const rows=[];
+  rows.push(exportTreeRow('folder','resourcepacks',1,'',{toggleKey:'resourcepacks'}));
+  if(!exportPreviewTreeIsOpen('resourcepacks'))return rows.join('');
+  rows.push(exportTreeRow('zip',exportResourcePackZipName(meta),2,edited.length?`${edited.length} PNG / ${editedPieceCount} edited piece${editedPieceCount===1?'':'s'}`:'resource-pack preview',{toggleKey:'resourcepack'}));
+  if(!exportPreviewTreeIsOpen('resourcepack'))return rows.join('');
+  rows.push(exportTreeRow('file','pack.mcmeta',3));
+  rows.push(exportTreeRow('file','pack.png',3));
+  rows.push(exportTreeRow('file','questlog_export_manifest.json',3,'Resource-pack export manifest'));
+  rows.push(exportTreeRow('folder','assets',3,'',{toggleKey:'assets'}));
+  if(exportPreviewTreeIsOpen('assets')){
+    rows.push(exportTreeRow('folder','questlog',4,'',{toggleKey:'questlogAssets'}));
+    if(exportPreviewTreeIsOpen('questlogAssets')){
+      rows.push(exportTreeRow('folder','textures',5,'',{toggleKey:'textures'}));
+      if(exportPreviewTreeIsOpen('textures')){
+        rows.push(exportTreeRow('folder','gui',6,'',{toggleKey:'gui'}));
+        if(exportPreviewTreeIsOpen('gui')){
+          if(edited.length){
+            edited.forEach(file=>{
+              rows.push(exportTreeRow('file',file.displayFile||file.file,7,`${guiStudioPackTextureDetail(file.pieces)} / generated atlas PNG`));
+              rows.push(exportTreeRow('file',`${file.displayFile||file.file}.manifest.json`,7,'Generated atlas metadata'));
+              file.pieces
+                .slice()
+                .sort((a,b)=>(GUI_STUDIO_PIECES[a]?.short||a).localeCompare(GUI_STUDIO_PIECES[b]?.short||b))
+                .forEach(piece=>rows.push(exportTreeRow('piece',GUI_STUDIO_PIECES[piece]?.short||piece,8)));
+            });
+          }else{
+            rows.push(exportTreeRow('file','README.txt',7,'No GUI atlas edits to export yet'));
+          }
+        }
+      }
+      rows.push(exportTreeRow('folder','lang',5,'',{toggleKey:'lang'}));
+      if(exportPreviewTreeIsOpen('lang'))rows.push(exportTreeRow('file','en_us.json',6));
+    }
+  }
+  return rows.join('');
+}
+function exportPreviewTree(paths,meta=loadExportMetadata()){
+  const rows=[];
+  rows.push(exportTreeRow('zip','questlog_export.zip',0,'main export package',{toggleKey:'root'}));
+  if(exportPreviewTreeIsOpen('root')){
+    rows.push(exportTreeRow('folder','config',1,'',{toggleKey:'config'}));
+    if(exportPreviewTreeIsOpen('config')){
+      rows.push(exportTreeRow('folder','questlog',2,'',{toggleKey:'questlog'}));
+      if(exportPreviewTreeIsOpen('questlog')){
+        rows.push(exportTreeRow('folder','quests',3,`${paths.quests.length} file${paths.quests.length===1?'':'s'}`,{toggleKey:'quests'}));
+        if(exportPreviewTreeIsOpen('quests'))rows.push(exportPreviewFileRows(paths.quests,'config/questlog/quests/',4));
+        rows.push(exportTreeRow('folder','chapters',3,`${paths.chapters.length} file${paths.chapters.length===1?'':'s'}`,{toggleKey:'chapters'}));
+        if(exportPreviewTreeIsOpen('chapters'))rows.push(exportPreviewFileRows(paths.chapters,'config/questlog/chapters/',4));
+      }
+      const configPaths=paths.config||[];
+      if(configPaths.includes('config/questlog-client.toml')){
+        rows.push(exportTreeRow('file','questlog-client.toml',2,'Global QuestList GUI offsets from GUI Studio'));
+      }
+    }
+    if((paths.config||[]).includes('overrides/config/questlog-client.toml')){
+      rows.push(exportTreeRow('folder','overrides',1,'Modpack override copy',{toggleKey:'overrides'}));
+      if(exportPreviewTreeIsOpen('overrides')){
+        rows.push(exportTreeRow('folder','config',2,'',{toggleKey:'overrides-config'}));
+        if(exportPreviewTreeIsOpen('overrides-config')){
+          rows.push(exportTreeRow('file','questlog-client.toml',3,'Same QuestList offsets for CurseForge/Modrinth-style overrides'));
+        }
+      }
+    }
+    rows.push(exportResourcePackPreviewRows(meta));
+  }
+  return `<div class="export-tree" aria-label="Export ZIP folder preview">${rows.join('')}</div>`;
+}
+function exportPreviewTreeText(paths=projectZipPaths(),meta=loadExportMetadata()){
+  const questFiles=(Array.isArray(paths.quests)?paths.quests:[]).map(path=>`        ${path.split('/').pop()}`);
+  const chapterFiles=(Array.isArray(paths.chapters)?paths.chapters:[]).map(path=>`        ${path.split('/').pop()}`);
+  const edited=typeof guiStudioExportTextureJobs==='function'?guiStudioExportTextureJobs(meta):[];
+  const guiFiles=edited.length
+    ? edited.flatMap(file=>[
+      `              ${file.displayFile||file.file}`,
+      `              ${(file.displayFile||file.file)}.manifest.json`
+    ])
+    : ['              README.txt'];
+  return [
+    'questlog_export.zip',
+    '  config',
+    ...((paths.config||[]).includes('config/questlog-client.toml')?['    questlog-client.toml']:[]),
+    '    questlog',
+    '      quests',
+    ...(questFiles.length?questFiles:['        (no quest files)']),
+    '      chapters',
+    ...(chapterFiles.length?chapterFiles:['        (no chapter files)']),
+    ...((paths.config||[]).includes('overrides/config/questlog-client.toml')?[
+      '  overrides',
+      '    config',
+      '      questlog-client.toml'
+    ]:[]),
+    '  resourcepacks',
+    `    ${exportResourcePackZipName(meta)}`,
+    '      pack.mcmeta',
+    '      pack.png',
+    '      questlog_export_manifest.json',
+    '      assets',
+    '        questlog',
+    '          textures',
+    '            gui',
+    ...guiFiles,
+    '          lang',
+    '            en_us.json'
+  ].join('\n');
+}
+async function copyExportPreviewTree(){
+  const text=exportPreviewTreeText(projectZipPaths(),loadExportMetadata());
+  try{
+    await navigator.clipboard.writeText(text);
+    showMsg('Copied export tree.',true);
+    return;
+  }catch(_err){}
+  try{
+    const ta=document.createElement('textarea');
+    ta.value=text;
+    ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;left:-9999px;top:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    const copied=document.execCommand('copy');
+    ta.remove();
+    if(copied){
+      showMsg('Copied export tree.',true);
+    }else{
+      showMsg('Could not copy export tree in this browser.',false);
+    }
+  }catch(_err){
+    showMsg('Could not copy export tree in this browser.',false);
+  }
 }
 function summarizeIssues(issues){
   return {
@@ -988,19 +2970,82 @@ function summarizeIssues(issues){
     warn:issues.filter(i=>i.level==='warn').length
   };
 }
+function exportHasUnsafeFileNames(){
+  return [...Object.keys(quests),...Object.keys(chapters)].some(n=>!FILE_SAFE.test(n));
+}
 function exportPreviewChecks(issues,paths){
-  const checks=[]; 
   const counts=summarizeIssues(issues);
-  if(!paths.quests.length)checks.push({level:'warn',text:'No quest files will be exported.'});
-  if(!paths.chapters.length)checks.push({level:'warn',text:'No chapter files will be exported.'});
-  if([...Object.keys(quests),...Object.keys(chapters)].some(n=>!FILE_SAFE.test(n))){
-    checks.push({level:'warn',text:'Some filenames are not lowercase Questlog-safe paths.'});
+  const unsafeNames=exportHasUnsafeFileNames();
+  return [
+    {
+      key:'quests',
+      level:paths.quests.length?'ok':'missing',
+      label:'Quests',
+      value:String(paths.quests.length),
+      detail:paths.quests.length?'Quest JSON files will export under config/questlog/quests/.':'Add at least one quest before exporting.'
+    },
+    {
+      key:'chapters',
+      level:paths.chapters.length?'ok':'missing',
+      label:'Chapters',
+      value:String(paths.chapters.length),
+      detail:paths.chapters.length?'Chapter JSON files will export under config/questlog/chapters/.':'Add at least one chapter before exporting.'
+    },
+    {
+      key:'validation',
+      level:(counts.error||counts.missing)?'missing':(counts.warn?'warn':'ok'),
+      label:'Validation',
+      value:counts.error||counts.missing?'Fix':(counts.warn?'Review':'OK'),
+      detail:(counts.error||counts.missing)?'Open the checklist panel and fix missing/error items before exporting.':(counts.warn?'Warnings are not blocking, but should be reviewed before release.':'No validation errors or warnings were found.')
+    },
+    {
+      key:'names',
+      level:unsafeNames?'missing':'ok',
+      label:'Names',
+      value:unsafeNames?'Fix':'OK',
+      detail:unsafeNames?'Some file names are not Questlog-safe. Use simple .json filenames without unsafe characters.':'Quest and chapter filenames are Questlog-safe.'
+    }
+  ];
+}
+function exportReadiness(counts,paths){
+  if(!paths.quests.length||!paths.chapters.length||counts.error||counts.missing||exportHasUnsafeFileNames()){
+    return {
+      level:'blocked',
+      title:'Not ready yet',
+      copy:'Fix required checks first.'
+    };
   }
-  if(counts.error)checks.push({level:'error',text:`${counts.error} serious problem${counts.error===1?'':'s'} should be fixed before export.`});
-  if(counts.missing)checks.push({level:'missing',text:`${counts.missing} missing thing${counts.missing===1?'':'s'} may leave quests incomplete.`});
-  if(counts.warn)checks.push({level:'warn',text:`${counts.warn} warning${counts.warn===1?'':'s'} should be reviewed.`});
-  if(!checks.length)checks.push({level:'ok',text:'No warnings or missing data found for the current project.'});
-  return checks;
+  if(counts.warn){
+    return {
+      level:'review',
+      title:'Ready after review',
+      copy:'Warnings need a quick look.'
+    };
+  }
+  return {
+    level:'ready',
+    title:'Ready to export',
+    copy:'Project checks passed.'
+  };
+}
+function exportReadinessOverrideActive(){
+  return !!exportReadinessOverrideEnabled;
+}
+function setExportReadinessOverride(enabled){
+  exportReadinessOverrideEnabled=!!enabled;
+  localStorage.setItem(EXPORT_READINESS_OVERRIDE_KEY,exportReadinessOverrideEnabled?'true':'false');
+  updateExportReadinessOverrideControl();
+  refreshOpenExportPreview();
+}
+function updateExportReadinessOverrideControl(){
+  const btn=$('#exportReadinessOverrideToggle');
+  if(!btn)return;
+  btn.setAttribute('aria-pressed',exportReadinessOverrideEnabled?'true':'false');
+  btn.classList.toggle('active',exportReadinessOverrideEnabled);
+  btn.innerHTML=`${guiStudioLucideIcon(exportReadinessOverrideEnabled?'unlock':'lock','settings-toggle-icon-svg')}<span>Export readiness override</span><strong>${exportReadinessOverrideEnabled?'On':'Off'}</strong>`;
+}
+function issueLabel(level){
+  return {error:'Fix',missing:'Needs review',warn:'Warning',ok:'Ready'}[level]||level;
 }
 function renderExportPreview(){
   syncCurrentForExport();
@@ -1009,42 +3054,3411 @@ function renderExportPreview(){
   const issues=validateAll(false);
   const counts=summarizeIssues(issues);
   const checks=exportPreviewChecks(issues,paths);
-  const issueRows=issues.slice(0,8).map(i=>`<div class="export-check ${esc(i.level)}"><strong>${esc(i.level)}</strong>${esc(i.file)} ${esc(i.path)} - ${esc(i.msg)}</div>`).join('');
-  const totalProblems=counts.error+counts.missing+counts.warn;
+  const ready=exportReadiness(counts,paths);
+  const overrideActive=ready.level==='blocked'&&exportReadinessOverrideActive();
+  const meta=loadExportMetadata();
+  const exportOnlyProblems=(!paths.quests.length?1:0)+(!paths.chapters.length?1:0)+(exportHasUnsafeFileNames()?1:0);
+  const totalProblems=counts.error+counts.missing+counts.warn+exportOnlyProblems;
   body.innerHTML=`
-    <div class="export-summary-grid">
-      <div class="export-summary-cell"><div class="export-summary-num">${paths.quests.length}</div><div class="export-summary-label">Quests</div></div>
-      <div class="export-summary-cell"><div class="export-summary-num">${paths.chapters.length}</div><div class="export-summary-label">Chapters</div></div>
-      <div class="export-summary-cell"><div class="export-summary-num">${totalProblems}</div><div class="export-summary-label">Warnings</div></div>
+    <div class="export-preview-shell ${esc(ready.level)}">
+      <div class="export-left-stack">
+        <div class="export-meta-grid" id="exportMetaFields">
+          <label title="Optional creator name for your pack notes.">${exportLucide('user')}<span>Author</span><input data-export-meta="author" value="${esc(meta.author)}" maxlength="80" placeholder="Your name"></label>
+          <label title="Namespace used by this editor project.">${exportLucide('tag')}<span>Namespace</span><input data-export-meta="namespace" value="${esc(meta.namespace)}" maxlength="48"></label>
+          <label class="export-meta-description" title="Short resource-pack description.">${exportLucide('file-code-2')}<span>Description</span><input data-export-meta="description" value="${esc(meta.description)}" maxlength="140"></label>
+        </div>
+        <div class="export-summary-grid">
+          <div class="export-summary-cell">${exportLucide('file-code-2')}<div><div class="export-summary-num">${paths.quests.length}</div><div class="export-summary-label">Quests</div></div></div>
+          <div class="export-summary-cell">${exportLucide('folder')}<div><div class="export-summary-num">${paths.chapters.length}</div><div class="export-summary-label">Chapters</div></div></div>
+          <div class="export-summary-cell">${exportLucide(totalProblems?'alert-triangle':'check')}<div><div class="export-summary-num">${totalProblems}</div><div class="export-summary-label">Review</div></div></div>
+        </div>
+        <div class="export-readiness-panel">
+          <div class="export-section-title">Readiness checks</div>
+          <div class="export-check-list">${checks.map(c=>`<button type="button" class="export-check ${esc(c.level)} ${c.level!=='ok'?'needs-attention':''} ${c.key==='validation'?'actionable':''}" data-export-check="${esc(c.key)}" title="${esc(c.detail)}" data-tip="${esc(c.detail)}">${exportLucide(c.level==='ok'?'check':c.level==='warn'?'info':'alert-triangle')}<span>${esc(c.label)}</span><strong>${esc(c.value)}</strong>${c.key==='validation'?exportLucide('chevron-right','export-check-next'):''}</button>`).join('')}</div>
+        </div>
+        <div class="export-status-panel export-hero ${esc(ready.level)}">
+          <span class="export-status-icon">${exportLucide(ready.level==='ready'?'check':ready.level==='review'?'info':'alert-triangle')}</span>
+          <div>
+            <div class="export-ready-title">${esc(ready.title)}</div>
+            <div class="export-ready-copy">${esc(ready.copy)}</div>
+          </div>
+        </div>
+        <div class="export-download-panel">
+          <div class="export-download-status ${esc(overrideActive?'override':ready.level)}" id="exportPreviewZipStatus">${overrideActive?'Override enabled':ready.level==='blocked'?'ZIP not ready':ready.level==='review'?'Ready after review':'Ready to export'}</div>
+          <button class="export-download-button ${esc(ready.level)} ${overrideActive?'override':''}" id="exportPreviewZipBtn" type="button" aria-label="${overrideActive?'Export ZIP with readiness override.':'blocked'===ready.level?'ZIP not ready. Fix blocking checks before exporting.':'Export ZIP'}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
+          </button>
+        </div>
+      </div>
+      <div class="export-project-tree-panel">
+        <div class="export-tree-head">
+          <div class="export-section-title">Project ZIP preview</div>
+          <button type="button" class="export-copy-tree-btn" id="exportCopyTreeBtn" title="Copy the visible export tree">${exportLucide('copy')}<span>Copy tree</span></button>
+        </div>
+        ${exportPreviewTree(paths,meta)}
+      </div>
     </div>
-    <div class="export-info-box">Put quest files in <span class="kbd">config/questlog/quests/</span> and chapter files in <span class="kbd">config/questlog/chapters/</span>.</div>
-    <div class="export-section-title">Checks</div>
-    <div class="export-check-list">${checks.map(c=>`<div class="export-check ${esc(c.level)}"><strong>${esc(c.level)}</strong>${esc(c.text)}</div>`).join('')}</div>
-    ${issueRows?`<div class="export-section-title">Warnings and missing stuff</div><div class="export-check-list">${issueRows}</div>`:''}
   `;
+  const zipBtn=$('#exportPreviewZipBtn');
+  const status=$('#exportPreviewZipStatus');
+  if(zipBtn){
+    zipBtn.className=`export-download-button ${ready.level}${overrideActive?' override':''}`;
+    zipBtn.disabled=ready.level==='blocked'&&!overrideActive;
+    zipBtn.setAttribute('aria-disabled',zipBtn.disabled?'true':'false');
+    zipBtn.setAttribute('aria-label',overrideActive?'Export ZIP with readiness override.':ready.level==='blocked'?'ZIP not ready. Fix blocking checks before exporting.':'Export ZIP');
+  }
+  if(status){
+    status.className=`export-download-status ${overrideActive?'override':ready.level}`;
+    status.textContent=overrideActive?'Override enabled':ready.level==='blocked'?'ZIP not ready':ready.level==='review'?'Ready after review':'Ready to export';
+  }
 }
 function openExportPreviewModal(){
   closeSidebarMenus();
   renderExportPreview();
   $('#exportPreviewModal')?.classList.add('open');
+  playUiSound('panel');
+}
+window.questlogOpenExportPreview=e=>{
+  e?.preventDefault?.();
+  e?.stopPropagation?.();
+  openExportPreviewModal();
+};
+function openGuiStudioProjectExportPreview(){
+  closeGuiStudioApplyConfirm();
+  closeGuiStudio();
+  openExportPreviewModal();
 }
 function closeExportPreviewModal(){
-  $('#exportPreviewModal')?.classList.remove('open');
+  const modal=$('#exportPreviewModal');
+  const wasOpen=modal?.classList.contains('open');
+  modal?.classList.remove('open');
+  if(wasOpen)playUiSound('panel');
 }
-async function exportProjectZip(){
-  if(typeof JSZip==='undefined'){showMsg('JSZip failed.',false);return;}
-  syncCurrentForExport();
+function bindExportPreviewControls(){
+  const files=$('#btnImportExportMenu');
+  if(files&&!files.dataset.exportPreviewBound){
+    files.dataset.exportPreviewBound='true';
+    const openFilesExport=e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      openExportPreviewModal();
+    };
+    files.addEventListener('click',openFilesExport);
+    files.addEventListener('pointerup',openFilesExport);
+  }
+  const closeButtons=$$('#exportPreviewCloseBtn,#exportPreviewCancelBtn');
+  closeButtons.forEach(btn=>{
+    if(btn.dataset.exportPreviewBound)return;
+    btn.dataset.exportPreviewBound='true';
+    btn.addEventListener('click',e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      closeExportPreviewModal();
+    });
+  });
+  const zip=$('#exportPreviewZipBtn');
+  if(zip&&!zip.dataset.exportPreviewBound){
+    zip.dataset.exportPreviewBound='true';
+    zip.addEventListener('click',e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      handleExportPreviewZipClick();
+    });
+  }
+  const body=$('#exportPreviewBody');
+  if(body&&!body.dataset.exportPreviewTreeBound){
+    body.dataset.exportPreviewTreeBound='true';
+    body.addEventListener('click',e=>{
+      const copyTree=e.target.closest?.('#exportCopyTreeBtn');
+      if(copyTree){
+        e.preventDefault();
+        e.stopPropagation();
+        copyExportPreviewTree();
+        return;
+      }
+      const toggle=e.target.closest?.('[data-export-toggle]');
+      if(toggle){
+        e.preventDefault();
+        e.stopPropagation();
+        const key=toggle.dataset.exportToggle;
+        exportPreviewTreeOpen[key]=toggle.getAttribute('aria-expanded')!=='true';
+        renderExportPreview();
+        return;
+      }
+      const check=e.target.closest?.('[data-export-check]');
+      if(check?.dataset.exportCheck==='validation'){
+        e.preventDefault();
+        e.stopPropagation();
+        closeExportPreviewModal();
+        setRightPanelMode('validation');
+        renderValidation();
+        showMsg('Opened validation checklist.',true);
+      }
+    });
+    body.addEventListener('input',e=>{
+      const input=e.target.closest?.('[data-export-meta]');
+      if(!input)return;
+      saveExportMetadata(exportMetadataFromDom());
+      const meta=loadExportMetadata();
+      $$('.export-tree-row.zip .export-tree-label').forEach(label=>{
+        if(label.textContent.includes('.zip')&&!label.textContent.includes('questlog_export'))label.textContent=exportResourcePackZipName(meta);
+      });
+    });
+  }
+}
+function refreshOpenExportPreview(){
+  const modal=$('#exportPreviewModal');
+  if(modal?.classList.contains('open'))renderExportPreview();
+}
+let exportPreviewRefreshFrame=0;
+function queueRefreshOpenExportPreview(){
+  if(exportPreviewRefreshFrame)return;
+  exportPreviewRefreshFrame=requestAnimationFrame(()=>{
+    exportPreviewRefreshFrame=0;
+    refreshOpenExportPreview();
+  });
+}
+const EXPORT_RESOURCE_PACK_FORMAT=34;
+const EXPORT_PACK_ICON_PNG='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+const EXPORT_GUI_TEXTURE_SOURCE_KEYS={
+  'questlog.png':'questlog',
+  'quest_page.png':'questPage',
+  'quest_peripherals.png':'peripherals',
+  'questlog_search_tab_buttons.png':'searchTabs'
+};
+function exportGuiTextureKey(file){
+  const safeFile=String(file||'').split(/[\\/]/).pop();
+  return EXPORT_GUI_TEXTURE_SOURCE_KEYS[safeFile]||null;
+}
+function canvasToPngBlob(canvas){
+  return new Promise((resolve,reject)=>{
+    if(!canvas?.toBlob){
+      reject(new Error('Canvas PNG export is not available in this browser.'));
+      return;
+    }
+    canvas.toBlob(blob=>{
+      if(blob)resolve(blob);
+      else reject(new Error('Canvas PNG export returned an empty file.'));
+    },'image/png');
+  });
+}
+function loadExportImage(src){
+  return new Promise((resolve,reject)=>{
+    if(typeof Image==='undefined'){
+      reject(new Error('Image loading is not available in this browser.'));
+      return;
+    }
+    const img=new Image();
+    img.onload=()=>resolve(img);
+    img.onerror=()=>reject(new Error(`Could not load export texture: ${src}`));
+    img.src=src;
+  });
+}
+async function ensureGuiStudioExportTexture(key){
+  if(!key||typeof GUI_STUDIO_TEXTURES==='undefined')return null;
+  const cached=typeof getGuiStudioTextureImage==='function'?getGuiStudioTextureImage(key):null;
+  if(cached?.complete&&cached.naturalWidth)return cached;
+  const src=GUI_STUDIO_TEXTURES[key];
+  if(!src)return null;
+  const img=await loadExportImage(src);
+  if(typeof guiStudioTextureCache!=='undefined')guiStudioTextureCache[key]=img;
+  return img;
+}
+async function renderGuiStudioPieceExportCanvas(piece){
+  const meta=GUI_STUDIO_PIECES[piece];
+  const data=typeof guiStudioPieceData==='function'?guiStudioPieceData(piece):null;
+  const b=data?.bounds||meta?.bounds;
+  if(!meta||!data||!b)throw new Error(`Missing GUI Studio export data for ${piece}.`);
+  await ensureGuiStudioExportTexture(meta.source?.image);
+  const full=createGuiStudioScratchCanvas();
+  const ctx=full.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  const clip={x:b.x,y:b.y,w:b.w,h:b.h};
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(clip.x,clip.y,clip.w,clip.h);
+  ctx.clip();
+  const baseLayer=guiStudioBaseLayer(piece);
+  if(baseLayer?.visible!==false){
+    drawGuiStudioBase(ctx,meta,{clear:false});
+    ctx.save();
+    ctx.globalAlpha=clampGuiNumber(baseLayer.opacity,0,1,1);
+    ctx.globalCompositeOperation=guiStudioCanvasBlendMode(baseLayer.blend);
+    drawGuiStudioLayerCached(ctx,piece,baseLayer,clip);
+    ctx.restore();
+  }
+  guiStudioApplyBaseEraseMaskCached(ctx,piece,data,clip);
+  (data.layers||[]).forEach(layer=>{
+    if(!layer.visible||layer.id==='base')return;
+    ctx.save();
+    ctx.globalAlpha=clampGuiNumber(layer.opacity,0,1,1);
+    ctx.globalCompositeOperation=guiStudioCanvasBlendMode(layer.blend);
+    drawGuiStudioLayerCached(ctx,piece,layer,clip);
+    ctx.restore();
+  });
+  ctx.restore();
+  const out=document.createElement('canvas');
+  out.width=Math.max(1,Math.round(b.w));
+  out.height=Math.max(1,Math.round(b.h));
+  const outCtx=out.getContext('2d');
+  outCtx.imageSmoothingEnabled=false;
+  outCtx.drawImage(full,b.x,b.y,b.w,b.h,0,0,out.width,out.height);
+  return out;
+}
+async function buildGuiStudioAtlasBlob(file,pieces=[],options={}){
+  if(typeof document==='undefined')throw new Error('Canvas export requires a browser document.');
+  const safeFile=String(file||'questlog.png').split(/[\\/]/).pop()||'questlog.png';
+  const sourceKey=exportGuiTextureKey(safeFile);
+  if(!sourceKey)throw new Error(`No source atlas mapping for ${safeFile}.`);
+  const baseImage=await ensureGuiStudioExportTexture(sourceKey);
+  if(!baseImage?.naturalWidth)throw new Error(`Source atlas failed to load for ${safeFile}.`);
+  const atlas=document.createElement('canvas');
+  atlas.width=baseImage.naturalWidth||baseImage.width;
+  atlas.height=baseImage.naturalHeight||baseImage.height;
+  const ctx=atlas.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  ctx.clearRect(0,0,atlas.width,atlas.height);
+  ctx.drawImage(baseImage,0,0);
+  const generatedPieces=[];
+  for(const piece of pieces||[]){
+    const meta=GUI_STUDIO_PIECES[piece];
+    const src=meta?.source;
+    if(!src||meta.texture!==safeFile||src.image!==sourceKey)continue;
+    const pieceCanvas=await renderGuiStudioPieceExportCanvas(piece);
+    const transform=piece==='QuestList Main Panel'?options.layoutTransform:null;
+    if(transform?.changed){
+      const dx=Math.round(Number(transform.dx)||0);
+      const dy=Math.round(Number(transform.dy)||0);
+      const scaleX=Number(transform.scaleX)||1;
+      const scaleY=Number(transform.scaleY)||1;
+      const targetW=Math.max(1,Math.round(src.w*scaleX));
+      const targetH=Math.max(1,Math.round(src.h*scaleY));
+      ctx.clearRect(src.x,src.y,src.w,src.h);
+      ctx.drawImage(pieceCanvas,0,0,pieceCanvas.width,pieceCanvas.height,src.x+dx,src.y+dy,targetW,targetH);
+    }else{
+      ctx.clearRect(src.x,src.y,src.w,src.h);
+      ctx.drawImage(pieceCanvas,0,0,pieceCanvas.width,pieceCanvas.height,src.x,src.y,src.w,src.h);
+    }
+    generatedPieces.push(piece);
+  }
+  if(!generatedPieces.length)throw new Error(`No edited pieces matched ${safeFile}.`);
+  return {blob:await canvasToPngBlob(atlas),pieces:generatedPieces,sourceKey:safeFile};
+}
+function exportProjectManifest(meta,paths,options={}){
+  const edited=typeof guiStudioExportTextureJobs==='function'?guiStudioExportTextureJobs(meta):[];
+  const editedPieces=[...new Set(edited.flatMap(file=>file.pieces||[]))];
+  const layoutInfo=options.layoutInfo||guiStudioProjectLayoutExportInfo?.()||guiStudioPendingQuestExportLayoutInfo();
+  const publicEdited=edited.map(file=>({
+    file:file.file,
+    displayFile:file.displayFile,
+    assetPath:file.assetPath,
+    resource:file.resource,
+    scope:file.scope,
+    quest:file.questFile,
+    layout_transform:file.layoutTransform?.changed?file.layoutTransform:undefined,
+    pieces:file.pieces
+  }));
+  const manifest={
+    generated_by:'QuestLog Builder',
+    generated_at:new Date().toISOString(),
+    prototype:!!options.prototype,
+    blocked:!!options.blocked,
+    project_zip:'questlog_export.zip',
+    resourcepack_zip:exportResourcePackZipName(meta),
+    pack:{
+      name:meta.packName,
+      author:meta.author,
+      namespace:meta.namespace,
+      description:meta.description,
+      pack_format:EXPORT_RESOURCE_PACK_FORMAT
+    },
+    counts:{
+      quests:(paths.quests||[]).length,
+      chapters:(paths.chapters||[]).length,
+      edited_gui_pieces:editedPieces.length,
+      edited_texture_files:edited.length
+    },
+    edited_gui_pieces:editedPieces,
+    edited_texture_files:publicEdited,
+    resource_pack:{
+      generated_atlas_pngs:edited.length,
+      pack_format:EXPORT_RESOURCE_PACK_FORMAT
+    },
+    questlist_config:{
+      file:(paths.config||[]).includes('config/questlog-client.toml')?'config/questlog-client.toml':null,
+      files:(paths.config||[]).filter(path=>/questlog-client\.toml$/.test(path)),
+      direct_instance_file:(paths.config||[]).includes('config/questlog-client.toml')?'config/questlog-client.toml':null,
+      modpack_override_file:(paths.config||[]).includes('overrides/config/questlog-client.toml')?'overrides/config/questlog-client.toml':null,
+      fields:typeof guiStudioQuestListConfigPatch==='function'?guiStudioQuestListConfigPatch().changed:[]
+    },
+    quest_layout:{
+      pending_export_fields:layoutInfo.fields||Object.keys(layoutInfo.patch||{}),
+      target_quests:layoutInfo.targets||[],
+      source:layoutInfo.source||'none'
+    }
+  };
+  if(options.builderProject!==false)manifest.builder_project=exportBuilderProjectState(meta);
+  return manifest;
+}
+function resourcePackReadme(meta,edited){
+  return [
+    `${meta.packName||'Questlog GUI resource pack'}`,
+    '',
+    'Resource-pack export generated by QuestLog Builder.',
+    'The pack.mcmeta, pack icon, lang file, and generated edited GUI atlas PNGs are included when GUI Studio edits exist.',
+    '',
+    `Edited texture files: ${edited.length?edited.map(file=>file.file).join(', '):'none'}`
+  ].join('\n');
+}
+async function buildResourcePackZip(meta,paths,options={}){
+  const packZip=new JSZip();
+  const edited=typeof guiStudioExportTextureJobs==='function'?guiStudioExportTextureJobs(meta):[];
+  packZip.file('pack.mcmeta',stringifyJson({
+    pack:{
+      pack_format:EXPORT_RESOURCE_PACK_FORMAT,
+      description:meta.description||'Questlog GUI resource pack'
+    }
+  }));
+  packZip.file('pack.png',EXPORT_PACK_ICON_PNG,{base64:true});
+  packZip.file('questlog_export_manifest.json',stringifyJson(exportProjectManifest(meta,paths,{...options,builderProject:false})));
+  packZip.file('assets/questlog/lang/en_us.json',stringifyJson({}));
+  if(edited.length){
+    for(const file of edited){
+      const safeFile=String(file.file||'questlog.png').split(/[\\/]/).pop()||'questlog.png';
+      let atlasResult=null;
+      let error='';
+      try{
+        atlasResult=await withGuiStudioScopedDraftAsync(file.draft,()=>buildGuiStudioAtlasBlob(safeFile,file.pieces||[],file));
+        packZip.file(file.assetPath||`assets/questlog/textures/gui/${safeFile}`,atlasResult.blob);
+      }catch(err){
+        console.warn('[resourcepack atlas export]',err);
+        error=err?.message||String(err);
+      }
+      packZip.file(`${file.assetPath||`assets/questlog/textures/gui/${safeFile}`}.manifest.json`,stringifyJson({
+        file:safeFile,
+        scope:file.scope,
+        quest:file.questFile||undefined,
+        resource:file.resource||undefined,
+        generated_atlas:!!atlasResult,
+        pieces:atlasResult?.pieces||file.pieces||[],
+        layout_transform:file.layoutTransform?.changed?file.layoutTransform:undefined,
+        error:error||undefined
+      }));
+    }
+  }else{
+    packZip.file('assets/questlog/textures/gui/README.txt',resourcePackReadme(meta,edited));
+  }
+  return packZip.generateAsync({type:'blob'});
+}
+function pngDimensionsFromBytes(bytes){
+  if(!bytes||bytes.length<24)return {valid:false,width:0,height:0};
+  const signature=[137,80,78,71,13,10,26,10].every((value,index)=>bytes[index]===value);
+  if(!signature)return {valid:false,width:0,height:0};
+  const read32=offset=>((bytes[offset]<<24)|(bytes[offset+1]<<16)|(bytes[offset+2]<<8)|bytes[offset+3])>>>0;
+  return {valid:true,width:read32(16),height:read32(20)};
+}
+function questlogAddDiagnosticGuiPaint(piece='Search Tab Minimized'){
+  const meta=GUI_STUDIO_PIECES[piece];
+  if(!meta)throw new Error(`Unknown diagnostic GUI piece: ${piece}`);
+  const data=guiStudioPieceData(piece);
+  const bounds=data.bounds||meta.bounds;
+  const base=guiStudioBaseLayer(piece)||data.layers?.[0];
+  if(!base)throw new Error(`Missing diagnostic base layer for ${piece}`);
+  base.visible=true;
+  base.fills=Array.isArray(base.fills)?base.fills:[];
+  const w=Math.max(2,Math.min(8,Math.floor(bounds.w/4)));
+  const h=Math.max(2,Math.min(8,Math.floor(bounds.h/4)));
+  const x=Math.floor(bounds.x+Math.max(1,Math.floor(bounds.w/2)-Math.floor(w/2)));
+  const y=Math.floor(bounds.y+Math.max(1,Math.floor(bounds.h/2)-Math.floor(h/2)));
+  base.fills.push({type:'rect',color:'#ff00ff',x,y,w,h,bounds:{x,y,w,h}});
+  clearGuiStudioLayerCanvasCache(piece);
+  invalidateGuiStudioPiecePreview(piece);
+  return {piece,texture:meta.texture,rect:{x,y,w,h}};
+}
+async function questlogRunExportAtlasSelfTest(options={}){
+  if(typeof JSZip==='undefined')throw new Error('JSZip failed to load.');
+  const beforeDraft=cloneGuiStudioDraft();
+  const beforeScopes=cloneGuiStudioDraft(guiStudioDraftScopes);
+  const beforeEdited=typeof guiStudioEditedTextureFiles==='function'?guiStudioEditedTextureFiles():[];
+  const piece=options.piece||'Search Tab Minimized';
+  let result=null;
+  try{
+    const target=GUI_STUDIO_PIECES[piece]?.scope==='chapterList'?'quest-list':'quest-menu';
+    guiStudioLoadScopedDraftForTarget(target,currentFile);
+    const edit=questlogAddDiagnosticGuiPaint(piece);
+    const meta=Object.assign({},loadExportMetadata(),{
+      packName:'Questlog Export Diagnostic',
+      description:'Questlog export diagnostic resource pack'
+    });
+    const blob=await buildResourcePackZip(meta,projectZipPaths(),{diagnostic:true});
+    const zip=await JSZip.loadAsync(blob);
+    const atlasPath=`assets/questlog/textures/gui/${edit.texture}`;
+    const manifestPath=`${atlasPath}.manifest.json`;
+    const atlasEntry=zip.file(atlasPath);
+    const manifestEntry=zip.file(manifestPath);
+    const atlasBytes=atlasEntry?await atlasEntry.async('uint8array'):null;
+    const manifest=manifestEntry?JSON.parse(await manifestEntry.async('string')):null;
+    const png=pngDimensionsFromBytes(atlasBytes);
+    const files=Object.keys(zip.files).filter(name=>!zip.files[name].dir).sort();
+    result={
+      ok:!!(atlasEntry&&manifestEntry&&png.valid&&png.width>1&&png.height>1&&manifest?.generated_atlas===true&&(manifest.pieces||[]).includes(piece)),
+      edit,
+      atlasPath,
+      manifestPath,
+      atlasBytes:atlasBytes?.length||0,
+      png,
+      manifest,
+      files,
+      hadReadme:files.includes('assets/questlog/textures/gui/README.txt')
+    };
+  }finally{
+    guiStudioDraft=beforeDraft;
+    guiStudioDraftScopes=beforeScopes;
+    invalidateGuiStudioAllPreviews();
+    refreshOpenExportPreview();
+  }
+  const afterEdited=typeof guiStudioEditedTextureFiles==='function'?guiStudioEditedTextureFiles():[];
+  result.restoredDraft=JSON.stringify(afterEdited)===JSON.stringify(beforeEdited);
+  return result;
+}
+window.questlogRunExportAtlasSelfTest=questlogRunExportAtlasSelfTest;
+async function questlogRunExportLayoutSelfTest(){
+  if(typeof JSZip==='undefined')throw new Error('JSZip failed to load.');
+  const before={
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    currentFile,
+    mode,
+    draft:cloneGuiStudioDraft(),
+    scopes:cloneGuiStudioDraft(guiStudioDraftScopes)
+  };
+  const file='__export_layout_selftest.json';
+  let result=null;
+  try{
+    quests[file]={...defQ(),title:'Export layout selftest'};
+    currentFile=file;
+    mode='quest';
+    guiStudioLoadScopedDraftForTarget('quest-menu',file);
+    ensureGuiStudioLayoutState();
+    const mainDefault=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.main;
+    guiStudioDraft.layout.elements.main={...guiStudioDraft.layout.elements.main,...mainDefault,x:mainDefault.x+17,y:mainDefault.y+5};
+    guiStudioSaveActiveDraftToScope();
+    const {zip,layoutInfo}=await createProjectExportZip({diagnostic:true});
+    const blob=await zip.generateAsync({type:'blob'});
+    const loaded=await JSZip.loadAsync(blob);
+    const questPath=`config/questlog/quests/${file}`;
+    const questEntry=loaded.file(questPath);
+    const manifestEntry=loaded.file('questlog_export_manifest.json');
+    const questJson=questEntry?JSON.parse(await questEntry.async('string')):null;
+    const manifest=manifestEntry?JSON.parse(await manifestEntry.async('string')):null;
+    result={
+      ok:!!(questJson&&questJson.left_panel_x_offset===17&&questJson.left_panel_y_offset===5&&manifest?.quest_layout?.target_quests?.includes(file)),
+      questPath,
+      questJson,
+      manifestLayout:manifest?.quest_layout||null,
+      layoutInfo
+    };
+  }finally{
+    quests=before.quests;
+    chapters=before.chapters;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    guiStudioDraft=before.draft;
+    guiStudioDraftScopes=before.scopes;
+    invalidateGuiStudioAllPreviews();
+    renderFileList();
+    if(currentFile)renderMain();
+    renderValidation();
+    refreshOpenExportPreview();
+  }
+  result.restoredProject=!quests[file]&&currentFile===before.currentFile&&mode===before.mode;
+  return result;
+}
+window.questlogRunExportLayoutSelfTest=questlogRunExportLayoutSelfTest;
+async function questlogRunGuiStudioAutosaveSelfTest(){
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode,
+    draft:cloneGuiStudioDraft(),
+    scopes:cloneGuiStudioDraft(guiStudioDraftScopes),
+    autosaveEnabled
+  };
+  const piece='Quest Button';
+  let storedHasEdit=false;
+  let loadedHasEdit=false;
+  let result=null;
+  try{
+    autosaveEnabled=true;
+    if(!currentFile||mode!=='quest'||!quests[currentFile]){
+      const file='__gui_autosave_selftest.json';
+      quests[file]={...defQ(),title:'GUI autosave selftest'};
+      currentFile=file;
+      mode='quest';
+    }
+    guiStudioLoadScopedDraftForTarget('quest-menu',currentFile);
+    const edit=questlogAddDiagnosticGuiPaint(piece);
+    saveAutosaveNow('gui-studio-diagnostic',true);
+    const stored=JSON.parse(localStorage.getItem(AUTOSAVE_KEY)||'{}');
+    storedHasEdit=!!stored.guiStudioDraftScopes?.quests?.[currentFile]?.pieces?.[piece]?.layers?.some(layer=>(layer.fills||[]).length);
+    guiStudioDraft=createDefaultGuiStudioDraft();
+    resetGuiStudioScopedDrafts();
+    invalidateGuiStudioAllPreviews();
+    loadAutosave();
+    loadedHasEdit=!!guiStudioDraftScopes?.questMenu?.[currentFile]?.pieces?.[piece]?.layers?.some(layer=>(layer.fills||[]).length);
+    result={ok:storedHasEdit&&loadedHasEdit,edit,storedHasEdit,loadedHasEdit};
+  }finally{
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    guiStudioDraft=before.draft;
+    guiStudioDraftScopes=before.scopes;
+    autosaveEnabled=before.autosaveEnabled;
+    invalidateGuiStudioAllPreviews();
+    renderFileList();
+    if(currentFile)renderMain();
+    renderValidation();
+    refreshOpenExportPreview();
+  }
+  result.restoredProject=currentFile===before.currentFile&&mode===before.mode;
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw;
+  return result;
+}
+window.questlogRunGuiStudioAutosaveSelfTest=questlogRunGuiStudioAutosaveSelfTest;
+async function questlogRunGuiStudioScopedDraftSelfTest(){
+  if(typeof JSZip==='undefined')throw new Error('JSZip failed to load.');
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode,
+    draft:cloneGuiStudioDraft(),
+    scopes:cloneGuiStudioDraft(guiStudioDraftScopes),
+    autosaveEnabled
+  };
+  const qa='__scoped_draft_a.json';
+  const qb='__scoped_draft_b.json';
+  const ch='__scoped_draft_chapter.json';
+  let result=null;
+  try{
+    autosaveEnabled=true;
+    quests[qa]={...defQ(),title:'Scoped draft A'};
+    quests[qb]={...defQ(),title:'Scoped draft B'};
+    chapters[ch]={...defC(),name:'Scoped draft chapter',default_chapter:true};
+    currentFile=qa;
+    mode='quest';
+    resetGuiStudioScopedDrafts();
+    guiStudioLoadScopedDraftForTarget('quest-menu',qa);
+    const questEdit=questlogAddDiagnosticGuiPaint('Quest Button');
+    ensureGuiStudioLayoutState();
+    const mainDefault=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.main;
+    guiStudioDraft.layout.elements.main={...guiStudioDraft.layout.elements.main,...mainDefault,x:mainDefault.x+13,y:mainDefault.y+4};
+    guiStudioDraft.appliedPreview={scope:'current',pieces:guiStudioEditedPieceNamesForTarget('quest-menu'),targetFiles:[qa],currentFile:qa,updatedAt:new Date().toISOString()};
+    guiStudioSaveActiveDraftToScope();
+
+    currentFile=qb;
+    guiStudioLoadScopedDraftForTarget('quest-menu',qb);
+    const questBHasEdit=guiStudioPieceHasEdits('Quest Button');
+
+    guiStudioLoadScopedDraftForTarget('quest-list',qa);
+    const listEdit=questlogAddDiagnosticGuiPaint('Search Tab Minimized');
+    ensureGuiStudioLayoutState();
+    const searchDefault=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.searchTab;
+    guiStudioDraft.layout.elements.searchTab={...guiStudioDraft.layout.elements.searchTab,...searchDefault,x:searchDefault.x+9,y:searchDefault.y+7};
+    guiStudioDraft.appliedPreview={scope:'global-questlist',pieces:guiStudioEditedPieceNamesForTarget('quest-list'),targetFiles:[],currentFile:null,updatedAt:new Date().toISOString()};
+    guiStudioSaveActiveDraftToScope();
+
+    currentFile=qa;
+    mode='quest';
+    guiStudioLoadScopedDraftForTarget('quest-menu',qa);
+    const questAHasEdit=guiStudioPieceHasEdits('Quest Button');
+    guiStudioRefreshAppliedPreviewsForCurrentSelection();
+    const appliedQuestPreviewRestored=!!guiStudioAppliedQuestPreview?.pieces?.button;
+    const appliedListPreviewRestored=!!guiStudioAppliedQuestListPreview?.pieces?.searchMin;
+
+    saveAutosaveNow('scoped-gui-studio-diagnostic',true);
+    const stored=JSON.parse(localStorage.getItem(AUTOSAVE_KEY)||'{}');
+    const storedQuestAHasEdit=!!stored.guiStudioDraftScopes?.quests?.[qa]?.pieces?.['Quest Button']?.layers?.some(layer=>(layer.fills||[]).length);
+    const storedQuestBHasEdit=!!stored.guiStudioDraftScopes?.quests?.[qb]?.pieces?.['Quest Button']?.layers?.some(layer=>(layer.fills||[]).length);
+    const storedListHasEdit=!!stored.guiStudioDraftScopes?.questList?.pieces?.['Search Tab Minimized']?.layers?.some(layer=>(layer.fills||[]).length);
+
+    resetGuiStudioScopedDrafts();
+    guiStudioDraft=createDefaultGuiStudioDraft();
+    guiStudioAppliedQuestPreview=null;
+    guiStudioAppliedQuestListPreview=null;
+    loadAutosave();
+    currentFile=qa;
+    mode='quest';
+    guiStudioRefreshAppliedPreviewsForCurrentSelection();
+    const reloadedQuestAHasEdit=!!guiStudioDraftScopes.questMenu?.[qa]?.pieces?.['Quest Button']?.layers?.some(layer=>(layer.fills||[]).length);
+    const reloadedQuestBHasEdit=!!guiStudioDraftScopes.questMenu?.[qb]?.pieces?.['Quest Button']?.layers?.some(layer=>(layer.fills||[]).length);
+    const reloadedListHasEdit=!!guiStudioDraftScopes.questList?.pieces?.['Search Tab Minimized']?.layers?.some(layer=>(layer.fills||[]).length);
+    const reloadedAppliedQuestPreview=!!guiStudioAppliedQuestPreview?.pieces?.button;
+    const reloadedAppliedListPreview=!!guiStudioAppliedQuestListPreview?.pieces?.searchMin;
+
+    const {zip}=await createProjectExportZip({diagnostic:true});
+    const blob=await zip.generateAsync({type:'blob'});
+    const loaded=await JSZip.loadAsync(blob);
+    const questA=JSON.parse(await loaded.file(`config/questlog/quests/${qa}`).async('string'));
+    const questB=JSON.parse(await loaded.file(`config/questlog/quests/${qb}`).async('string'));
+    const manifest=JSON.parse(await loaded.file('questlog_export_manifest.json').async('string'));
+    const configText=loaded.file('config/questlog-client.toml')?await loaded.file('config/questlog-client.toml').async('string'):'';
+    const rpName=manifest.resourcepack_zip;
+    const rpBlob=await loaded.file(`resourcepacks/${rpName}`).async('blob');
+    const rpZip=await JSZip.loadAsync(rpBlob);
+    const rpFiles=Object.keys(rpZip.files).filter(name=>!rpZip.files[name].dir).sort();
+    const questTexturePath=`assets/${(loadExportMetadata().namespace||'questlog').toLowerCase()}/textures/gui/questlog_builder/__scoped_draft_a/quest_peripherals.png`;
+    result={
+      ok:questAHasEdit&&!questBHasEdit&&appliedQuestPreviewRestored&&appliedListPreviewRestored&&storedQuestAHasEdit&&!storedQuestBHasEdit&&storedListHasEdit&&reloadedQuestAHasEdit&&!reloadedQuestBHasEdit&&reloadedListHasEdit&&reloadedAppliedQuestPreview&&reloadedAppliedListPreview&&!!questA.peripheral_texture&&!questB.peripheral_texture&&questA.left_panel_x_offset===13&&questA.left_panel_y_offset===4&&!!configText&&rpFiles.includes(questTexturePath)&&rpFiles.includes('assets/questlog/textures/gui/questlog_search_tab_buttons.png'),
+      questEdit,
+      listEdit,
+      questBHasEdit,
+      questAHasEdit,
+      appliedQuestPreviewRestored,
+      appliedListPreviewRestored,
+      storedQuestAHasEdit,
+      storedQuestBHasEdit,
+      storedListHasEdit,
+      reloadedQuestAHasEdit,
+      reloadedQuestBHasEdit,
+      reloadedListHasEdit,
+      reloadedAppliedQuestPreview,
+      reloadedAppliedListPreview,
+      questAExport:{peripheral_texture:questA.peripheral_texture,left_panel_x_offset:questA.left_panel_x_offset,left_panel_y_offset:questA.left_panel_y_offset},
+      questBExport:{peripheral_texture:questB.peripheral_texture||null,left_panel_x_offset:questB.left_panel_x_offset||0},
+      configText,
+      resourcePackHasQuestTexture:rpFiles.includes(questTexturePath),
+      resourcePackHasQuestListTexture:rpFiles.includes('assets/questlog/textures/gui/questlog_search_tab_buttons.png'),
+      manifestQuestlistConfig:manifest.questlist_config||null,
+      manifestLayout:manifest.quest_layout||null
+    };
+  }finally{
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    guiStudioDraft=before.draft;
+    guiStudioDraftScopes=before.scopes;
+    autosaveEnabled=before.autosaveEnabled;
+    guiStudioRefreshAppliedPreviewsForCurrentSelection();
+    invalidateGuiStudioAllPreviews();
+    renderFileList();
+    if(currentFile)renderMain();
+    renderValidation();
+    refreshOpenExportPreview();
+  }
+  result.restoredProject=currentFile===before.currentFile&&mode===before.mode&&!quests[qa]&&!quests[qb]&&!chapters[ch];
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw;
+  return result;
+}
+window.questlogRunGuiStudioScopedDraftSelfTest=questlogRunGuiStudioScopedDraftSelfTest;
+async function questlogRunQuestListLayoutExportSelfTest(){
+  if(typeof JSZip==='undefined')throw new Error('JSZip failed to load.');
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode,
+    guiStudioDraft:cloneGuiStudioDraft(guiStudioDraft),
+    guiStudioDraftScopes:cloneGuiStudioDraft(guiStudioDraftScopes),
+    appliedQuestPreview:guiStudioAppliedQuestPreview?JSON.parse(JSON.stringify(guiStudioAppliedQuestPreview)):null,
+    appliedQuestListPreview:guiStudioAppliedQuestListPreview?JSON.parse(JSON.stringify(guiStudioAppliedQuestListPreview)):null
+  };
+  let result=null;
+  try{
+    quests={'__questlist_layout_export.json':defQ()};
+    chapters={'__questlist_layout_export_chapter.json':{...defC(),quests:['questlog:__questlist_layout_export']}};
+    currentFile='__questlist_layout_export_chapter.json';
+    mode='chapter';
+    resetGuiStudioScopedDrafts();
+    guiStudioDraft=createDefaultGuiStudioDraft();
+    guiStudioLoadScopedDraftForTarget('quest-list',currentFile);
+    ensureGuiStudioLayoutState();
+    const dx=18;
+    const dy=11;
+    const sx=-7;
+    const sy=5;
+    const cx=9;
+    const cy=-4;
+    ['listBackground','listRows','listScrollbar'].forEach(key=>{
+      const base=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key];
+      guiStudioDraft.layout.elements[key]={...guiStudioDraft.layout.elements[key],...base,x:base.x+dx,y:base.y+dy};
+    });
+    ['searchTab','searchInput','hideButton','condenseButton'].forEach(key=>{
+      const base=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key];
+      guiStudioDraft.layout.elements[key]={...guiStudioDraft.layout.elements[key],...base,x:base.x+dx+sx,y:base.y+dy+sy};
+    });
+    {
+      const base=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.searchTab;
+      const expanded=QUESTLOG_LIST_RENDER_SPEC.states['search-expanded'].defaultOffsets.searchTab;
+      guiStudioDraft.layoutState='search-expanded';
+      guiStudioDraft.layout.elements.searchTab={...guiStudioDraft.layout.elements.searchTab,...base,x:expanded.x+dx+sx,y:expanded.y+dy+sy,w:expanded.w,h:expanded.h};
+    }
+    {
+      const base=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.chapterTabs;
+      guiStudioDraft.layout.elements.chapterTabs={...guiStudioDraft.layout.elements.chapterTabs,...base,x:base.x+dx+cx,y:base.y+dy+cy};
+    }
+    ['listRows','listScrollbar','searchInput','hideButton','condenseButton','chapterArrows'].forEach(key=>{
+      guiStudioDraft.layout.elements[key]={...guiStudioDraft.layout.elements[key],x:1,y:1};
+    });
+    guiStudioDraft.appliedPreview={scope:'global-questlist',pieces:['QuestList Main Panel'],targetFiles:[],currentFile:null,updatedAt:new Date().toISOString()};
+    guiStudioSaveActiveDraftToScope();
+    saveAutosaveNow('questlist-layout-export-diagnostic',true);
+    resetGuiStudioScopedDrafts();
+    guiStudioDraft=createDefaultGuiStudioDraft();
+    loadAutosave();
+    currentFile='__questlist_layout_export_chapter.json';
+    mode='chapter';
+    guiStudioRefreshAppliedPreviewsForCurrentSelection();
+    const configPatch=guiStudioQuestListConfigPatch();
+    const {zip}=await createProjectExportZip({diagnostic:true});
+    const blob=await zip.generateAsync({type:'blob'});
+    const loaded=await JSZip.loadAsync(blob);
+    const configText=loaded.file('config/questlog-client.toml')?await loaded.file('config/questlog-client.toml').async('string'):'';
+    const overrideConfigText=loaded.file('overrides/config/questlog-client.toml')?await loaded.file('overrides/config/questlog-client.toml').async('string'):'';
+    const installNote=loaded.file('QUESTLIST_LAYOUT_INSTALL.txt')?await loaded.file('QUESTLIST_LAYOUT_INSTALL.txt').async('string'):'';
+    const rpName=Object.keys(loaded.files).find(name=>/^resourcepacks\/.+\.zip$/.test(name)&&!loaded.files[name].dir);
+    const rpBlob=rpName?await loaded.file(rpName).async('blob'):null;
+    const rpZip=rpBlob?await JSZip.loadAsync(rpBlob):null;
+    const rpFiles=rpZip?Object.keys(rpZip.files).filter(name=>!rpZip.files[name].dir).sort():[];
+    const questlogTexturePath='assets/questlog/textures/gui/questlog.png';
+    const manifest=rpZip?.file(`${questlogTexturePath}.manifest.json`)
+      ? JSON.parse(await rpZip.file(`${questlogTexturePath}.manifest.json`).async('string'))
+      : null;
+    result={
+      ok:configPatch.gui.mainPanelX===dx
+        && configPatch.gui.mainPanelY===dy
+        && configPatch.gui.searchBarX===sx
+        && configPatch.gui.searchBarY===sy
+        && configPatch.gui.chapterButtonsX===cx
+        && configPatch.gui.chapterButtonsY===cy
+        && rpFiles.includes(questlogTexturePath)
+        && !!manifest?.pieces?.includes?.('QuestList Main Panel')
+        && !!configText.includes(`mainPanelX = ${dx}`)
+        && !!configText.includes(`mainPanelY = ${dy}`)
+        && !!configText.includes(`searchBarX = ${sx}`)
+        && !!configText.includes(`searchBarY = ${sy}`)
+        && !!configText.includes(`chapterButtonsX = ${cx}`)
+        && !!configText.includes(`chapterButtonsY = ${cy}`)
+        && overrideConfigText===configText
+        && !!installNote.includes('If only the QuestList background panel moves in-game'),
+      configPatch,
+      configText,
+      overrideConfigMatches:overrideConfigText===configText,
+      installNoteIncluded:!!installNote,
+      resourcePackHasQuestlogTexture:rpFiles.includes(questlogTexturePath),
+      manifest
+    };
+  }finally{
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    guiStudioDraft=cloneGuiStudioDraft(before.guiStudioDraft);
+    guiStudioDraftScopes=cloneGuiStudioDraft(before.guiStudioDraftScopes);
+    guiStudioAppliedQuestPreview=before.appliedQuestPreview;
+    guiStudioAppliedQuestListPreview=before.appliedQuestListPreview;
+    invalidateGuiStudioAllPreviews();
+    renderFileList();
+    renderMain();
+    refreshOpenExportPreview();
+  }
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw;
+  return result;
+}
+window.questlogRunQuestListLayoutExportSelfTest=questlogRunQuestListLayoutExportSelfTest;
+async function questlogRunProjectImportRoundTripSelfTest(){
+  if(typeof JSZip==='undefined')throw new Error('JSZip failed to load.');
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    exportMetaRaw:localStorage.getItem(EXPORT_METADATA_KEY),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    activityLog:JSON.parse(JSON.stringify(activityLog||[])),
+    currentFile,
+    mode,
+    guiStudioDraft:cloneGuiStudioDraft(guiStudioDraft),
+    guiStudioDraftScopes:cloneGuiStudioDraft(guiStudioDraftScopes),
+    appliedQuestPreview:guiStudioAppliedQuestPreview?JSON.parse(JSON.stringify(guiStudioAppliedQuestPreview)):null,
+    appliedQuestListPreview:guiStudioAppliedQuestListPreview?JSON.parse(JSON.stringify(guiStudioAppliedQuestListPreview)):null
+  };
+  const qa='__roundtrip_quest.json';
+  const ch='__roundtrip_chapter.json';
+  let result=null;
+  try{
+    quests={[qa]:{...defQ(),title:'Roundtrip Quest',chapter:'questlog:__roundtrip_chapter'}};
+    chapters={[ch]:{...defC(),name:'Roundtrip Chapter',default_chapter:true,quests:['questlog:__roundtrip_quest']}};
+    fileMeta={};
+    ensureFileMeta();
+    currentFile=qa;
+    mode='quest';
+    resetGuiStudioScopedDrafts();
+    guiStudioDraft=createDefaultGuiStudioDraft();
+    guiStudioLoadScopedDraftForTarget('quest-menu',qa);
+    ensureGuiStudioLayoutState();
+    questlogAddDiagnosticGuiPaint('Quest Main');
+    {
+      const base=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.main;
+      guiStudioDraft.layout.elements.main={...guiStudioDraft.layout.elements.main,...base,x:base.x+13,y:base.y+7};
+    }
+    guiStudioDraft.appliedPreview={scope:'current',pieces:guiStudioEditedPieceNamesForTarget('quest-menu'),targetFiles:[qa],currentFile:qa,updatedAt:new Date().toISOString()};
+    guiStudioSaveActiveDraftToScope();
+    guiStudioLoadScopedDraftForTarget('quest-list',ch);
+    ensureGuiStudioLayoutState();
+    questlogAddDiagnosticGuiPaint('QuestList Main Panel');
+    {
+      const base=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.listBackground;
+      guiStudioDraft.layout.elements.listBackground={...guiStudioDraft.layout.elements.listBackground,...base,x:base.x+9,y:base.y+4};
+    }
+    guiStudioDraft.appliedPreview={scope:'global-questlist',pieces:guiStudioEditedPieceNamesForTarget('quest-list'),targetFiles:[],currentFile:null,updatedAt:new Date().toISOString()};
+    guiStudioSaveActiveDraftToScope();
+    const {zip}=await createProjectExportZip({diagnostic:true});
+    const blob=await zip.generateAsync({type:'blob'});
+    const loaded=await JSZip.loadAsync(blob);
+    const manifest=JSON.parse(await loaded.file('questlog_export_manifest.json').async('string'));
+    quests={};
+    chapters={};
+    fileMeta={};
+    activityLog=[];
+    currentFile=null;
+    mode='quest';
+    resetGuiStudioScopedDrafts();
+    guiStudioDraft=createDefaultGuiStudioDraft();
+    guiStudioAppliedQuestPreview=null;
+    guiStudioAppliedQuestListPreview=null;
+    await importZipFile(blob);
+    const qDraft=guiStudioDraftScopes.questMenu?.[qa];
+    const listDraft=guiStudioDraftScopes.questList;
+    const qPaint=!!qDraft?.pieces?.['Quest Main']?.layers?.some(layer=>(layer.fills||[]).length);
+    const listPaint=!!listDraft?.pieces?.['QuestList Main Panel']?.layers?.some(layer=>(layer.fills||[]).length);
+    const qMoved=qDraft?.layout?.elements?.main?.x===GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.main.x+13;
+    const listMoved=listDraft?.layout?.elements?.listBackground?.x===GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.listBackground.x+9;
+    guiStudioRefreshAppliedPreviewsForCurrentSelection();
+    result={
+      ok:!!quests[qa]
+        && !!chapters[ch]
+        && !chapters['questlog_export_manifest.json']
+        && !!manifest?.builder_project?.gui_studio_draft_scopes
+        && qPaint
+        && listPaint
+        && qMoved
+        && listMoved
+        && !!guiStudioAppliedQuestPreview
+        && !!guiStudioAppliedQuestListPreview,
+      importedQuest:!!quests[qa],
+      importedChapter:!!chapters[ch],
+      manifestImportedAsChapter:!!chapters['questlog_export_manifest.json'],
+      manifestHasBuilderProject:!!manifest?.builder_project?.gui_studio_draft_scopes,
+      questDraftRestored:qPaint&&qMoved,
+      questListDraftRestored:listPaint&&listMoved,
+      questPreviewRestored:!!guiStudioAppliedQuestPreview,
+      questListPreviewRestored:!!guiStudioAppliedQuestListPreview
+    };
+  }finally{
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    if(before.exportMetaRaw===null)localStorage.removeItem(EXPORT_METADATA_KEY);
+    else localStorage.setItem(EXPORT_METADATA_KEY,before.exportMetaRaw);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    activityLog=before.activityLog;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    guiStudioDraft=cloneGuiStudioDraft(before.guiStudioDraft);
+    guiStudioDraftScopes=cloneGuiStudioDraft(before.guiStudioDraftScopes);
+    guiStudioAppliedQuestPreview=before.appliedQuestPreview;
+    guiStudioAppliedQuestListPreview=before.appliedQuestListPreview;
+    invalidateGuiStudioAllPreviews();
+    renderFileList();
+    renderMain();
+    refreshOpenExportPreview();
+  }
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw;
+  return result;
+}
+window.questlogRunProjectImportRoundTripSelfTest=questlogRunProjectImportRoundTripSelfTest;
+async function questlogRunExportDownloadSmokeSelfTest(){
+  if(typeof JSZip==='undefined')throw new Error('JSZip failed to load.');
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode,
+    draft:cloneGuiStudioDraft(),
+    scopes:cloneGuiStudioDraft(guiStudioDraftScopes),
+    autosaveEnabled
+  };
+  const questFile='__export_download_smoke_quest.json';
+  const chapterFile='__export_download_smoke_chapter.json';
+  const chapterRef=`${getNs()}:__export_download_smoke_chapter`;
+  const checks={};
+  let result=null;
+  try{
+    autosaveEnabled=false;
+    chapters[chapterFile]={...defC(),name:'Export Download Smoke',default_chapter:true};
+    quests[questFile]={...defQ(),title:'Export download smoke quest',chapter:chapterRef,description:'Selected-file export payload'};
+    currentFile=questFile;
+    mode='quest';
+    const selectedQuest=JSON.parse(stringifyJson(buildQuestExportObject(questFile,quests[questFile])));
+    checks.selectedQuestJson=selectedQuest.title==='Export download smoke quest'&&selectedQuest.chapter===chapterRef&&!selectedQuest.builder_project&&!selectedQuest.guiStudioDraftScopes;
+    currentFile=chapterFile;
+    mode='chapter';
+    const chapterPayload=JSON.parse(JSON.stringify(chapters[chapterFile]));
+    trimCh(chapterPayload);
+    const selectedChapter=JSON.parse(stringifyJson(chapterPayload));
+    checks.selectedChapterJson=selectedChapter.name==='Export Download Smoke'&&selectedChapter.default_chapter===true&&!selectedChapter.builder_project&&!selectedChapter.guiStudioDraftScopes;
+    currentFile=questFile;
+    mode='quest';
+    guiStudioLoadScopedDraftForTarget('quest-menu',questFile);
+    questlogAddDiagnosticGuiPaint('Quest Button');
+    guiStudioSaveActiveDraftToScope();
+    const {zip}=await createProjectExportZip({diagnostic:true});
+    const blob=await zip.generateAsync({type:'blob'});
+    const loaded=await JSZip.loadAsync(blob);
+    const questPath=`config/questlog/quests/${questFile}`;
+    const chapterPath=`config/questlog/chapters/${chapterFile}`;
+    const questEntry=loaded.file(questPath);
+    const chapterEntry=loaded.file(chapterPath);
+    const manifestEntry=loaded.file('questlog_export_manifest.json');
+    const resourcePackPath=Object.keys(loaded.files).find(path=>/^resourcepacks\/.+\.zip$/.test(path));
+    const resourcePackBytes=resourcePackPath?await loaded.file(resourcePackPath).async('uint8array'):null;
+    const resourcePackZip=resourcePackBytes?await JSZip.loadAsync(resourcePackBytes):null;
+    const resourcePackMeta=!!resourcePackZip?.file('pack.mcmeta');
+    const resourcePackTexture=resourcePackZip?Object.keys(resourcePackZip.files).some(path=>/assets\/.+\/textures\/gui\/questlog_builder\/.+\.png$/.test(path)):false;
+    const zipQuest=questEntry?JSON.parse(await questEntry.async('string')):null;
+    const zipChapter=chapterEntry?JSON.parse(await chapterEntry.async('string')):null;
+    const manifest=manifestEntry?JSON.parse(await manifestEntry.async('string')):null;
+    checks.projectZipCore=!!questEntry&&!!chapterEntry&&!!manifestEntry&&!!resourcePackPath;
+    checks.projectZipJson=zipQuest?.title==='Export download smoke quest'&&zipQuest?.chapter===chapterRef&&zipChapter?.name==='Export Download Smoke';
+    checks.projectZipBuilderManifest=!!manifest?.builder_project?.gui_studio_draft_scopes;
+    checks.projectZipResourcePack=resourcePackMeta&&resourcePackTexture;
+    checks.intentionalRed=true;
+    result={
+      ok:Object.values(checks).every(Boolean),
+      checks,
+      questPath,
+      chapterPath,
+      resourcePackPath,
+      zipBytes:blob.size,
+      fileCount:Object.keys(loaded.files).filter(path=>!loaded.files[path].dir).length
+    };
+  }finally{
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    guiStudioDraft=before.draft;
+    guiStudioDraftScopes=before.scopes;
+    autosaveEnabled=before.autosaveEnabled;
+    invalidateGuiStudioAllPreviews();
+    renderFileList();
+    if(currentFile)renderMain();
+    else renderMain();
+    renderValidation();
+    refreshOpenExportPreview();
+  }
+  result.restoredProject=currentFile===before.currentFile&&mode===before.mode;
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw;
+  return result;
+}
+window.questlogRunExportDownloadSmokeSelfTest=questlogRunExportDownloadSmokeSelfTest;
+async function questlogRunWorkbenchCanvasReleaseSelfTest(){
+  const storageKeys=[
+    PERSONALIZATION_KEY,
+    WORKBENCH_LAYOUT_KEY,WORKBENCH_HIDDEN_KEY,WORKBENCH_LOCKED_KEY,
+    CANVAS_LAYOUT_KEY,CANVAS_HIDDEN_KEY,CANVAS_LOCKED_KEY,CANVAS_VIEW_KEY
+  ];
+  const before={
+    layout:currentPersonalLayout(),
+    storage:Object.fromEntries(storageKeys.map(key=>[key,localStorage.getItem(key)]))
+  };
+  const restoreStorage=()=>{
+    storageKeys.forEach(key=>{
+      const value=before.storage[key];
+      if(value===null)localStorage.removeItem(key);
+      else localStorage.setItem(key,value);
+    });
+  };
+  const visible=el=>{
+    if(!el)return false;
+    const style=getComputedStyle(el),rect=el.getBoundingClientRect();
+    return style.display!=='none'&&style.visibility!=='hidden'&&rect.width>1&&rect.height>1;
+  };
+  const rectOf=el=>{
+    const rect=el.getBoundingClientRect();
+    return {x:rect.x,y:rect.y,w:rect.width,h:rect.height,right:rect.right,bottom:rect.bottom};
+  };
+  const overlapArea=(a,b)=>{
+    const x=Math.max(0,Math.min(a.right,b.right)-Math.max(a.x,b.x));
+    const y=Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.y,b.y));
+    return x*y;
+  };
+  const collectPanels=()=>$$('[data-workbench-panel]').filter(visible).map(el=>({key:el.dataset.workbenchPanel,rect:rectOf(el)}));
+  const collectOverlaps=panels=>{
+    const overlaps=[];
+    for(let i=0;i<panels.length;i++){
+      for(let j=i+1;j<panels.length;j++){
+        const area=overlapArea(panels[i].rect,panels[j].rect);
+        if(area>6)overlaps.push([panels[i].key,panels[j].key,Math.round(area)]);
+      }
+    }
+    return overlaps;
+  };
+  const checks={};
+  let result=null;
+  try{
+    const staleWorkbench={...defaultWorkbenchLayout(),preview:{x:0,y:1,w:22.52720165922146,h:18.201555962343093,z:13},sources:{x:0,y:63,w:22,h:37,z:12},notes:{x:73,y:61,w:26,h:37,z:9}};
+    localStorage.setItem(WORKBENCH_LAYOUT_KEY,JSON.stringify(staleWorkbench));
+    localStorage.setItem(WORKBENCH_HIDDEN_KEY,JSON.stringify(['json','templates','projectStats','exportReadiness']));
+    activeFloatingPanelLayout=null;
+    applyPersonalLayout('workbench');
+    updateWorkbenchState();
+    await new Promise(resolve=>{
+      const started=Date.now();
+      const poll=()=>{
+        if(!guiStudioThumbRenderFrame&&!guiStudioThumbRenderPending)return resolve();
+        if(Date.now()-started>600)return resolve();
+        requestAnimationFrame(poll);
+      };
+      requestAnimationFrame(poll);
+    });
+    const workbenchPanels=collectPanels();
+    const workbenchOverlaps=collectOverlaps(workbenchPanels);
+    const previewPanel=$('[data-workbench-panel="preview"]');
+    const navigatorPanel=$('[data-workbench-panel="navigator"]');
+    const previewButton=previewPanel?.querySelector('#workbenchQuestGuiStudioBtn,.gui-studio-launch');
+    const resourceLinks=$$('[data-workbench-panel="sources"] a.workbench-source-link');
+    const toolbarButtons=$$('.workbench-toolbar-shell button').filter(visible);
+    checks.workbenchRecoveredNoOverlap=workbenchOverlaps.length===0;
+    checks.workbenchPreviewNotOverNavigator=!previewPanel||!navigatorPanel||overlapArea(rectOf(previewPanel),rectOf(navigatorPanel))<6;
+    checks.workbenchPreviewButton=!!previewButton&&visible(previewButton);
+    checks.workbenchResourceLinks=resourceLinks.length===3&&resourceLinks.every(visible);
+    checks.workbenchToolbarSvg=toolbarButtons.length>=8&&toolbarButtons.every(btn=>!!btn.querySelector('svg'));
+    const staleCanvas={...defaultCanvasLayout(),preview:{x:787.2263363951507,y:455.74803482546025,w:187.83652940309184,h:169.25196517453975,z:4}};
+    localStorage.setItem(CANVAS_LAYOUT_KEY,JSON.stringify(staleCanvas));
+    localStorage.setItem(CANVAS_HIDDEN_KEY,JSON.stringify(['json','templates','projectStats','exportReadiness']));
+    localStorage.removeItem(CANVAS_VIEW_KEY);
+    loadCanvasView();
+    activeFloatingPanelLayout=null;
+    applyPersonalLayout('canvas');
+    updateWorkbenchState();
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    const canvasPanels=collectPanels();
+    const canvasOverlaps=collectOverlaps(canvasPanels);
+    const canvasPreview=$('[data-workbench-panel="preview"]');
+    const canvasPreviewButton=canvasPreview?.querySelector('#workbenchQuestGuiStudioBtn,.gui-studio-launch');
+    const canvasControls=['canvasZoomOutBtn','canvasZoomResetBtn','canvasZoomInBtn','canvasDrawToolBtn','canvasEraserToolBtn','canvasHandToolBtn','canvasSettingsBtn'];
+    checks.canvasPanelsOnscreen=canvasPanels.every(panel=>panel.rect.right>0&&panel.rect.bottom>0&&panel.rect.x<innerWidth&&panel.rect.y<innerHeight);
+    checks.canvasNoPanelOverlap=canvasOverlaps.length===0;
+    checks.canvasPreviewButton=!!canvasPreviewButton&&visible(canvasPreviewButton);
+    checks.canvasControlsSvg=canvasControls.every(id=>!!document.getElementById(id)?.querySelector('svg'));
+    checks.canvasConnectorLayerClean=!document.getElementById('canvasLinkSvgLayer')||document.body.dataset.layout==='canvas';
+    result={ok:Object.values(checks).every(Boolean),checks,workbenchOverlaps,canvasOverlaps,workbenchPanels,canvasPanels};
+  }finally{
+    restoreStorage();
+    loadCanvasView();
+    activeFloatingPanelLayout=null;
+    applyPersonalLayout(before.layout);
+    updateWorkbenchState();
+  }
+  result.restoredLayout=currentPersonalLayout()===before.layout;
+  result.restoredStorage=storageKeys.every(key=>localStorage.getItem(key)===before.storage[key]);
+  return result;
+}
+window.questlogRunWorkbenchCanvasReleaseSelfTest=questlogRunWorkbenchCanvasReleaseSelfTest;
+async function questlogRunChapterRenamePreviewSelfTest(){
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode,
+    guiStudioDraft:cloneGuiStudioDraft(guiStudioDraft),
+    guiStudioDraftScopes:cloneGuiStudioDraft(guiStudioDraftScopes),
+    appliedQuestPreview:guiStudioAppliedQuestPreview?JSON.parse(JSON.stringify(guiStudioAppliedQuestPreview)):null,
+    appliedQuestListPreview:guiStudioAppliedQuestListPreview?JSON.parse(JSON.stringify(guiStudioAppliedQuestListPreview)):null
+  };
+  let result=null;
+  try{
+    const oldChapter='__rename_old_chapter.json';
+    const newChapter='__rename_new_chapter.json';
+    const quest='__rename_bound_quest.json';
+    quests={[quest]:{...defQ(),title:'Rename bound quest',chapter:`${getNs()}:__rename_old_chapter`}};
+    chapters={[oldChapter]:{...defC(),name:'Old Chapter',default_chapter:true}};
+    fileMeta={};
+    ensureFileMeta();
+    currentFile=oldChapter;
+    mode='chapter';
+    renameProjectFile('chapter',oldChapter,newChapter);
+    const chapterRefUpdated=quests[quest]?.chapter===`${getNs()}:__rename_new_chapter`;
+    resetGuiStudioScopedDrafts();
+    currentFile=quest;
+    mode='quest';
+    guiStudioDraft=createDefaultGuiStudioDraft();
+    guiStudioLoadScopedDraftForTarget('quest-menu',quest);
+    ensureGuiStudioLayoutState();
+    const mainDefault=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.main;
+    const questMainDefault=questlogDetailStateDisplayBox('main',mainDefault,'quest',true);
+    const questMainMoved={...questMainDefault,x:questMainDefault.x+14,y:questMainDefault.y+6};
+    guiStudioDraft.layout.elements.main={...guiStudioDraft.layout.elements.main,...questlogDetailCanonicalBoxFromDisplay('main',questMainMoved,'quest')};
+    guiStudioDraft.layout.elements.description={...GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.description,x:3,y:4,w:64,h:24};
+    guiStudioDraft.appliedPreview={scope:'current',pieces:[],targetFiles:[quest],currentFile:quest,updatedAt:new Date().toISOString()};
+    guiStudioAppliedQuestPreview=createGuiStudioQuestPreviewSnapshot('current',[],[quest]);
+    guiStudioSaveActiveDraftToScope();
+    const questMount=document.createElement('div');
+    document.body.appendChild(questMount);
+    renderQuestPreviewSurface(questMount);
+    const questStage=questMount.querySelector('.ql-preview-stage');
+    const questPreviewUsesAppliedPatch=questStage?.style.getPropertyValue('--ql-left-x').trim()==='14px'
+      && questStage?.style.getPropertyValue('--ql-left-y').trim()==='6px';
+    const questMainRuntime=guiStudioLayoutRenderBox('main',guiStudioLayoutDisplayBox('main'),{safeZone:false});
+    const questDescriptionRuntime=guiStudioLayoutRenderBox('description',guiStudioLayoutDisplayBox('description'),{safeZone:false});
+    const runtimeLockedDescriptionFollowsPanel=questDescriptionRuntime.x===questMainRuntime.x+18
+      && questDescriptionRuntime.y===questMainRuntime.y+36
+      && questDescriptionRuntime.w===questMainRuntime.w-38
+      && questDescriptionRuntime.h===questMainRuntime.h-68;
+    const questRuntimeChildrenArePassive=guiStudioLayoutElementPassiveRuntime('description','quest-menu')
+      && !guiStudioLayoutLayerAvailable('description');
+    questMount.remove();
+    guiStudioLoadScopedDraftForTarget('quest-list',newChapter);
+    ensureGuiStudioLayoutState();
+    const dx=12,dy=5,sx=7,sy=-3,cx=-4,cy=2;
+    ['listBackground','listRows','listScrollbar'].forEach(key=>{
+      const base=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key];
+      guiStudioDraft.layout.elements[key]={...guiStudioDraft.layout.elements[key],...base,x:base.x+dx,y:base.y+dy};
+    });
+    guiStudioDraft.layout.elements.listRows={...guiStudioDraft.layout.elements.listRows,x:1,y:1};
+    guiStudioDraft.layout.elements.listScrollbar={...guiStudioDraft.layout.elements.listScrollbar,x:1,y:1};
+    {
+      const base=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.searchTab;
+      guiStudioDraft.layout.elements.searchTab={...guiStudioDraft.layout.elements.searchTab,...base,x:base.x+dx+sx,y:base.y+dy+sy};
+    }
+    ['chapterTabs','chapterArrows'].forEach(key=>{
+      const base=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key];
+      guiStudioDraft.layout.elements[key]={...guiStudioDraft.layout.elements[key],...base,x:base.x+dx+cx,y:base.y+dy+cy};
+    });
+    guiStudioDraft.layout.elements.chapterArrows={...guiStudioDraft.layout.elements.chapterArrows,x:1,y:1};
+    const listRowsDisplay=guiStudioLayoutDisplayBox('listRows');
+    const listScrollbarDisplay=guiStudioLayoutDisplayBox('listScrollbar');
+    const passiveKeys=['listRows','listScrollbar','searchInput','hideButton','condenseButton','chapterArrows'];
+    const passiveQuestListChildrenFollowParents=passiveKeys.every(key=>guiStudioLayoutElementPassiveRuntime(key,'quest-list')&&!guiStudioLayoutLayerAvailable(key))
+      && listRowsDisplay.x===GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.listRows.x+dx
+      && listRowsDisplay.y===GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.listRows.y+dy
+      && listScrollbarDisplay.x===GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.listScrollbar.x+dx
+      && listScrollbarDisplay.y===GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.listScrollbar.y+dy;
+    guiStudioDraft.appliedPreview={scope:'global-questlist',pieces:[],targetFiles:[],currentFile:null,updatedAt:new Date().toISOString()};
+    guiStudioAppliedQuestListPreview=createGuiStudioQuestListPreviewSnapshot('global-questlist',[]);
+    guiStudioSaveActiveDraftToScope();
+    const listMount=document.createElement('div');
+    document.body.appendChild(listMount);
+    renderQuestlogListPreviewSurface(listMount,chapterIdFromFile(newChapter),{inline:true});
+    const listScreen=listMount.querySelector('.ql-list-screen');
+    const listPanel=listMount.querySelector('.ql-list-panel');
+    const listSearch=listMount.querySelector('.ql-list-search.minimized');
+    const listTabs=listMount.querySelector('.ql-list-tabs');
+    const listStyle=listScreen?.getAttribute('style')||'';
+    const panelLeft=getComputedStyle(listPanel).left;
+    const searchLeft=getComputedStyle(listSearch).left;
+    const tabsLeft=getComputedStyle(listTabs).left;
+    const listPreviewUsesRuntimeVars=listStyle.includes('--ql-list-main-dx:12px')
+      && listStyle.includes('--ql-list-search-dx:19px')
+      && listStyle.includes('--ql-list-chapter-dx:8px')
+      && panelLeft==='403px'
+      && searchLeft==='608px'
+      && tabsLeft==='399px';
+    guiStudioDraft.layoutState='search-expanded';
+    const expandedDisplay=guiStudioLayoutRenderBox('searchTab',guiStudioLayoutDisplayBox('searchTab'),{safeZone:false});
+    const expandedCanonical=questlogListCanonicalBoxFromDisplay('searchTab',guiStudioLayoutDisplayBox('searchTab'),'search-expanded');
+    const expandedSearchKeepsWide=expandedDisplay.w===250
+      && expandedDisplay.x===412
+      && Math.round(Number(expandedCanonical.x)||0)===590;
+    listMount.remove();
+    result={
+      ok:chapterRefUpdated&&questPreviewUsesAppliedPatch&&runtimeLockedDescriptionFollowsPanel&&questRuntimeChildrenArePassive&&passiveQuestListChildrenFollowParents&&listPreviewUsesRuntimeVars&&expandedSearchKeepsWide,
+      chapterRefUpdated,
+      questPreviewUsesAppliedPatch,
+      runtimeLockedDescriptionFollowsPanel,
+      questRuntimeChildrenArePassive,
+      passiveQuestListChildrenFollowParents,
+      questMainRuntime,
+      questDescriptionRuntime,
+      listPreviewUsesRuntimeVars,
+      expandedSearchKeepsWide,
+      expandedDisplay,
+      expandedCanonical,
+      listStyle,
+      panelLeft,
+      searchLeft,
+      tabsLeft
+    };
+  }finally{
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    guiStudioDraft=cloneGuiStudioDraft(before.guiStudioDraft);
+    guiStudioDraftScopes=cloneGuiStudioDraft(before.guiStudioDraftScopes);
+    guiStudioAppliedQuestPreview=before.appliedQuestPreview;
+    guiStudioAppliedQuestListPreview=before.appliedQuestListPreview;
+    invalidateGuiStudioAllPreviews();
+    renderFileList();
+    renderMain();
+    refreshOpenExportPreview();
+  }
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw;
+  return result;
+}
+window.questlogRunChapterRenamePreviewSelfTest=questlogRunChapterRenamePreviewSelfTest;
+async function questlogRunQuestListPreviewFlowSelfTest(){
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode,
+    listExpanded:questlogListSearchExpanded,
+    listSearch:questlogListSearchQuery,
+    listCondensed:questlogListCondensed,
+    listHideCompleted:questlogListHideCompleted,
+    activeChapter:questlogListActiveChapter,
+    openedFromList:questPreviewOpenedFromList,
+    textMode:questPreviewTextMode,
+    detailsOpen:questPreviewDetailsOpen,
+    detailIndex:questPreviewDetailIndex,
+    completed:[...questPreviewCompletedFiles],
+    failed:[...questPreviewFailedFiles]
+  };
+  const click=(el)=>el?.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:0,clientY:0}));
+  const key=(value)=>document.dispatchEvent(new KeyboardEvent('keydown',{key:value,bubbles:true,cancelable:true}));
+  let result=null;
+  try{
+    const chA='__questlist_flow_chapter.json';
+    const chB='__questlist_flow_extra.json';
+    const files=Array.from({length:7},(_,i)=>`__questlist_flow_${i+1}.json`);
+    quests={};
+    files.forEach((file,i)=>{
+      quests[file]={
+        ...defQ(),
+        title:i===0?'Flow Iconless Entry':`Flow Quest ${i+1}`,
+        chapter:`${getNs()}:__questlist_flow_chapter`,
+        icon:i===0?{}:{item:i%2?'minecraft:diamond':'minecraft:book'},
+        description:`QuestList flow diagnostic ${i+1}`,
+        objectives:[{type:'questlog:item_obtain',item:'minecraft:dirt'}],
+        rewards:[{type:'questlog:item',item:'minecraft:diamond'}]
+      };
+    });
+    quests[files[2]].title='Search Needle Quest';
+    chapters={
+      [chA]:{...defC(),name:'QuestList Flow',default_chapter:true,quests:files.map(file=>`${getNs()}:${file.replace(/\.json$/,'')}`),icon:{item:'minecraft:book'}},
+      [chB]:{...defC(),name:'Extra Flow Chapter',default_chapter:false,quests:[],icon:{item:'minecraft:diamond'}}
+    };
+    fileMeta={};
+    ensureFileMeta();
+    currentFile=chA;
+    mode='chapter';
+    questPreviewCompletedFiles.clear();
+    questPreviewFailedFiles.clear();
+    questPreviewCompletedFiles.add(files[1]);
+    questlogListSearchExpanded=false;
+    questlogListSearchQuery='';
+    questlogListCondensed=false;
+    questlogListHideCompleted=false;
+    questPreviewOpenedFromList=false;
+    questlogListActiveChapter=null;
+    renderFileList();
+    renderMain();
+    renderQuestlogListPreviewModal(`${getNs()}:__questlist_flow_chapter`);
+    const modal=$('#questlogListPreviewModal');
+    modal?.classList.add('open');
+    const body=$('#questlogListPreviewBody');
+    const initial={
+      open:!!modal?.classList.contains('open'),
+      rowCount:$$('.ql-list-row',modal).length,
+      chapterTabCount:$$('[data-chapter-id]',modal).length,
+      searchCount:$$('#questlogSearchToggle',modal).length,
+      oldSearchChildDivs:$$('#questlogSearchToggle div',modal).length,
+      background:getComputedStyle($('.ql-list-screen',modal)).backgroundImage,
+      searchBackground:getComputedStyle($('#questlogSearchToggle',modal)).backgroundImage,
+      tabBackground:getComputedStyle($('.ql-list-tabs button',modal),'::before').backgroundImage
+    };
+    const iconless=$$('.ql-list-row.no-icon',modal)[0];
+    const iconlessSpan=iconless?.querySelector('span');
+    const iconfulSpan=$$('.ql-list-row.has-icon > span:not(.ql-icon-tile)',modal)[0];
+    const iconlessRowRect=iconless?.getBoundingClientRect?.();
+    const iconlessSpanRect=iconlessSpan?.getBoundingClientRect?.();
+    const iconlessState={
+      found:!!iconless,
+      hasIcon:!!iconless?.querySelector('.ql-list-row-icon.real-texture,.ql-list-row-icon.placeholder'),
+      spanLeft:iconlessSpan?parseFloat(getComputedStyle(iconlessSpan).left):null,
+      visualLeft:iconlessRowRect&&iconlessSpanRect?Math.round(iconlessSpanRect.left-iconlessRowRect.left):null,
+      iconfulSpanLeft:iconfulSpan?parseFloat(getComputedStyle(iconfulSpan).left):null
+    };
+    click($('#questlogSearchToggle',modal));
+    const expanded={
+      searchExpanded:$('#questlogSearchToggle',modal)?.classList.contains('expanded')||false,
+      condenseVisible:!!$('#questlogCondenseToggle',modal),
+      hideVisible:!!$('#questlogHideCompletedToggle',modal)
+    };
+    const input=$('#questlogPreviewSearchInput',modal);
+    if(input){
+      input.value='Needle';
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+    }
+    const searchFilteredRows=$$('.ql-list-row',modal).map(row=>row.textContent.trim());
+    click($('#questlogCondenseToggle',modal));
+    const condensedAfterClick=$('.ql-list-screen',modal)?.classList.contains('condensed')||false;
+    click($('#questlogHideCompletedToggle',modal));
+    const hideAfterClick=$('#questlogHideCompletedToggle',modal)?.classList.contains('active')||false;
+
+    questlogListSearchExpanded=false;
+    questlogListSearchQuery='';
+    questlogListCondensed=false;
+    questlogListHideCompleted=false;
+    renderQuestlogListPreviewModal(`${getNs()}:__questlist_flow_chapter`);
+    modal?.classList.add('open');
+    const firstRow=$('.ql-list-row',modal);
+    click(firstRow);
+    const openedQuest={
+      listClosed:!modal?.classList.contains('open'),
+      questModalOpen:$('#questPreviewModal')?.classList.contains('open')||false,
+      currentFile
+    };
+    const questPreviewControls={
+      backVisible:!!$('#questPreviewBackBtn'),
+      activeChapter:questlogListActiveChapter
+    };
+    key('Escape');
+    const escapeClosed=!modal?.classList.contains('open')&&!$('#questPreviewModal')?.classList.contains('open');
+    renderQuestlogListPreviewModal(`${getNs()}:__questlist_flow_chapter`);
+    modal?.classList.add('open');
+    modal?.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:4,clientY:4}));
+    const outsideClickClosed=!modal?.classList.contains('open');
+
+    result={
+      ok:initial.open
+        && initial.rowCount===files.length
+        && initial.chapterTabCount>=1
+        && initial.searchCount===1
+        && initial.oldSearchChildDivs===0
+        && /(questlog\.png|data:image)/.test(initial.background)
+        && /(search_tab_minimized|data:image)/.test(initial.searchBackground)
+        && /(tab_|data:image)/.test(initial.tabBackground)
+        && iconlessState.found
+        && !iconlessState.hasIcon
+        && iconlessState.visualLeft!==null
+        && iconlessState.iconfulSpanLeft!==null
+        && iconlessState.visualLeft<iconlessState.iconfulSpanLeft
+        && expanded.searchExpanded
+        && expanded.condenseVisible
+        && expanded.hideVisible
+        && searchFilteredRows.length===1
+        && /Search Needle Quest/.test(searchFilteredRows[0]||'')
+        && condensedAfterClick
+        && hideAfterClick
+        && openedQuest.listClosed
+        && openedQuest.questModalOpen
+        && openedQuest.currentFile===files[0]
+        && !questPreviewControls.backVisible
+        && questPreviewControls.activeChapter===`${getNs()}:__questlist_flow_chapter`
+        && escapeClosed
+        && outsideClickClosed,
+      initial,
+      iconlessState,
+      expanded,
+      searchFilteredRows,
+      condensedAfterClick,
+      hideAfterClick,
+      openedQuest,
+      questPreviewControls,
+      escapeClosed,
+      outsideClickClosed
+    };
+  }finally{
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    questlogListSearchExpanded=before.listExpanded;
+    questlogListSearchQuery=before.listSearch;
+    questlogListCondensed=before.listCondensed;
+    questlogListHideCompleted=before.listHideCompleted;
+    questlogListActiveChapter=before.activeChapter;
+    questPreviewOpenedFromList=before.openedFromList;
+    questPreviewTextMode=before.textMode;
+    questPreviewDetailsOpen=before.detailsOpen;
+    questPreviewDetailIndex=before.detailIndex;
+    questPreviewCompletedFiles.clear();
+    before.completed.forEach(file=>questPreviewCompletedFiles.add(file));
+    questPreviewFailedFiles.clear();
+    before.failed.forEach(file=>questPreviewFailedFiles.add(file));
+    $('#questlogListPreviewModal')?.classList.remove('open');
+    $('#questPreviewModal')?.classList.remove('open');
+    renderFileList();
+    renderMain();
+    renderValidation();
+    refreshOpenExportPreview();
+  }
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw;
+  result.restoredProject=currentFile===before.currentFile&&mode===before.mode&&!quests.__questlist_flow_1;
+  return result;
+}
+window.questlogRunQuestListPreviewFlowSelfTest=questlogRunQuestListPreviewFlowSelfTest;
+async function questlogRunQuestPreviewButtonSelfTest(){
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode,
+    guiStudioDraft:cloneGuiStudioDraft(guiStudioDraft),
+    guiStudioDraftScopes:cloneGuiStudioDraft(guiStudioDraftScopes),
+    appliedQuestPreview:guiStudioAppliedQuestPreview?JSON.parse(JSON.stringify(guiStudioAppliedQuestPreview)):null,
+    appliedQuestListPreview:guiStudioAppliedQuestListPreview?JSON.parse(JSON.stringify(guiStudioAppliedQuestListPreview)):null,
+    textMode:questPreviewTextMode,
+    detailsOpen:questPreviewDetailsOpen,
+    appliedPanelDismissed:questPreviewAppliedPanelDismissed,
+    detailIndex:questPreviewDetailIndex
+  };
+  let result=null;
+  const mount=document.createElement('div');
+  const renderTest=()=>renderQuestPreviewSurface(mount,{inline:true,rerender:renderTest});
+  const state=()=>{
+    const text=mount.textContent||'';
+    return {
+      text,
+      open:!!mount.querySelector('.ql-preview-details.open'),
+      details:!!mount.querySelector('#questPreviewDetailsBtn'),
+      back:!!mount.querySelector('#questPreviewBackBtn')&&/Back/.test(mount.querySelector('#questPreviewBackBtn')?.textContent||''),
+      collect:!!mount.querySelector('#questPreviewBackBtn')&&/Collect Rewards/.test(mount.querySelector('#questPreviewBackBtn')?.textContent||''),
+      complete:!!mount.querySelector('#questPreviewCompleteBtn'),
+      rewards:/Rewards/.test(text),
+      objectives:/Objectives/.test(text)
+    };
+  };
+  try{
+    const quest='__preview_button_selftest.json';
+    quests={[quest]:{
+      ...defQ(),
+      title:'Preview button selftest',
+      description:'Button flow selftest',
+      objectives:[{type:'questlog:item',title:'Item Obtain',item:'minecraft:dirt'}],
+      rewards:[{type:'questlog:item',title:'Diamond Reward',item:'minecraft:diamond'}]
+    }};
+    chapters={};
+    fileMeta={};
+    ensureFileMeta();
+    currentFile=quest;
+    mode='quest';
+    document.body.appendChild(mount);
+
+    resetGuiStudioScopedDrafts();
+    guiStudioDraft=createDefaultGuiStudioDraft();
+    guiStudioLoadScopedDraftForTarget('quest-menu',quest);
+    ensureGuiStudioLayoutState();
+    const rightDefault=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.right;
+    guiStudioDraft.layout.elements.right={...guiStudioDraft.layout.elements.right,...rightDefault,x:rightDefault.x+24,y:rightDefault.y-16};
+    guiStudioDraft.appliedPreview={scope:'current',pieces:[],targetFiles:[quest],currentFile:quest,updatedAt:new Date().toISOString()};
+    guiStudioAppliedQuestPreview=createGuiStudioQuestPreviewSnapshot('current',[],[quest]);
+    guiStudioSaveActiveDraftToScope();
+    questPreviewTextMode='default';
+    questPreviewDetailsOpen=false;
+    questPreviewAppliedPanelDismissed=false;
+    questPreviewDetailIndex=0;
+    renderTest();
+    const appliedInitial=state();
+    mount.querySelector('#questPreviewDetailsBtn')?.click();
+    const appliedAfterToggle=state();
+    mount.querySelector('#questPreviewDetailsBtn')?.click();
+    const appliedAfterDetails=state();
+
+    guiStudioAppliedQuestPreview=null;
+    questPreviewTextMode='default';
+    questPreviewDetailsOpen=false;
+    questPreviewAppliedPanelDismissed=false;
+    questPreviewDetailIndex=0;
+    renderTest();
+    const normalInitial=state();
+    mount.querySelector('#questPreviewDetailsBtn')?.click();
+    const normalAfterDetails=state();
+    mount.querySelector('#questPreviewCompleteBtn')?.click();
+    const normalAfterComplete=state();
+    mount.querySelector('#questPreviewBackBtn')?.click();
+    const normalAfterCollect=state();
+
+    result={
+      ok:appliedInitial.open
+        && appliedInitial.details
+        && !appliedInitial.back
+        && appliedAfterToggle.details
+        && !appliedAfterToggle.open
+        && !appliedAfterToggle.back
+        && appliedAfterDetails.open
+        && !appliedAfterDetails.back
+        && normalInitial.details
+        && !normalInitial.open
+        && !normalInitial.back
+        && normalAfterDetails.open
+        && !normalAfterDetails.back
+        && normalAfterDetails.complete
+        && normalAfterComplete.open
+        && normalAfterComplete.collect
+        && normalAfterComplete.rewards
+        && !normalAfterCollect.open
+        && normalAfterCollect.details
+        && !normalAfterCollect.collect,
+      appliedInitial,
+      appliedAfterToggle,
+      appliedAfterDetails,
+      normalInitial,
+      normalAfterDetails,
+      normalAfterComplete,
+      normalAfterCollect
+    };
+  }finally{
+    mount.remove();
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    guiStudioDraft=cloneGuiStudioDraft(before.guiStudioDraft);
+    guiStudioDraftScopes=cloneGuiStudioDraft(before.guiStudioDraftScopes);
+    guiStudioAppliedQuestPreview=before.appliedQuestPreview;
+    guiStudioAppliedQuestListPreview=before.appliedQuestListPreview;
+    questPreviewTextMode=before.textMode;
+    questPreviewDetailsOpen=before.detailsOpen;
+    questPreviewAppliedPanelDismissed=before.appliedPanelDismissed;
+    questPreviewDetailIndex=before.detailIndex;
+    invalidateGuiStudioAllPreviews();
+    renderFileList();
+    renderMain();
+    refreshOpenExportPreview();
+  }
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw;
+  return result;
+}
+window.questlogRunQuestPreviewButtonSelfTest=questlogRunQuestPreviewButtonSelfTest;
+async function questlogRunGuiStudioCreateSmokeSelfTest(){
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    paletteRaw:localStorage.getItem(GUI_STUDIO_PALETTE_KEY),
+    activeTab:localStorage.getItem('ql.activeTab'),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode,
+    draft:cloneGuiStudioDraft(),
+    scopes:cloneGuiStudioDraft(guiStudioDraftScopes),
+    autosaveEnabled,
+    modalOpen:$('#guiStudioModal')?.classList.contains('open')||false,
+    modalTarget:guiStudioModalTarget(),
+    modalMode:$('#guiStudioModal')?.dataset.mode||'create'
+  };
+  const file='__gui_create_smoke_selftest.json';
+  const chapter='__gui_create_smoke_chapter.json';
+  const piece='Quest Main';
+  const checks={};
+  const launchDetails={};
+  let result=null;
+  try{
+    autosaveEnabled=false;
+    quests[file]={...defQ(),title:'GUI Create smoke selftest',chapter};
+    chapters[chapter]={...defC(),name:'GUI Create Smoke',default_chapter:true};
+    currentFile=file;
+    mode='quest';
+    localStorage.setItem('ql.activeTab','display');
+    resetGuiStudioScopedDrafts();
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const launchFromLayout=async(layout,selector)=>{
+      applyPersonalLayout(layout);
+      renderMain();
+      await wait(40);
+      const button=$(selector);
+      const beforeOpen=$('#guiStudioModal')?.classList.contains('open')||false;
+      if(!button)return {layout,button:false,open:false,mode:'',target:'',ok:false};
+      button.click();
+      await wait(30);
+      const modal=$('#guiStudioModal');
+      const info={
+        layout,
+        button:true,
+        beforeOpen,
+        open:modal?.classList.contains('open')||false,
+        mode:modal?.dataset.mode||'',
+        target:modal?.dataset.target||''
+      };
+      info.ok=info.open&&info.mode==='create'&&info.target==='quest-menu';
+      closeGuiStudio();
+      return info;
+    };
+    launchDetails.normal=await launchFromLayout('classic','#questGuiStudioBtn');
+    launchDetails.workbench=await launchFromLayout('workbench','.workbench-quest-preview .gui-studio-launch');
+    launchDetails.canvas=await launchFromLayout('canvas','.workbench-quest-preview .gui-studio-launch');
+    checks.normalPreviewLaunch=launchDetails.normal.ok;
+    checks.workbenchPreviewLaunch=launchDetails.workbench.ok;
+    checks.canvasPreviewLaunch=launchDetails.canvas.ok;
+    applyPersonalLayout('classic');
+    openGuiStudio('quest-menu');
+    setGuiStudioMode('create');
+    setGuiStudioPiece(piece);
+    renderGuiStudioDraft();
+    const zone=guiStudioActiveZone();
+    const point={x:zone.x+14,y:zone.y+14};
+    const paintLayer=addGuiStudioLayer('Diagnostic Paint',{});
+    guiStudioDraft.primary='#ff0000';
+    guiStudioActiveTool='Brush';
+    applyGuiStudioCanvasTool(point,{button:0});
+    checks.brushPainted=guiStudioPixelColorAtPiece(piece,point.x,point.y)==='#ff0000';
+    guiStudioActiveTool='Eraser';
+    applyGuiStudioCanvasTool(point,{button:0});
+    checks.eraserRemoved=guiStudioPixelColorAtPiece(piece,point.x,point.y)!=='#ff0000';
+    const bucketPoint={x:point.x+8,y:point.y+8};
+    guiStudioDraft.selection={piece,type:'rect',bounds:{x:bucketPoint.x,y:bucketPoint.y,w:3,h:3}};
+    guiStudioDraft.primary='#00ff66';
+    guiStudioActiveTool='Paint Bucket';
+    applyGuiStudioCanvasTool(bucketPoint,{button:0});
+    checks.paintBucketFilled=guiStudioPixelColorAtPiece(piece,bucketPoint.x,bucketPoint.y)==='#00ff66';
+    guiStudioDraft.primary='#111111';
+    guiStudioActiveTool='Eyedropper';
+    applyGuiStudioCanvasTool(bucketPoint,{button:0});
+    checks.eyedropperPicked=guiStudioDraft.primary==='#00ff66';
+    guiStudioActiveTool='Rectangle Select';
+    setGuiStudioSelectionFromPointer({start:{x:bucketPoint.x,y:bucketPoint.y},points:[bucketPoint]}, {x:bucketPoint.x+9,y:bucketPoint.y+7});
+    renderGuiStudioPixelCanvas({refreshChrome:true});
+    const selection=guiStudioSelectionForPiece();
+    checks.selectionOutline=!!selection?.bounds&&selection.bounds.w===10&&selection.bounds.h===8;
+    const data=guiStudioPieceData(piece);
+    const beforeLayerCount=data.layers.length;
+    const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAEklEQVR4nGP8z4AATAxEcQAz0QEHOoQ+uAAAAABJRU5ErkJggg==';
+    await placeGuiStudioImageDataUrlAsLayer(png,'diagnostic-thumb',{x:zone.x+40,y:zone.y+40});
+    renderGuiStudioDraft();
+    const imageLayer=guiStudioActiveLayer(piece);
+    checks.importedImageLayer=!!imageLayer&&imageLayer.kind==='image'&&imageLayer.sourceName==='diagnostic-thumb'&&guiStudioPieceData(piece).layers.length===beforeLayerCount+1;
+    applyGuiStudioLayerAction('toggle-visibility',imageLayer.id);
+    checks.layerEyeToggled=imageLayer.visible===false;
+    applyGuiStudioLayerAction('toggle-lock',imageLayer.id);
+    checks.layerLockToggled=imageLayer.locked===true;
+    imageLayer.locked=false;
+    imageLayer.visible=true;
+    const oldName=imageLayer.name;
+    imageLayer.name='Renamed Diagnostic Layer';
+    renderGuiStudioLayerPanel();
+    checks.layerRename=imageLayer.name!==oldName&&!!$(`#guiStudioLayerList [data-layer-id="${CSS.escape(imageLayer.id)}"] [data-layer-name]`);
+    const extraLayer=addGuiStudioLayer('Delete Me',{});
+    const deleted=deleteGuiStudioLayer(extraLayer.id);
+    checks.layerDelete=deleted&&!guiStudioLayerById(extraLayer.id,piece);
+    const layersBeforeReorder=guiStudioPieceData(piece).layers.map(layer=>layer.id);
+    const targetLayer=layersBeforeReorder.find(id=>id!==imageLayer.id);
+    checks.layerReorder=targetLayer?reorderGuiStudioLayer(imageLayer.id,targetLayer):true;
+    const layersAfterReorder=guiStudioPieceData(piece).layers.map(layer=>layer.id);
+    checks.layerReorder=checks.layerReorder&&layersBeforeReorder.join('|')!==layersAfterReorder.join('|');
+    guiStudioDraft.paletteLibrary=[createGuiStudioPaletteRow(0,['#123456','#abcdef'])];
+    commitGuiStudioPaletteLibrary(true);
+    guiStudioDraft.paletteLibrary=[];
+    guiStudioDraft.paletteLibrary=loadSavedGuiStudioPaletteLibrary();
+    ensureGuiStudioPaletteLibrary();
+    checks.paletteSaveLoad=guiStudioDraft.paletteLibrary.some(row=>(row.colors||[]).includes('#123456'));
+    const oldZone={...guiStudioPieceData(piece).zone};
+    const defaultZone=guiStudioDefaultZoneForMeta(GUI_STUDIO_PIECES[piece]);
+    guiStudioPieceData(piece).zone={w:192,h:144};
+    renderGuiStudioOptionsBar();
+    renderGuiStudioActiveZone();
+    const lockedZone=guiStudioActiveZone();
+    const zoneWidthInput=$('#guiStudioOptionsBar [data-tool-option="zoneWidth"]');
+    const zoneHeightInput=$('#guiStudioOptionsBar [data-tool-option="zoneHeight"]');
+    checks.activeZoneLocked=lockedZone.w===defaultZone.w&&lockedZone.h===defaultZone.h&&oldZone.w===defaultZone.w&&lockedZone.w!==192&&lockedZone.h!==144;
+    checks.zoneInputsLocked=zoneWidthInput?.disabled===true&&zoneHeightInput?.disabled===true&&Number(zoneWidthInput?.value)===defaultZone.w&&Number(zoneHeightInput?.value)===defaultZone.h;
+    checks.allTextureZonesLocked=Object.entries(GUI_STUDIO_PIECES).every(([name,meta])=>{
+      const expected=guiStudioDefaultZoneForMeta(meta);
+      const actual=sanitizeGuiStudioPieceZone({w:1,h:1},meta);
+      return actual.w===expected.w&&actual.h===expected.h&&actual.w===Math.ceil(Number(meta.bounds?.w)||actual.w)&&actual.h===Math.ceil(Number(meta.bounds?.h)||actual.h);
+    });
+    setGuiStudioFrameZoom(20);
+    checks.zoom2000=guiStudioFrameZoom===20&&$('#guiStudioCanvasFitBtn')?.textContent?.trim()==='2000%';
+    const sourceButtons=$$('[data-gui-piece]');
+    checks.sourceTextureSelection=selectedGuiStudioPiece()===piece&&sourceButtons.some(btn=>btn.dataset.guiPiece===piece&&btn.classList.contains('active'));
+    const shell=$('.gui-studio-shell');
+    const createScreen=$('.gui-studio-create-screen');
+    const createChildren=createScreen?['.gui-studio-sketch-tools','.gui-studio-sketch-create-main','.gui-studio-sketch-side','.gui-studio-palette-strip','.gui-studio-sketch-pieces'].map(sel=>createScreen.querySelector(sel)).filter(Boolean):[];
+    const currentNarrow=typeof matchMedia==='function'&&matchMedia('(max-width:1100px)').matches;
+    const responsiveCreateRule=[...document.styleSheets].some(sheet=>{
+      let rules=[];
+      try{rules=[...(sheet.cssRules||[])];}catch(_err){return false;}
+      return rules.some(rule=>{
+        const condition=String(rule.conditionText||'').replace(/\s+/g,'');
+        const text=String(rule.cssText||'');
+        return condition.includes('max-width:1100px')&&text.includes('gui-studio-create-screen')&&(text.includes('flex-direction:column')||text.includes('grid-template-columns: 1fr'));
+      });
+    });
+    const childRects=createChildren.map(el=>el.getBoundingClientRect()).filter(rect=>rect.width>0&&rect.height>0);
+    const childOverlapFree=childRects.every((a,index)=>childRects.slice(index+1).every(b=>a.right<=b.left+1||b.right<=a.left+1||a.bottom<=b.top+1||b.bottom<=a.top+1));
+    const shellRect=shell?.getBoundingClientRect();
+    const shellContainsChildren=!!shellRect&&childRects.every(rect=>rect.left>=shellRect.left-2&&rect.right<=shellRect.right+2);
+    const currentNarrowApplied=!currentNarrow||(getComputedStyle(createScreen).display==='flex'&&getComputedStyle(createScreen).flexDirection==='column');
+    checks.narrowStackingOk=responsiveCreateRule&&currentNarrowApplied&&(!currentNarrow||childOverlapFree)&&shellContainsChildren;
+    result={
+      ok:Object.values(checks).every(Boolean),
+      checks,
+      launchDetails,
+      narrowStackingDetails:{responsiveCreateRule,currentNarrow,currentNarrowApplied,childOverlapFree,shellContainsChildren},
+      layerCount:guiStudioPieceData(piece).layers.length,
+      sourceButtonCount:sourceButtons.length,
+      createChildCount:createChildren.length,
+      shellVisible:!!shell&&shell.getBoundingClientRect().width>0
+    };
+  }finally{
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    if(before.paletteRaw===null)localStorage.removeItem(GUI_STUDIO_PALETTE_KEY);
+    else localStorage.setItem(GUI_STUDIO_PALETTE_KEY,before.paletteRaw);
+    if(before.activeTab===null)localStorage.removeItem('ql.activeTab');
+    else localStorage.setItem('ql.activeTab',before.activeTab);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    guiStudioDraft=before.draft;
+    guiStudioDraftScopes=before.scopes;
+    autosaveEnabled=before.autosaveEnabled;
+    invalidateGuiStudioAllPreviews();
+    closeGuiStudio();
+    if(before.modalOpen){
+      openGuiStudio(before.modalTarget);
+      setGuiStudioMode(before.modalMode);
+    }
+    renderFileList();
+    if(currentFile)renderMain();
+    else renderMain();
+    renderValidation();
+    refreshOpenExportPreview();
+  }
+  result.restoredProject=currentFile===before.currentFile&&mode===before.mode;
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw&&localStorage.getItem(GUI_STUDIO_PALETTE_KEY)===before.paletteRaw;
+  return result;
+}
+window.questlogRunGuiStudioCreateSmokeSelfTest=questlogRunGuiStudioCreateSmokeSelfTest;
+async function questlogRunGuiStudioPerformanceSelfTest(){
+  const before={
+    draft:cloneGuiStudioDraft(),
+    scopes:cloneGuiStudioDraft(guiStudioDraftScopes),
+    modalOpen:$('#guiStudioModal')?.classList.contains('open')||false,
+    modalTarget:guiStudioModalTarget(),
+    modalMode:$('#guiStudioModal')?.dataset.mode||'create',
+    previewHtml:$('#questPreviewModalBody')?.innerHTML||''
+  };
+  const checks={};
+  try{
+    checks.previewWarmScheduler=typeof scheduleGuiStudioPreviewWarm==='function';
+    checks.thumbRenderCoalescing=typeof guiStudioQueuePieceThumbRender==='function';
+    checks.hiddenPreviewCulling=typeof questlogShouldRenderHiddenPreviewSurface==='function';
+    openGuiStudio('quest-menu');
+    setGuiStudioMode('create');
+    setGuiStudioPiece('Quest Main');
+    renderGuiStudioPieceThumbs({forceRefresh:false});
+    renderGuiStudioPieceThumbs({forceRefresh:true});
+    checks.thumbCallsCoalesced=!!guiStudioThumbRenderFrame&&guiStudioThumbRenderPending?.forceRefresh===true;
+    guiStudioPiecePreviewCache.clear();
+    guiStudioDirtyPreviewPieces.add('Quest Main');
+    checks.previewWarmScheduled=scheduleGuiStudioPreviewWarm(['Quest Main'],{forceRefresh:true})===true;
+    await new Promise(resolve=>setTimeout(resolve,80));
+    checks.previewWarmCached=guiStudioPiecePreviewCache.has('Quest Main')&&!guiStudioDirtyPreviewPieces.has('Quest Main');
+    const previewBody=$('#questPreviewModalBody');
+    const previewModal=$('#questPreviewModal');
+    const sentinel='<div data-performance-sentinel="1">closed preview</div>';
+    if(previewBody)previewBody.innerHTML=sentinel;
+    previewModal?.classList.remove('open');
+    renderOpenQuestPreviewModal();
+    checks.closedQuestPreviewSkipped=!previewBody||previewBody.innerHTML===sentinel;
+  }finally{
+    guiStudioDraft=before.draft;
+    guiStudioDraftScopes=before.scopes;
+    invalidateGuiStudioAllPreviews();
+    closeGuiStudio();
+    if(before.previewHtml&&$('#questPreviewModalBody'))$('#questPreviewModalBody').innerHTML=before.previewHtml;
+    if(before.modalOpen){
+      openGuiStudio(before.modalTarget);
+      setGuiStudioMode(before.modalMode);
+    }
+  }
+  return {ok:Object.values(checks).every(Boolean),checks};
+}
+window.questlogRunGuiStudioPerformanceSelfTest=questlogRunGuiStudioPerformanceSelfTest;
+async function questlogRunIdSpaceHelperSelfTest(){
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode
+  };
+  let result=null;
+  const testInput=(selector,value,expected)=>{
+    const input=document.querySelector(selector);
+    if(!input)return {selector,value,expected,actual:null,found:false,ok:false};
+    input.value=value;
+    if(input.setSelectionRange)input.setSelectionRange(value.length,value.length);
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    return {selector,value,expected,actual:input.value,found:true,ok:input.value===expected};
+  };
+  try{
+    const quest='__id_space_helper_selftest.json';
+    quests={[quest]:{
+      ...defQ(),
+      title:'ID space helper selftest',
+      chapter:'questlog:starter chapter',
+      icon:{item:'minecraft:book'},
+      completed_sound:'minecraft:block.note block.pling',
+      triggered_sound:'minecraft:item.trident.hit ground',
+      requirements:[{type:'questlog:read',quest:'questlog:starter quest'}],
+      objectives:[
+        {type:'questlog:block_interact',block:'minecraft:oak planks',item:'minecraft:stick'},
+        {type:'questlog:entity_kill',entity:'minecraft:zombie'},
+        {type:'questlog:item_obtain',item:'minecraft:iron ingot'},
+        {type:'questlog:visit_biome',biome:'minecraft:dark forest'},
+        {type:'questlog:visit_dimension',dimension:'minecraft:the nether'},
+        {type:'questlog:visit_structure',structure:'minecraft:village plains'},
+        {type:'questlog:enchant',enchantment:'minecraft:sharpness',item:'minecraft:iron sword'},
+        {type:'questlog:effect_added',effect:'minecraft:fire resistance'},
+        {type:'questlog:quest_complete',quest:'questlog:other quest'},
+        {type:'questlog:advancement',advancement:'minecraft:story/mine stone'}
+      ],
+      rewards:[
+        {type:'questlog:item',item:'minecraft:gold ingot'},
+        {type:'questlog:loot_table',loot_table:'minecraft:chests/spawn bonus chest',icon:'minecraft:chest',claim_sound:'minecraft:entity.item pickup'}
+      ]
+    }};
+    chapters={};
+    fileMeta={};
+    ensureFileMeta();
+    currentFile=quest;
+    mode='quest';
+    renderFileList();
+    renderMain();
+    const checks=[
+      testInput('[data-r="icon-itemv"]','minecraft:iron ingot','minecraft:iron_ingot'),
+      testInput('[data-r="icon-strv"]','minecraft:gold ingot','minecraft:gold_ingot'),
+      testInput('#qf_completed_sound','minecraft:block.note block.pling','minecraft:block.note_block.pling'),
+      testInput('#qf_triggered_sound','minecraft:item.trident hit ground','minecraft:item.trident_hit_ground'),
+      testInput('.obj-read-quest','questlog:starter quest','questlog:starter_quest'),
+      testInput('.obj-block','minecraft:oak planks','minecraft:oak_planks'),
+      testInput('.obj-bitem','minecraft:wooden shovel','minecraft:wooden_shovel'),
+      testInput('.obj-entity','minecraft:zombie villager','minecraft:zombie_villager'),
+      testInput('.obj-item','minecraft:iron ingot','minecraft:iron_ingot'),
+      testInput('.obj-biome','minecraft:dark forest','minecraft:dark_forest'),
+      testInput('.obj-dim','minecraft:the nether','minecraft:the_nether'),
+      testInput('.obj-structure','minecraft:village plains','minecraft:village_plains'),
+      testInput('.obj-ench','minecraft:fire aspect','minecraft:fire_aspect'),
+      testInput('.obj-effect','minecraft:fire resistance','minecraft:fire_resistance'),
+      testInput('.obj-quest','questlog:other quest','questlog:other_quest'),
+      testInput('.obj-adv','minecraft:story/mine stone','minecraft:story/mine_stone'),
+      testInput('.rw-item','minecraft:gold ingot','minecraft:gold_ingot'),
+      testInput('.rw-loot','minecraft:chests/spawn bonus chest','minecraft:chests/spawn_bonus_chest'),
+      testInput('.rw-sound','minecraft:entity.item pickup','minecraft:entity.item_pickup')
+    ];
+    const searchBefore='create mod';
+    const search=document.querySelector('#modSupportSearch');
+    if(search){
+      search.value=searchBefore;
+      search.dispatchEvent(new Event('input',{bubbles:true}));
+    }
+    result={
+      ok:checks.every(x=>x.ok)&&(!search||search.value===searchBefore),
+      checks,
+      modSupportSearchPreserved:!search||search.value===searchBefore,
+      editableModIdFields:0
+    };
+  }finally{
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    renderFileList();
+    renderMain();
+    refreshOpenExportPreview();
+  }
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw;
+  return result;
+}
+window.questlogRunIdSpaceHelperSelfTest=questlogRunIdSpaceHelperSelfTest;
+async function questlogRunModSupportControlsSelfTest(){
+  const before={
+    enabled:[...enabledModSuggestions],
+    target:modSuggestionTarget,
+    search:modSupportSearch,
+    sort:modSupportSort,
+    enabledRaw:localStorage.getItem(MOD_SUGGESTION_ENABLED_KEY),
+    targetRaw:localStorage.getItem(MOD_SUGGESTION_VERSION_KEY),
+    sortRaw:localStorage.getItem(MOD_SUGGESTION_SORT_KEY),
+    settingsOpen:$('#settingsMenu')?.classList.contains('open')||false,
+    activePref:[...$$('.preferences-nav-item.active')].map(btn=>btn.dataset.prefTab).find(Boolean)||''
+  };
+  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  const rowState=()=>[...document.querySelectorAll('#modSupportList .mod-pack-row')].map(row=>{
+    const box=row.querySelector('.mod-pack-toggle');
+    return {
+      text:(row.textContent||'').replace(/\s+/g,' ').trim(),
+      name:(row.querySelector('.mod-pack-name')?.textContent||'').trim(),
+      category:(window.MOD_ID_PACKS?.packs||[]).find(pack=>pack.id===box?.value)?.category||'',
+      id:box?.value||'',
+      disabled:!!box?.disabled,
+      checked:!!box?.checked,
+      rowHeight:row.getBoundingClientRect().height,
+      rowTop:row.getBoundingClientRect().top,
+      rowBottom:row.getBoundingClientRect().bottom,
+      rowLeft:row.getBoundingClientRect().left,
+      contentHeight:row.scrollHeight,
+      overflowX:row.scrollWidth-row.clientWidth
+    };
+  });
+  const overlappingRows=(rows)=>rows.filter((row,index)=>{
+    if(index===0)return false;
+    return rows.slice(0,index).some(prev=>Math.abs(prev.rowLeft-row.rowLeft)<5&&row.rowTop+1<prev.rowBottom);
+  });
+  const listInsideCard=()=>{
+    const list=$('#modSupportList'),card=$('#preferencesModSupport');
+    if(!list||!card)return false;
+    return list.getBoundingClientRect().bottom<=card.getBoundingClientRect().bottom+1;
+  };
+  const renderFor=(search='',sort='available')=>{
+    modSupportSearch=search;
+    modSupportSort=sort;
+    renderModSupportControls();
+    return rowState();
+  };
+  let result=null;
+  try{
+    openPersonalizationModal();
+    setPreferenceTab('mod',false);
+    await wait(40);
+    modSuggestionTarget='1.21.1';
+    enabledModSuggestions=new Set();
+    refreshKnownIds();
+    let rows=renderFor('', 'available');
+    const searchBox=$('#preferencesModSupport .mod-support-search-box');
+    const searchBoxChildren=[...(searchBox?.children||[])];
+    const searchBoxButtons=[...(searchBox?.querySelectorAll('button')||[])].map(button=>button.id);
+    const searchBoxHasSearchIcon=searchBoxChildren.some(child=>child.tagName?.toLowerCase()==='svg');
+    const modSearchControlsInline=!!searchBox
+      && !searchBoxHasSearchIcon
+      && !$('#modSupportSearchClear')
+      && searchBox.contains($('#modSupportSearch'))
+      && searchBoxButtons.length===3
+      && searchBoxButtons[0]==='modSupportSortButton'
+      && searchBoxButtons.includes('modSupportSelectAllBtn')
+      && searchBoxButtons.includes('modSupportClearAllBtn');
+    const packs=Array.isArray(window.MOD_ID_PACKS?.packs)?window.MOD_ID_PACKS.packs:[];
+    const requested=packs.filter(pack=>pack.verificationStatus==='requested');
+    const available=packs.filter(pack=>modPackSupportsTarget(pack)&&modPackDataCount(pack)>0);
+    const comfortsPack=packs.find(pack=>pack.id==='comforts');
+    const comfortsIds=registryRows(comfortsPack,'items').map(row=>row.id);
+    const comfortsDataOk=!!comfortsPack&&modPackSupportsTarget(comfortsPack)&&modPackDataCount(comfortsPack)===33&&
+      comfortsIds.includes('comforts:rope_and_nail')&&comfortsIds.includes('comforts:sleeping_bag_white')&&comfortsIds.includes('comforts:hammock_white');
+    const naturesCompassPack=packs.find(pack=>pack.id==='natures_compass');
+    const naturesCompassIds=registryRows(naturesCompassPack,'items').map(row=>row.id);
+    const naturesCompassDataOk=!!naturesCompassPack&&modPackSupportsTarget(naturesCompassPack)&&modPackDataCount(naturesCompassPack)===1&&
+      naturesCompassPack.modIds?.includes('naturescompass')&&naturesCompassIds.includes('naturescompass:naturescompass');
+    const sleepTightPack=packs.find(pack=>pack.id==='sleep_tight');
+    const sleepTightItems=registryRows(sleepTightPack,'items').map(row=>row.id);
+    const sleepTightBlocks=registryRows(sleepTightPack,'blocks').map(row=>row.id);
+    const sleepTightEntities=registryRows(sleepTightPack,'entities').map(row=>row.id);
+    const sleepTightDataOk=!!sleepTightPack&&modPackSupportsTarget(sleepTightPack)&&modPackDataCount(sleepTightPack)===23&&
+      sleepTightPack.modIds?.includes('sleep_tight')&&sleepTightBlocks.includes('sleep_tight:hammock_white')&&
+      sleepTightBlocks.includes('sleep_tight:night_bag')&&sleepTightItems.includes('sleep_tight:bedbug_eggs')&&
+      sleepTightEntities.includes('sleep_tight:bedbug');
+    const additionalAdditionsPack=packs.find(pack=>pack.id==='additional_additions');
+    const additionalAdditionsItems=registryRows(additionalAdditionsPack,'items').map(row=>row.id);
+    const additionalAdditionsBlocks=registryRows(additionalAdditionsPack,'blocks').map(row=>row.id);
+    const additionalAdditionsEntities=registryRows(additionalAdditionsPack,'entities').map(row=>row.id);
+    const additionalAdditionsDataOk=!!additionalAdditionsPack&&modPackSupportsTarget(additionalAdditionsPack)&&modPackDataCount(additionalAdditionsPack)===87&&
+      additionalAdditionsPack.modIds?.includes('additionaladditions')&&
+      additionalAdditionsBlocks.includes('additionaladditions:tinted_redstone_lamp')&&
+      additionalAdditionsBlocks.includes('additionaladditions:lotus_lily')&&
+      additionalAdditionsItems.includes('additionaladditions:pocket_jukebox')&&
+      additionalAdditionsItems.includes('additionaladditions:rose_gold_spear')&&
+      additionalAdditionsEntities.includes('additionaladditions:glow_stick');
+    const ecologicsPack=packs.find(pack=>pack.id==='ecologics');
+    const ecologicsBlocks=registryRows(ecologicsPack,'blocks').map(row=>row.id);
+    const ecologicsItems=registryRows(ecologicsPack,'items').map(row=>row.id);
+    const ecologicsEntities=registryRows(ecologicsPack,'entities').map(row=>row.id);
+    const ecologicsSounds=registryRows(ecologicsPack,'sounds').map(row=>row.id);
+    const ecologicsDataOk=!!ecologicsPack&&modPackSupportsTarget(ecologicsPack)&&modPackDataCount(ecologicsPack)===141&&
+      ecologicsPack.modIds?.includes('ecologics')&&ecologicsBlocks.includes('ecologics:coconut_log')&&
+      ecologicsBlocks.includes('ecologics:moss_layer')&&ecologicsItems.includes('ecologics:coconut_slice')&&
+      ecologicsEntities.includes('ecologics:penguin')&&ecologicsSounds.includes('ecologics:entity.squirrel.ambient');
+    const betterArcheologyPack=packs.find(pack=>pack.id==='better_archeology');
+    const betterArcheologyBlocks=registryRows(betterArcheologyPack,'blocks').map(row=>row.id);
+    const betterArcheologyItems=registryRows(betterArcheologyPack,'items').map(row=>row.id);
+    const betterArcheologySounds=registryRows(betterArcheologyPack,'sounds').map(row=>row.id);
+    const betterArcheologyDataOk=!!betterArcheologyPack&&modPackSupportsTarget(betterArcheologyPack)&&modPackDataCount(betterArcheologyPack)===106&&
+      betterArcheologyPack.modIds?.includes('betterarcheology')&&
+      betterArcheologyBlocks.includes('betterarcheology:archeology_table')&&
+      betterArcheologyBlocks.includes('betterarcheology:suspicious_red_sand')&&
+      betterArcheologyItems.includes('betterarcheology:diamond_brush')&&
+      betterArcheologyItems.includes('betterarcheology:unidentified_artifact')&&
+      betterArcheologySounds.includes('betterarcheology:swings');
+    const naturesSpiritPack=packs.find(pack=>pack.id==='natures_spirit');
+    const naturesSpiritBlocks=registryRows(naturesSpiritPack,'blocks').map(row=>row.id);
+    const naturesSpiritItems=registryRows(naturesSpiritPack,'items').map(row=>row.id);
+    const naturesSpiritBiomes=registryRows(naturesSpiritPack,'biomes').map(row=>row.id);
+    const naturesSpiritSounds=registryRows(naturesSpiritPack,'sounds').map(row=>row.id);
+    const naturesSpiritDataOk=!!naturesSpiritPack&&modPackSupportsTarget(naturesSpiritPack)&&modPackDataCount(naturesSpiritPack)===1544&&
+      naturesSpiritPack.modIds?.includes('natures_spirit')&&
+      naturesSpiritBlocks.includes('natures_spirit:aspen_log')&&
+      naturesSpiritItems.includes('natures_spirit:aspen_boat')&&
+      naturesSpiritItems.includes('natures_spirit:maple_chest_boat')&&
+      naturesSpiritBiomes.includes('natures_spirit:redwood_forest')&&
+      naturesSpiritSounds.includes('natures_spirit:music.overworld.redwood');
+    const exposurePack=packs.find(pack=>pack.id==='exposure');
+    const exposureBlocks=registryRows(exposurePack,'blocks').map(row=>row.id);
+    const exposureItems=registryRows(exposurePack,'items').map(row=>row.id);
+    const exposureEntities=registryRows(exposurePack,'entities').map(row=>row.id);
+    const exposureSounds=registryRows(exposurePack,'sounds').map(row=>row.id);
+    const exposureDataOk=!!exposurePack&&modPackSupportsTarget(exposurePack)&&modPackDataCount(exposurePack)===61&&
+      exposurePack.modIds?.includes('exposure')&&
+      exposureBlocks.includes('exposure:lightroom')&&
+      exposureItems.includes('exposure:camera')&&
+      exposureItems.includes('exposure:interplanar_projector')&&
+      exposureEntities.includes('exposure:camera_stand')&&
+      exposureSounds.includes('exposure:item.camera.shutter_open');
+    const wayfinderPack=packs.find(pack=>pack.id==='wayfinder');
+    const wayfinderBlocks=registryRows(wayfinderPack,'blocks').map(row=>row.id);
+    const wayfinderItems=registryRows(wayfinderPack,'items').map(row=>row.id);
+    const wayfinderEntities=registryRows(wayfinderPack,'entities').map(row=>row.id);
+    const wayfinderSounds=registryRows(wayfinderPack,'sounds').map(row=>row.id);
+    const wayfinderDataOk=!!wayfinderPack&&modPackSupportsTarget(wayfinderPack)&&modPackDataCount(wayfinderPack)===20&&
+      wayfinderPack.modIds?.includes('wayfinder')&&
+      wayfinderBlocks.includes('wayfinder:wayfinder_heart')&&
+      wayfinderItems.includes('wayfinder:wayfinder_spawn_egg')&&
+      wayfinderEntities.includes('wayfinder:wayfinder')&&
+      wayfinderSounds.includes('wayfinder:wayfinder.idle0');
+    const spelunkersCharmPack=packs.find(pack=>pack.id==='spelunkers_charm');
+    const spelunkersCharmBlocks=registryRows(spelunkersCharmPack,'blocks').map(row=>row.id);
+    const spelunkersCharmItems=registryRows(spelunkersCharmPack,'items').map(row=>row.id);
+    const spelunkersCharmEntities=registryRows(spelunkersCharmPack,'entities').map(row=>row.id);
+    const spelunkersCharmBiomes=registryRows(spelunkersCharmPack,'biomes').map(row=>row.id);
+    const spelunkersCharmSounds=registryRows(spelunkersCharmPack,'sounds').map(row=>row.id);
+    const spelunkersCharmDataOk=!!spelunkersCharmPack&&modPackSupportsTarget(spelunkersCharmPack)&&modPackDataCount(spelunkersCharmPack)===214&&
+      spelunkersCharmPack.modIds?.includes('spelunkers_charm')&&
+      spelunkersCharmBlocks.includes('spelunkers_charm:amethyst_bricks')&&
+      spelunkersCharmItems.includes('spelunkers_charm:rock')&&
+      spelunkersCharmEntities.includes('spelunkers_charm:boulder')&&
+      spelunkersCharmBiomes.includes('spelunkers_charm:spider_cave')&&
+      spelunkersCharmSounds.includes('spelunkers_charm:geyser_charge');
+    const whalebornePack=packs.find(pack=>pack.id==='whaleborne');
+    const whaleborneBlocks=registryRows(whalebornePack,'blocks').map(row=>row.id);
+    const whaleborneItems=registryRows(whalebornePack,'items').map(row=>row.id);
+    const whaleborneEntities=registryRows(whalebornePack,'entities').map(row=>row.id);
+    const whaleborneSounds=registryRows(whalebornePack,'sounds').map(row=>row.id);
+    const whaleborneDataOk=!!whalebornePack&&modPackSupportsTarget(whalebornePack)&&modPackDataCount(whalebornePack)===27&&
+      whalebornePack.modIds?.includes('whaleborne')&&
+      whaleborneBlocks.includes('whaleborne:barnacle')&&
+      whaleborneItems.includes('whaleborne:anchor')&&
+      whaleborneEntities.includes('whaleborne:hullback')&&
+      whaleborneSounds.includes('whaleborne:entity.hullback.ambient');
+    const immersiveEnchantingPack=packs.find(pack=>pack.id==='immersive_enchanting');
+    const immersiveEnchantingBlocks=registryRows(immersiveEnchantingPack,'blocks').map(row=>row.id);
+    const immersiveEnchantingItems=registryRows(immersiveEnchantingPack,'items').map(row=>row.id);
+    const immersiveEnchantingSounds=registryRows(immersiveEnchantingPack,'sounds').map(row=>row.id);
+    const immersiveEnchantingDataOk=!!immersiveEnchantingPack&&modPackSupportsTarget(immersiveEnchantingPack)&&modPackDataCount(immersiveEnchantingPack)===7&&
+      immersiveEnchantingPack.modIds?.includes('immersiveenchanting')&&
+      immersiveEnchantingBlocks.includes('immersiveenchanting:creative_bookshelf')&&
+      immersiveEnchantingItems.includes('immersiveenchanting:ancient_book')&&
+      immersiveEnchantingSounds.includes('immersiveenchanting:arcane_memories');
+    const selfexpressionPack=packs.find(pack=>pack.id==='selfexpression');
+    const selfexpressionItems=registryRows(selfexpressionPack,'items').map(row=>row.id);
+    const selfexpressionDataOk=!!selfexpressionPack&&modPackSupportsTarget(selfexpressionPack)&&modPackDataCount(selfexpressionPack)===877&&
+      selfexpressionPack.modIds?.includes('selfexpression')&&
+      selfexpressionItems.includes('selfexpression:akool_chestplate')&&
+      selfexpressionItems.includes('selfexpression:android_boots');
+    const tidePack=packs.find(pack=>pack.id==='tide');
+    const tideBlocks=registryRows(tidePack,'blocks').map(row=>row.id);
+    const tideItems=registryRows(tidePack,'items').map(row=>row.id);
+    const tideEntities=registryRows(tidePack,'entities').map(row=>row.id);
+    const tideSounds=registryRows(tidePack,'sounds').map(row=>row.id);
+    const tideDataOk=!!tidePack&&modPackSupportsTarget(tidePack)&&modPackDataCount(tidePack)===497&&
+      tidePack.modIds?.includes('tide')&&
+      tideBlocks.includes('tide:angling_table')&&
+      tideItems.includes('tide:abyss_angler_bucket')&&
+      tideEntities.includes('tide:abyss_angler')&&
+      tideSounds.includes('tide:fishing_reel');
+    const aquaculturePack=packs.find(pack=>pack.id==='aquaculture_2');
+    const aquacultureBlocks=registryRows(aquaculturePack,'blocks').map(row=>row.id);
+    const aquacultureItems=registryRows(aquaculturePack,'items').map(row=>row.id);
+    const aquacultureEntities=registryRows(aquaculturePack,'entities').map(row=>row.id);
+    const aquacultureSounds=registryRows(aquaculturePack,'sounds').map(row=>row.id);
+    const aquacultureDataOk=!!aquaculturePack&&modPackSupportsTarget(aquaculturePack)&&modPackDataCount(aquaculturePack)===191&&
+      aquaculturePack.modIds?.includes('aquaculture')&&
+      aquacultureBlocks.includes('aquaculture:tackle_box')&&
+      aquacultureItems.includes('aquaculture:neptunium_ingot')&&
+      aquacultureEntities.includes('aquaculture:arapaima')&&
+      aquacultureSounds.includes('aquaculture:fish_ambient');
+    const handcraftedPack=packs.find(pack=>pack.id==='handcrafted');
+    const handcraftedBlocks=registryRows(handcraftedPack,'blocks').map(row=>row.id);
+    const handcraftedItems=registryRows(handcraftedPack,'items').map(row=>row.id);
+    const handcraftedEntities=registryRows(handcraftedPack,'entities').map(row=>row.id);
+    const handcraftedSounds=registryRows(handcraftedPack,'sounds').map(row=>row.id);
+    const handcraftedDataOk=!!handcraftedPack&&modPackSupportsTarget(handcraftedPack)&&modPackDataCount(handcraftedPack)===556&&
+      handcraftedPack.modIds?.includes('handcrafted')&&
+      handcraftedBlocks.includes('handcrafted:acacia_bench')&&
+      handcraftedItems.includes('handcrafted:hammer')&&
+      handcraftedEntities.includes('handcrafted:fancy_painting')&&
+      handcraftedSounds.includes('handcrafted:hammer_wood');
+    const sophisticatedBackpacksPack=packs.find(pack=>pack.id==='sophisticated_backpacks');
+    const sophisticatedBackpacksBlocks=registryRows(sophisticatedBackpacksPack,'blocks').map(row=>row.id);
+    const sophisticatedBackpacksItems=registryRows(sophisticatedBackpacksPack,'items').map(row=>row.id);
+    const sophisticatedBackpacksDataOk=!!sophisticatedBackpacksPack&&modPackSupportsTarget(sophisticatedBackpacksPack)&&modPackDataCount(sophisticatedBackpacksPack)===65&&
+      sophisticatedBackpacksPack.modIds?.includes('sophisticatedbackpacks')&&
+      sophisticatedBackpacksBlocks.includes('sophisticatedbackpacks:backpack')&&
+      sophisticatedBackpacksItems.includes('sophisticatedbackpacks:advanced_alchemy_upgrade');
+    const securitycraftPack=packs.find(pack=>pack.id==='securitycraft');
+    const securitycraftBlocks=registryRows(securitycraftPack,'blocks').map(row=>row.id);
+    const securitycraftItems=registryRows(securitycraftPack,'items').map(row=>row.id);
+    const securitycraftEntities=registryRows(securitycraftPack,'entities').map(row=>row.id);
+    const securitycraftSounds=registryRows(securitycraftPack,'sounds').map(row=>row.id);
+    const securitycraftDataOk=!!securitycraftPack&&modPackSupportsTarget(securitycraftPack)&&modPackDataCount(securitycraftPack)===1292&&
+      securitycraftPack.modIds?.includes('securitycraft')&&
+      securitycraftBlocks.includes('securitycraft:alarm')&&
+      securitycraftItems.includes('securitycraft:admin_tool')&&
+      securitycraftEntities.includes('securitycraft:sentry')&&
+      securitycraftSounds.includes('securitycraft:alarm');
+    const relicsPack=packs.find(pack=>pack.id==='relics');
+    const relicsBlocks=registryRows(relicsPack,'blocks').map(row=>row.id);
+    const relicsItems=registryRows(relicsPack,'items').map(row=>row.id);
+    const relicsEntities=registryRows(relicsPack,'entities').map(row=>row.id);
+    const relicsSounds=registryRows(relicsPack,'sounds').map(row=>row.id);
+    const relicsDataOk=!!relicsPack&&modPackSupportsTarget(relicsPack)&&modPackDataCount(relicsPack)===65&&
+      relicsPack.modIds?.includes('relics')&&
+      relicsBlocks.includes('relics:phantom_block')&&
+      relicsItems.includes('relics:chorus_staff')&&
+      relicsEntities.includes('relics:falling_star')&&
+      relicsSounds.includes('relics:ability_cast');
+    const immersiveAircraftPack=packs.find(pack=>pack.id==='immersive_aircraft');
+    const immersiveAircraftItems=registryRows(immersiveAircraftPack,'items').map(row=>row.id);
+    const immersiveAircraftEntities=registryRows(immersiveAircraftPack,'entities').map(row=>row.id);
+    const immersiveAircraftSounds=registryRows(immersiveAircraftPack,'sounds').map(row=>row.id);
+    const immersiveAircraftDataOk=!!immersiveAircraftPack&&modPackSupportsTarget(immersiveAircraftPack)&&modPackDataCount(immersiveAircraftPack)===45&&
+      immersiveAircraftPack.modIds?.includes('immersive_aircraft')&&
+      immersiveAircraftItems.includes('immersive_aircraft:biplane')&&
+      immersiveAircraftEntities.includes('immersive_aircraft:airship')&&
+      immersiveAircraftSounds.includes('immersive_aircraft:propeller');
+    const packHasIds=(pack,kind,ids)=>ids.every(id=>registryRows(pack,kind).some(row=>row.id===id));
+    const modPackDataOk=(id,count,modId,expected)=>{
+      const pack=packs.find(item=>item.id===id);
+      return !!pack&&modPackSupportsTarget(pack)&&modPackDataCount(pack)===count&&pack.modIds?.includes(modId)&&
+        packHasIds(pack,'blocks',expected.blocks||[])&&packHasIds(pack,'items',expected.items||[])&&
+        packHasIds(pack,'entities',expected.entities||[])&&packHasIds(pack,'biomes',expected.biomes||[])&&
+        packHasIds(pack,'sounds',expected.sounds||[]);
+    };
+    const macawsFurnitureDataOk=modPackDataOk('macaws_furniture',1310,'mcwfurnitures',{
+      blocks:['mcwfurnitures:acacia_bookshelf'],
+      items:['mcwfurnitures:acacia_bookshelf'],
+      sounds:['mcwfurnitures:block.cabinet_open']
+    });
+    const macawsHolidaysDataOk=modPackDataOk('macaws_holidays',669,'mcwholidays',{
+      blocks:['mcwholidays:bat_doormat'],
+      items:['mcwholidays:bat_doormat']
+    });
+    const macawsWindowsDataOk=modPackDataOk('macaws_windows',631,'mcwwindows',{
+      blocks:['mcwwindows:acacia_blinds'],
+      items:['mcwwindows:acacia_blinds'],
+      sounds:['mcwwindows:block.blinds_close']
+    });
+    const macawsRoofsDataOk=modPackDataOk('macaws_roofs',1212,'mcwroofs',{
+      blocks:['mcwroofs:acacia_attic_roof'],
+      items:['mcwroofs:acacia_attic_roof']
+    });
+    const macawsDoorsDataOk=modPackDataOk('macaws_doors',506,'mcwdoors',{
+      blocks:['mcwdoors:acacia_bamboo_door'],
+      items:['mcwdoors:acacia_bamboo_door'],
+      sounds:['mcwdoors:block.garage']
+    });
+    const macawsFencesDataOk=modPackDataOk('macaws_fences',360,'mcwfences',{
+      blocks:['mcwfences:acacia_curved_gate'],
+      items:['mcwfences:acacia_curved_gate']
+    });
+    const macawsPathsDataOk=modPackDataOk('macaws_paths',630,'mcwpaths',{
+      blocks:['mcwpaths:acacia_planks_path'],
+      items:['mcwpaths:acacia_planks_path']
+    });
+    const macawsLightsDataOk=modPackDataOk('macaws_lights',282,'mcwlights',{
+      blocks:['mcwlights:acacia_tiki_torch'],
+      items:['mcwlights:acacia_tiki_torch'],
+      sounds:['mcwlights:block.light_switch']
+    });
+    const macawsStairsDataOk=modPackDataOk('macaws_stairs',448,'mcwstairs',{
+      blocks:['mcwstairs:acacia_balcony'],
+      items:['mcwstairs:acacia_balcony']
+    });
+    const macawsTrapdoorsDataOk=modPackDataOk('macaws_trapdoors',370,'mcwtrpdoors',{
+      blocks:['mcwtrpdoors:acacia_bamboo_trapdoor'],
+      items:['mcwtrpdoors:acacia_bamboo_trapdoor']
+    });
+    const macawsBridgesDataOk=modPackDataOk('macaws_bridges',291,'mcwbridges',{
+      blocks:['mcwbridges:acacia_bridge_pier'],
+      items:['mcwbridges:acacia_bridge_pier']
+    });
+    const macawsPaintingsRemovedOk=!packs.some(pack=>pack.id==='macaws_paintings');
+    const createCraftsAndAdditionsDataOk=modPackDataOk('create_crafts_and_additions',72,'createaddition',{
+      blocks:['createaddition:accumulator'],
+      items:['createaddition:bioethanol_bucket'],
+      sounds:['createaddition:electric_motor_buzz']
+    });
+    const createAeronauticsDataOk=modPackDataOk('create_aeronautics',116,'aeronautics',{
+      blocks:['aeronautics:adjustable_burner'],
+      items:['aeronautics:aviators_goggles'],
+      entities:['aeronautics:gust'],
+      sounds:['aeronautics:block.hot_air_burner.idle']
+    });
+    const createAeroworksDataOk=modPackDataOk('create_aeroworks',4,'aeroworks',{
+      blocks:['aeroworks:gyroscope'],
+      items:['aeroworks:joystick']
+    });
+    const mekanismDataOk=modPackDataOk('mekanism',598,'mekanism',{
+      blocks:['mekanism:advanced_bin'],
+      items:['mekanism:atomic_disassembler'],
+      entities:['mekanism:robit'],
+      sounds:['mekanism:item.flamethrower.active']
+    });
+    const immersiveEngineeringDataOk=modPackDataOk('immersive_engineering',1034,'immersiveengineering',{
+      blocks:['immersiveengineering:advanced_blast_furnace'],
+      items:['immersiveengineering:revolver'],
+      entities:['immersiveengineering:bulwark'],
+      sounds:['immersiveengineering:arc_furnace']
+    });
+    const incisionDataOk=modPackDataOk('incision',80,'twisted',{
+      blocks:['twisted:carrion'],
+      items:['twisted:carrion'],
+      entities:['twisted:unknown'],
+      biomes:['twisted:erodedyard']
+    });
+    const ironsSpellsDataOk=modPackDataOk('irons_spells',487,'irons_spellbooks',{
+      blocks:['irons_spellbooks:arcane_anvil'],
+      items:['irons_spellbooks:affinity_ring'],
+      entities:['irons_spellbooks:archevoker'],
+      sounds:['irons_spellbooks:abyssal_teleport']
+    });
+    const arsNouveauDataOk=modPackDataOk('ars_nouveau',598,'ars_nouveau',{
+      blocks:['ars_nouveau:agronomic_sourcelink'],
+      items:['ars_nouveau:air_essence'],
+      entities:['ars_nouveau:amethyst_golem'],
+      biomes:['ars_nouveau:archwood_forest'],
+      sounds:['ars_nouveau:aria_biblio']
+    });
+    const mysticalAgricultureDataOk=modPackDataOk('mystical_agriculture',318,'mysticalagriculture',{
+      blocks:['mysticalagriculture:awakened_supremium_block'],
+      items:['mysticalagriculture:awakened_supremium_axe']
+    });
+    const voidscapeDataOk=modPackDataOk('voidscape',7,'voidscape',{
+      blocks:['voidscape:moon_dust_block'],
+      items:['voidscape:moon_rocket_item'],
+      entities:['voidscape:moon_rocket'],
+      biomes:['voidscape:moon_plains']
+    });
+    const aetherDataOk=modPackDataOk('aether',577,'aether',{
+      blocks:['aether:aerogel'],
+      items:['aether:aechor_petal'],
+      entities:['aether:aerbunny'],
+      biomes:['aether:skyroot_forest'],
+      sounds:['aether:block.aether_portal.travel']
+    });
+    const mowziesMobsDataOk=modPackDataOk('mowzies_mobs',306,'mowziesmobs',{
+      blocks:['mowziesmobs:gong'],
+      items:['mowziesmobs:blowgun'],
+      entities:['mowziesmobs:bluff'],
+      sounds:['mowziesmobs:block.gong']
+    });
+    const undergardenDataOk=modPackDataOk('undergarden',733,'undergarden',{
+      blocks:['undergarden:ancient_root'],
+      items:['undergarden:ancient_helmet'],
+      entities:['undergarden:denizen'],
+      biomes:['undergarden:barren_abyss'],
+      sounds:['undergarden:ambient.abyss']
+    });
+    const bumblezoneDataOk=modPackDataOk('bumblezone',355,'the_bumblezone',{
+      blocks:['the_bumblezone:ancient_wax_bricks'],
+      items:['the_bumblezone:bee_bread'],
+      entities:['the_bumblezone:bee_queen'],
+      biomes:['the_bumblezone:crystal_canyon'],
+      sounds:['the_bumblezone:biomes.general_music']
+    });
+    const enderscapeDataOk=modPackDataOk('enderscape',895,'enderscape',{
+      blocks:['enderscape:alluring_magnia'],
+      items:['enderscape:blinklight'],
+      entities:['enderscape:drifter'],
+      biomes:['enderscape:celestial_grove'],
+      sounds:['enderscape:ambient.celestial_grove.loop']
+    });
+    const audited1201Packs=[
+      'alexscaves','alexsmobs','biomeswevegone',
+      'additional_additions','better_archeology','natures_spirit','ecologics','exposure',
+      'immersive_enchanting','selfexpression','sleep_tight','tide','whaleborne',
+      'sophisticated_backpacks','natures_compass','comforts','create_crafts_and_additions',
+      'aquaculture_2','securitycraft','mekanism','macaws_furniture',
+      'macaws_holidays','macaws_windows','macaws_roofs','macaws_doors','macaws_fences',
+      'macaws_paths','macaws_lights','macaws_stairs','macaws_trapdoors','macaws_bridges',
+      'immersive_engineering','relics','immersive_aircraft','handcrafted','irons_spells',
+      'ars_nouveau','mystical_agriculture','twilight_forest','mowzies_mobs','apotheosis',
+      'aether','ars_elemental','bumblezone','undergarden','blue_skies','ad_astra',
+      'mofus_better_end','deep_void','abyss_ii'
+    ];
+    const audited1211OnlyPacks=['create_aeronautics','create_aeroworks','spelunkers_charm','wayfinder','incision','voidscape','enderscape'];
+    const audited1201OnlyPacks=['alexscaves','blue_skies','ad_astra','mofus_better_end','deep_void','abyss_ii'];
+    const withTemporaryTarget=(target,fn)=>{
+      const oldTarget=modSuggestionTarget;
+      modSuggestionTarget=target;
+      try{return fn();}finally{modSuggestionTarget=oldTarget;}
+    };
+    const audited1201AvailabilityOk=withTemporaryTarget('1.20.1',()=>audited1201Packs.every(id=>{
+      const pack=packs.find(item=>item.id===id);
+      return !!pack&&modPackSupportsTarget(pack);
+    }));
+    const audited1211OnlyOk=withTemporaryTarget('1.20.1',()=>audited1211OnlyPacks.every(id=>{
+      const pack=packs.find(item=>item.id===id);
+      return !!pack&&!modPackSupportsTarget(pack);
+    }));
+    const audited1201OnlyOk=withTemporaryTarget('1.21.1',()=>audited1201OnlyPacks.every(id=>{
+      const pack=packs.find(item=>item.id===id);
+      return !!pack&&!modPackSupportsTarget(pack);
+    }));
+    const adAstraDataOk=withTemporaryTarget('1.20.1',()=>modPackDataOk('ad_astra',796,'ad_astra',{
+      blocks:['ad_astra:airlock'],
+      items:['ad_astra:oxygen_gear'],
+      entities:['ad_astra:tier_1_rocket'],
+      biomes:['ad_astra:lunar_wastelands'],
+      sounds:['ad_astra:rocket_launch']
+    }));
+    const mofusBetterEndDataOk=withTemporaryTarget('1.20.1',()=>modPackDataOk('mofus_better_end',769,'mofus_better_end_',{
+      blocks:['mofus_better_end_:blueblock'],
+      items:['mofus_better_end_:axe_fish_eggs'],
+      entities:['mofus_better_end_:sun_glider'],
+      biomes:['mofus_better_end_:root_archipelago'],
+      sounds:['mofus_better_end_:sunglider_roar']
+    }));
+    const blueSkiesDataOk=withTemporaryTarget('1.20.1',()=>modPackDataOk('blue_skies',1503,'blue_skies',{
+      blocks:['blue_skies:alchemy_table'],
+      items:['blue_skies:aquatic_arc'],
+      entities:['blue_skies:alchemist'],
+      biomes:['blue_skies:brightlands'],
+      sounds:['blue_skies:ambient.moonlit_reservoir.loop']
+    }));
+    const deepVoidDataOk=withTemporaryTarget('1.20.1',()=>modPackDataOk('deep_void',1697,'the_deep_void',{
+      blocks:['the_deep_void:ancient_deepslate'],
+      items:['the_deep_void:all_seeing_axe'],
+      entities:['the_deep_void:abductor'],
+      biomes:['the_deep_void:ashen_crags'],
+      sounds:['the_deep_void:abductor_ambient']
+    }));
+    const twilightForestDataOk=modPackDataOk('twilight_forest',1585,'twilightforest',{
+      blocks:['twilightforest:antibuilder'],
+      items:['twilightforest:alpha_yeti_fur'],
+      entities:['twilightforest:alpha_yeti'],
+      biomes:['twilightforest:clearing'],
+      sounds:['twilightforest:block.twilightforest.beanstalk.grow']
+    });
+    const apotheosisDataOk=modPackDataOk('apotheosis',48,'apotheosis',{
+      blocks:['apotheosis:augmenting_table'],
+      items:['apotheosis:boss_summoner'],
+      sounds:['apotheosis:invader_epic']
+    });
+    const arsElementalDataOk=modPackDataOk('ars_elemental',188,'ars_elemental',{
+      blocks:['ars_elemental:advanced_prism'],
+      items:['ars_elemental:air_bangle'],
+      entities:['ars_elemental:air_mage'],
+      biomes:['ars_elemental:blazing_forest']
+    });
+    const abyssIiDataOk=withTemporaryTarget('1.20.1',()=>modPackDataOk('abyss_ii',905,'theabyss',{
+      blocks:['theabyss:arcane_workbench'],
+      items:['theabyss:aberythe_axe'],
+      entities:['theabyss:abyssaur'],
+      biomes:['theabyss:blaru_forest'],
+      sounds:['theabyss:abyss_ambience']
+    }));
+    const pendingRows=rows.filter(row=>/pending source verification|Requested; source\/jar data still needs verification/.test(row.text));
+    const abyss1211Row=rows.find(row=>row.id==='abyss_ii');
+    const unsupportedRowsDoNotClaimData=!!abyss1211Row&&abyss1211Row.disabled&&
+      /Not available for Minecraft 1\.21\.1\./.test(abyss1211Row.text)&&
+      !/\d[\d,]* verified IDs available/.test(abyss1211Row.text);
+    const clippedRows=rows.filter(row=>row.rowHeight+1<row.contentHeight||row.overflowX>1);
+    const overlappedRows=overlappingRows(rows);
+    const listContained=listInsideCard();
+    const unavailableAfterAvailable=rows.findIndex(row=>{
+      const pack=packs.find(item=>item.id===row.id);
+      return !(pack&&modPackSupportsTarget(pack)&&modPackDataCount(pack)>0);
+    });
+    const availableBeforeUnavailable=unavailableAfterAvailable<0||rows.slice(0,unavailableAfterAvailable).every(row=>{
+      const pack=packs.find(item=>item.id===row.id);
+      return pack&&modPackSupportsTarget(pack)&&modPackDataCount(pack)>0;
+    });
+    const macawRows=renderFor('macaw','name');
+    const macawOnly=macawRows.length>0&&macawRows.every(row=>row.text.toLowerCase().includes('macaw'));
+    const macawPendingDisabled=macawRows.every(row=>row.disabled&&row.text.includes('pending source verification'));
+    const noMatchRows=renderFor('__definitely_no_mod__','name');
+    const noMatchOk=$('#modSupportList')?.textContent?.includes('No mod packs match that search.');
+    rows=renderFor('', 'category');
+    const categorySorted=rows.every((row,index)=>index===0||String(rows[index-1].category||'').localeCompare(row.category||'')<=0||String(rows[index-1].category||'')===String(row.category||''));
+    rows=renderFor('create','available');
+    const visibleAvailable=filteredModPacks().filter(pack=>modPackSupportsTarget(pack)&&modPackDataCount(pack)>0);
+    const macawPaintingsRow=macawRows.find(row=>row.id==='macaws_paintings');
+    const macawDataRows=macawRows.filter(row=>row.id!=='macaws_paintings');
+    const macawSearchOk=macawOnly&&macawDataRows.length===11&&
+      macawDataRows.every(row=>!row.disabled&&/verified IDs available/.test(row.text))&&
+      !macawPaintingsRow;
+    $('#modSupportSelectAllBtn')?.dispatchEvent(new Event('click',{bubbles:true}));
+    const selectedVisible=visibleAvailable.every(pack=>enabledModSuggestions.has(pack.id));
+    const selectedCountAfterSelect=[...enabledModSuggestions].length;
+    $('#modSupportClearAllBtn')?.dispatchEvent(new Event('click',{bubbles:true}));
+    const clearedVisible=visibleAvailable.every(pack=>!enabledModSuggestions.has(pack.id));
+    const pendingStillDisabled=requested.length===0?pendingRows.length===0:pendingRows.length>0&&pendingRows.every(row=>row.disabled);
+    const checks={
+      hasPacks:packs.length>0,
+      requestedRowsTracked:requested.length===0?pendingRows.length===0:pendingRows.length>=requested.length,
+      requestedRowsDisabled:pendingRows.every(row=>row.disabled),
+      rowsNotClipped:clippedRows.length===0,
+      rowsNotOverlapped:overlappedRows.length===0,
+      listStaysInsideCard:listContained,
+      unsupportedRowsDoNotClaimData,
+      searchFilters:macawSearchOk&&noMatchRows.length===0&&noMatchOk,
+      categorySortWorks:categorySorted,
+      availableSortWorks:available.length===0||availableBeforeUnavailable,
+      modSearchControlsInline,
+      comfortsDataLoaded:comfortsDataOk,
+      naturesCompassDataLoaded:naturesCompassDataOk,
+      sleepTightDataLoaded:sleepTightDataOk,
+      additionalAdditionsDataLoaded:additionalAdditionsDataOk,
+      ecologicsDataLoaded:ecologicsDataOk,
+      betterArcheologyDataLoaded:betterArcheologyDataOk,
+      naturesSpiritDataLoaded:naturesSpiritDataOk,
+      exposureDataLoaded:exposureDataOk,
+      wayfinderDataLoaded:wayfinderDataOk,
+      spelunkersCharmDataLoaded:spelunkersCharmDataOk,
+      whaleborneDataLoaded:whaleborneDataOk,
+      immersiveEnchantingDataLoaded:immersiveEnchantingDataOk,
+      selfexpressionDataLoaded:selfexpressionDataOk,
+      tideDataLoaded:tideDataOk,
+      aquacultureDataLoaded:aquacultureDataOk,
+      handcraftedDataLoaded:handcraftedDataOk,
+      sophisticatedBackpacksDataLoaded:sophisticatedBackpacksDataOk,
+      securitycraftDataLoaded:securitycraftDataOk,
+      relicsDataLoaded:relicsDataOk,
+      immersiveAircraftDataLoaded:immersiveAircraftDataOk,
+      macawsFurnitureDataLoaded:macawsFurnitureDataOk,
+      macawsHolidaysDataLoaded:macawsHolidaysDataOk,
+      macawsWindowsDataLoaded:macawsWindowsDataOk,
+      macawsRoofsDataLoaded:macawsRoofsDataOk,
+      macawsDoorsDataLoaded:macawsDoorsDataOk,
+      macawsFencesDataLoaded:macawsFencesDataOk,
+      macawsPathsDataLoaded:macawsPathsDataOk,
+      macawsLightsDataLoaded:macawsLightsDataOk,
+      macawsStairsDataLoaded:macawsStairsDataOk,
+      macawsTrapdoorsDataLoaded:macawsTrapdoorsDataOk,
+      macawsBridgesDataLoaded:macawsBridgesDataOk,
+      macawsPaintingsRemoved:macawsPaintingsRemovedOk,
+      createCraftsAndAdditionsDataLoaded:createCraftsAndAdditionsDataOk,
+      createAeronauticsDataLoaded:createAeronauticsDataOk,
+      createAeroworksDataLoaded:createAeroworksDataOk,
+      mekanismDataLoaded:mekanismDataOk,
+      immersiveEngineeringDataLoaded:immersiveEngineeringDataOk,
+      incisionDataLoaded:incisionDataOk,
+      ironsSpellsDataLoaded:ironsSpellsDataOk,
+      arsNouveauDataLoaded:arsNouveauDataOk,
+      mysticalAgricultureDataLoaded:mysticalAgricultureDataOk,
+      voidscapeDataLoaded:voidscapeDataOk,
+      aetherDataLoaded:aetherDataOk,
+      mowziesMobsDataLoaded:mowziesMobsDataOk,
+      undergardenDataLoaded:undergardenDataOk,
+      bumblezoneDataLoaded:bumblezoneDataOk,
+      enderscapeDataLoaded:enderscapeDataOk,
+      adAstra1201DataLoaded:adAstraDataOk,
+      mofusBetterEnd1201DataLoaded:mofusBetterEndDataOk,
+      blueSkies1201DataLoaded:blueSkiesDataOk,
+      deepVoid1201DataLoaded:deepVoidDataOk,
+      twilightForestDataLoaded:twilightForestDataOk,
+      apotheosisDataLoaded:apotheosisDataOk,
+      arsElementalDataLoaded:arsElementalDataOk,
+      abyssIi1201DataLoaded:abyssIiDataOk,
+      audited1201Availability:audited1201AvailabilityOk,
+      audited1211OnlyAvailability:audited1211OnlyOk,
+      audited1201OnlyAvailability:audited1201OnlyOk,
+      selectShownWorks:visibleAvailable.length===0||selectedVisible,
+      clearShownWorks:visibleAvailable.length===0||clearedVisible,
+      pendingRemainsDisabled:pendingStillDisabled
+    };
+    result={ok:Object.values(checks).every(Boolean),checks,counts:{
+      totalPacks:packs.length,
+      requested:requested.length,
+      available:available.length,
+      macawRows:macawRows.length,
+      visibleAvailableForCreate:visibleAvailable.length,
+      selectedCountAfterSelect
+    },clippedRows:clippedRows.map(row=>({id:row.id,name:row.name,rowHeight:row.rowHeight,contentHeight:row.contentHeight,overflowX:row.overflowX})),overlappedRows:overlappedRows.map(row=>({id:row.id,name:row.name,rowTop:row.rowTop,rowBottom:row.rowBottom,rowLeft:row.rowLeft})),listContained};
+  }finally{
+    enabledModSuggestions=new Set(before.enabled);
+    modSuggestionTarget=before.target;
+    modSupportSearch=before.search;
+    modSupportSort=before.sort;
+    if(before.enabledRaw===null)localStorage.removeItem(MOD_SUGGESTION_ENABLED_KEY);
+    else localStorage.setItem(MOD_SUGGESTION_ENABLED_KEY,before.enabledRaw);
+    if(before.targetRaw===null)localStorage.removeItem(MOD_SUGGESTION_VERSION_KEY);
+    else localStorage.setItem(MOD_SUGGESTION_VERSION_KEY,before.targetRaw);
+    if(before.sortRaw===null)localStorage.removeItem(MOD_SUGGESTION_SORT_KEY);
+    else localStorage.setItem(MOD_SUGGESTION_SORT_KEY,before.sortRaw);
+    refreshKnownIds();
+    renderModSupportControls();
+    if(before.settingsOpen){
+      openPersonalizationModal();
+      setPreferenceTab(before.activePref||'mod',false);
+    }else{
+      closePersonalizationModal(false);
+    }
+  }
+  return result;
+}
+window.questlogRunModSupportControlsSelfTest=questlogRunModSupportControlsSelfTest;
+async function questlogRunIdSuggestionsSelfTest(){
+  const recentKey='ql.idSuggestions.recent.v1';
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    recent:localStorage.getItem(recentKey),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode
+  };
+  let result=null;
+  const popupRows=()=>[...document.querySelectorAll('.mc-ac-row')].map(btn=>({
+    id:btn.dataset.id||'',
+    text:btn.textContent||''
+  }));
+  const showFor=(selector)=>{
+    const input=document.querySelector(selector);
+    if(!input)return {selector,found:false,rows:[]};
+    input.value='';
+    input.dispatchEvent(new Event('focusin',{bubbles:true}));
+    if(typeof showAc==='function')showAc(input);
+    return {selector,found:true,rows:popupRows()};
+  };
+  const chooseSuggestion=(selector,id)=>{
+    const input=document.querySelector(selector);
+    if(!input)return {selector,id,foundInput:false,foundButton:false,value:null,ok:false};
+    input.value='';
+    if(typeof showAc==='function')showAc(input);
+    const button=document.querySelector(`.mc-ac-row[data-id="${CSS.escape(id)}"]`);
+    if(button)button.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,cancelable:true}));
+    return {selector,id,foundInput:true,foundButton:!!button,value:input.value,ok:input.value===id};
+  };
+  try{
+    const qa='__id_suggestions_main.json';
+    const qb='__id_suggestions_target.json';
+    quests={
+      [qa]:{
+        ...defQ(),
+        title:'ID Suggestions Main',
+        objectives:[
+          {type:'questlog:item_obtain',item:'minecraft:dirt'},
+          {type:'questlog:quest_complete',quest:''}
+        ],
+        requirements:[{type:'questlog:read',quest:''}]
+      },
+      [qb]:{...defQ(),title:'Existing Target Quest'}
+    };
+    chapters={};
+    fileMeta={};
+    ensureFileMeta();
+    currentFile=qa;
+    mode='quest';
+    localStorage.setItem(recentKey,JSON.stringify({
+      item:['minecraft:diamond_pickaxe','minecraft:golden_apple'],
+      sound:['minecraft:entity.player.levelup']
+    }));
+    if(typeof loadRecentIdSuggestions==='function')recentIdSuggestions=loadRecentIdSuggestions();
+    renderFileList();
+    renderMain();
+    const itemEmpty=showFor('.obj-item');
+    const questComplete=showFor('.obj-quest');
+    const readQuest=showFor('.obj-read-quest');
+    const readHasExisting=readQuest.rows.some(row=>row.id===questIdFromFile(qb));
+    const completeHasExisting=questComplete.rows.some(row=>row.id===questIdFromFile(qb));
+    const itemHasRecent=itemEmpty.rows.some(row=>row.id==='minecraft:diamond_pickaxe');
+    const itemRecentBeforeKnown=itemEmpty.rows.length&&itemEmpty.rows[0].id==='minecraft:diamond_pickaxe';
+    const itemAutofill=chooseSuggestion('.obj-item','minecraft:diamond_pickaxe');
+    const questAutofill=chooseSuggestion('.obj-quest',questIdFromFile(qb));
+    result={
+      ok:itemHasRecent&&itemRecentBeforeKnown&&readHasExisting&&completeHasExisting&&itemAutofill.ok&&questAutofill.ok,
+      itemEmpty,
+      questComplete,
+      readQuest,
+      itemAutofill,
+      questAutofill,
+      expectedQuestId:questIdFromFile(qb),
+      checks:{
+        itemHasRecent,
+        itemRecentBeforeKnown,
+        readHasExisting,
+        completeHasExisting,
+        itemAutofill:itemAutofill.ok,
+        questAutofill:questAutofill.ok
+      }
+    };
+  }finally{
+    hideAc?.();
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    if(before.recent===null)localStorage.removeItem(recentKey);
+    else localStorage.setItem(recentKey,before.recent);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    renderFileList();
+    renderMain();
+    refreshOpenExportPreview();
+  }
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw&&localStorage.getItem(recentKey)===before.recent;
+  return result;
+}
+window.questlogRunIdSuggestionsSelfTest=questlogRunIdSuggestionsSelfTest;
+async function questlogRunTemplateRefreshSelfTest(){
+  const expected=[
+    {title:'Keyed Gate',file:'keyed_gate.json',tags:['questlog:item_obtain','questlog:quest_complete']},
+    {title:'Landmark Survey',file:'landmark_survey.json',tags:['questlog:visit_structure','questlog:block_interact']},
+    {title:'Station Unlock',file:'station_unlock.json',tags:['questlog:item_craft','questlog:quest_complete']},
+    {title:'Boss Trophy Turn-In',file:'boss_trophy_turn_in.json',tags:['questlog:entity_kill','questlog:item_obtain']},
+    {title:'Delivery Hand-In',file:'delivery_hand_in.json',tags:['questlog:item_obtain','questlog:item_drop']}
+  ];
+  const before={
+    search:$('#templateSearch')?.value,
+    category:$('#templateCategory')?.value,
+    complexity:$('#templateComplexity')?.value,
+    tag:$('#templateTag')?.value,
+    customOnly:$('#templateCustomOnly')?.checked,
+    modalOpen:$('#templateModal')?.classList.contains('open')
+  };
+  let result=null;
+  try{
+    const builtins=QUEST_TEMPLATES.slice();
+    const byTitle=new Map(builtins.map(t=>[t.title,t]));
+    const missing=expected.filter(item=>!byTitle.has(item.title)).map(item=>item.title);
+    const duplicateFiles=[...new Set(builtins.map(t=>t.file).filter((file,index,arr)=>file&&arr.indexOf(file)!==index))];
+    const detail=expected.map(item=>{
+      const t=byTitle.get(item.title);
+      const cloned=t?cloneTemplateQuest(t):null;
+      return {
+        title:item.title,
+        present:!!t,
+        file:t?.file||'',
+        fileOk:t?.file===item.file,
+        category:t?.cat||'',
+        categoryOk:t?.cat==='Pack Patterns',
+        tagsOk:!!t&&item.tags.every(tag=>(t.tags||[]).includes(tag)),
+        objectiveCount:(t?.objectives||[]).length,
+        rewardCount:(t?.rewards||[]).length,
+        cloneOk:!!cloned&&cloned.title===item.title&&Array.isArray(cloned.objectives)&&cloned.objectives.length>0&&Array.isArray(cloned.rewards)
+      };
+    });
+    const modal=$('#templateModal');
+    if(modal)modal.classList.add('open');
+    if($('#templateCustomOnly'))$('#templateCustomOnly').checked=false;
+    if($('#templateSearch'))$('#templateSearch').value='keyed gate';
+    if($('#templateCategory'))$('#templateCategory').value='all';
+    if($('#templateComplexity'))$('#templateComplexity').value='all';
+    if($('#templateTag'))$('#templateTag').value='all';
+    renderTemplateModal();
+    const searchRows=[...document.querySelectorAll('#templateList .template-row')].map(row=>row.dataset.tpl||row.textContent||'');
+    if($('#templateSearch'))$('#templateSearch').value='';
+    if($('#templateCategory'))$('#templateCategory').value='Pack Patterns';
+    if($('#templateComplexity'))$('#templateComplexity').value='all';
+    if($('#templateTag'))$('#templateTag').value='questlog:quest_complete';
+    renderTemplateModal();
+    const filteredRows=[...document.querySelectorAll('#templateList .template-row')].map(row=>row.dataset.tpl||row.textContent||'');
+    const modalSearchOk=searchRows.some(text=>String(text).includes('Keyed Gate'));
+    const modalFilterOk=filteredRows.some(text=>String(text).includes('Keyed Gate'))&&filteredRows.some(text=>String(text).includes('Station Unlock'));
+    const allDetailsOk=detail.every(item=>item.present&&item.fileOk&&item.categoryOk&&item.tagsOk&&item.objectiveCount>0&&item.rewardCount>0&&item.cloneOk);
+    result={ok:missing.length===0&&duplicateFiles.length===0&&allDetailsOk&&modalSearchOk&&modalFilterOk,missing,duplicateFiles,detail,modalSearchOk,modalFilterOk,searchRows,filteredRows,builtInCount:builtins.length};
+  }finally{
+    if($('#templateSearch')&&before.search!==undefined)$('#templateSearch').value=before.search||'';
+    if($('#templateCategory')&&before.category!==undefined)$('#templateCategory').value=before.category||'all';
+    if($('#templateComplexity')&&before.complexity!==undefined)$('#templateComplexity').value=before.complexity||'all';
+    if($('#templateTag')&&before.tag!==undefined)$('#templateTag').value=before.tag||'all';
+    if($('#templateCustomOnly')&&before.customOnly!==undefined)$('#templateCustomOnly').checked=!!before.customOnly;
+    renderTemplateModal();
+    if(!before.modalOpen)$('#templateModal')?.classList.remove('open');
+  }
+  return result;
+}
+window.questlogRunTemplateRefreshSelfTest=questlogRunTemplateRefreshSelfTest;
+async function questlogRunDynamicLightingSelfTest(){
+  const before={
+    layout:currentPersonalLayout(),
+    bodyClass:document.body?.className||'',
+    x:document.body?.style.getPropertyValue('--reactive-light-x')||'',
+    y:document.body?.style.getPropertyValue('--reactive-light-y')||''
+  };
+  let result=null;
+  try{
+    ensureReactiveAmbientLight();
+    applyPersonalLayout('classic');
+    const target=$('#btnSettings')||$('.btn')||document.body;
+    setReactiveAmbientFromElement(target,{pulse:true});
+    const xAfter=document.body.style.getPropertyValue('--reactive-light-x');
+    const yAfter=document.body.style.getPropertyValue('--reactive-light-y');
+    const light=$('#reactiveAmbientLight');
+    const classicOk=!!light&&document.body.classList.contains('reactive-ambient-on')&&!!xAfter&&!!yAfter;
+    applyPersonalLayout('canvas');
+    const canvasBg=findReactiveAmbientTarget($('.app-body'));
+    const canvasMuted=!canvasBg&&document.body.classList.contains('reactive-ambient-muted');
+    applyPersonalLayout('workbench');
+    const workbenchBg=findReactiveAmbientTarget($('.app-body'));
+    const workbenchMuted=!workbenchBg&&document.body.classList.contains('reactive-ambient-muted');
+    const toolbarTarget=findReactiveAmbientTarget($('#workbenchSettingsBtn')||$('#workbenchPreviewBtn'));
+    const toolbarAllowed=!!toolbarTarget&&!document.body.classList.contains('reactive-ambient-muted');
+    result={
+      ok:classicOk&&canvasMuted&&workbenchMuted&&toolbarAllowed,
+      classicOk,
+      canvasMuted,
+      workbenchMuted,
+      toolbarAllowed,
+      xAfter,
+      yAfter,
+      hasLight:!!light,
+      lightClass:light?.className||''
+    };
+  }finally{
+    applyPersonalLayout(before.layout);
+    if(document.body){
+      document.body.className=before.bodyClass;
+      if(before.x)document.body.style.setProperty('--reactive-light-x',before.x);
+      else document.body.style.removeProperty('--reactive-light-x');
+      if(before.y)document.body.style.setProperty('--reactive-light-y',before.y);
+      else document.body.style.removeProperty('--reactive-light-y');
+    }
+    refreshReactiveAmbientLight();
+  }
+  return result;
+}
+window.questlogRunDynamicLightingSelfTest=questlogRunDynamicLightingSelfTest;
+async function questlogRunMinecraftPlaceholderSelfTest(){
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode,
+    activeTab:localStorage.getItem('ql.activeTab'),
+    detailsOpen:questPreviewDetailsOpen,
+    textMode:questPreviewTextMode,
+    detailIndex:questPreviewDetailIndex
+  };
+  let result=null;
+  const iconState=(el)=>({
+    found:!!el,
+    className:el?.className||'',
+    text:(el?.textContent||'').trim(),
+    texture:el?.style?.getPropertyValue('--mc-icon-texture')||'',
+    background:el?String(getComputedStyle(el).backgroundImage||''):'',
+    cubeFaces:el?.querySelectorAll?.('.mc-cube-face')?.length||0,
+    entityFaceParts:el?.querySelectorAll?.('.mc-entity-face-base,.mc-entity-face-overlay')?.length||0
+  });
+  const hasTexture=(state,name)=>state.className.includes('real-texture')&&state.texture.includes(name);
+  const rendersTexture=(state,name)=>hasTexture(state,name)&&state.background.includes(name);
+  try{
+    const file='__minecraft_placeholder_selftest.json';
+    const q={
+      ...defQ(),
+      title:'Minecraft placeholder selftest',
+      icon:{item:'minecraft:book'},
+      objectives:[
+        {type:'questlog:item_obtain',name:'Explicit Icon Override',item:'minecraft:dirt',icon:'minecraft:diamond',required_amount:1},
+        {type:'questlog:block_mine',name:'Mine Stone',block:'minecraft:stone',required_amount:1},
+        {type:'questlog:entity_kill',name:'Defeat Zombie',entity:'minecraft:zombie',required_amount:1},
+        {type:'questlog:entity_kill',name:'Defeat Bee',entity:'minecraft:bee',required_amount:1},
+        {type:'questlog:entity_kill',name:'Defeat Skeleton Horse',entity:'minecraft:skeleton_horse',required_amount:1}
+      ],
+      rewards:[
+        {type:'questlog:item',name:'Emerald Reward',item:'minecraft:emerald',count:2},
+        {type:'questlog:item',name:'Apple Icon Override',item:'minecraft:stick',icon:'minecraft:apple',count:1}
+      ]
+    };
+    quests={[file]:q};
+    chapters={};
+    fileMeta={};
+    ensureFileMeta();
+    currentFile=file;
+    mode='quest';
+    setTab('progress');
+    questPreviewDetailsOpen=true;
+    questPreviewTextMode='default';
+    questPreviewDetailIndex=0;
+    renderFileList();
+    renderMain();
+    const objIcons=[...document.querySelectorAll('#objList .progress-compact-row .progress-entry-icon')].map(iconState);
+    const rewardIcons=[...document.querySelectorAll('#rewList .progress-compact-row .progress-entry-icon')].map(iconState);
+    setTab('display');
+    renderMain();
+    updateDisplayIconPreview();
+    const displayIcon=iconState(document.querySelector('.display-icon-preview'));
+    const mount=document.createElement('div');
+    mount.innerHTML=renderQuestPreviewDetailPanel(q,{open:true,kind:'objectives'})+renderQuestPreviewDetailPanel(q,{open:true,kind:'rewards'});
+    const detailIcons=[...mount.querySelectorAll('.ql-preview-entry-icon')].map(iconState);
+    mount.remove();
+    const generatedEntityTextureCount=Object.keys(window.QUESTLOG_MINECRAFT_ENTITY_TEXTURES||{}).length;
+    const generatedItemBlockTextureCount=Object.keys(window.QUESTLOG_MINECRAFT_TEXTURES||{}).length;
+    const checks={
+      generatedEntityTextureIndex:generatedEntityTextureCount>=300,
+      generatedItemBlockTextureIndex:generatedItemBlockTextureCount>=1500,
+      displayIconPreviewTexture:rendersTexture(displayIcon,'book.png'),
+      progressExplicitIcon:hasTexture(objIcons[0]||{},'diamond.png'),
+      progressBlockTexture:hasTexture(objIcons[1]||{},'stone.png'),
+      progressBlockFlatIcon:(objIcons[1]?.className||'').includes('block-flat-icon')&&(objIcons[1]?.cubeFaces||0)===0,
+      progressNoThreeBlock:(objIcons[1]?.className||'').includes('three-ready')===false,
+      progressNoThreeEntity:(objIcons[2]?.className||'').includes('entity-three-ready')===false,
+      progressEntityFaceFallback:(objIcons[2]?.className||'').includes('entity-face-model')&&(objIcons[2]?.entityFaceParts||0)===2,
+      progressBeeEntityFace:hasTexture(objIcons[3]||{},'bee.png')&&(objIcons[3]?.className||'').includes('entity-face-model'),
+      progressSkeletonHorseEntityFace:hasTexture(objIcons[4]||{},'horse_skeleton.png')&&(objIcons[4]?.className||'').includes('entity-face-model'),
+      progressRewardItem:hasTexture(rewardIcons[0]||{},'emerald.png'),
+      progressRewardIconOverride:hasTexture(rewardIcons[1]||{},'apple.png'),
+      previewExplicitIcon:hasTexture(detailIcons[0]||{},'diamond.png'),
+      previewBlockTexture:hasTexture(detailIcons[1]||{},'stone.png'),
+      previewBlockFlatIcon:(detailIcons[1]?.className||'').includes('block-flat-icon')&&(detailIcons[1]?.cubeFaces||0)===0,
+      previewEntityFace:(detailIcons[2]?.className||'').includes('entity-face-model')&&(detailIcons[2]?.entityFaceParts||0)===2,
+      previewBeeEntityFace:hasTexture(detailIcons[3]||{},'bee.png')&&(detailIcons[3]?.className||'').includes('entity-face-model'),
+      previewSkeletonHorseEntityFace:hasTexture(detailIcons[4]||{},'horse_skeleton.png')&&(detailIcons[4]?.className||'').includes('entity-face-model'),
+      previewRewardItem:hasTexture(detailIcons[5]||{},'emerald.png'),
+      previewRewardIconOverride:hasTexture(detailIcons[6]||{},'apple.png')
+    };
+    result={ok:Object.values(checks).every(Boolean),checks,generatedEntityTextureCount,generatedItemBlockTextureCount,displayIcon,objIcons,rewardIcons,detailIcons};
+  }finally{
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    if(before.activeTab===null)localStorage.removeItem('ql.activeTab');
+    else localStorage.setItem('ql.activeTab',before.activeTab);
+    questPreviewDetailsOpen=before.detailsOpen;
+    questPreviewTextMode=before.textMode;
+    questPreviewDetailIndex=before.detailIndex;
+    renderFileList();
+    renderMain();
+    refreshOpenExportPreview();
+  }
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw&&localStorage.getItem('ql.activeTab')===before.activeTab;
+  return result;
+}
+window.questlogRunMinecraftPlaceholderSelfTest=questlogRunMinecraftPlaceholderSelfTest;
+async function questlogRunProgressEditorSelfTest(){
+  const before={
+    raw:localStorage.getItem(AUTOSAVE_KEY),
+    quests:JSON.parse(JSON.stringify(quests||{})),
+    chapters:JSON.parse(JSON.stringify(chapters||{})),
+    fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
+    currentFile,
+    mode,
+    activeTab:localStorage.getItem('ql.activeTab')
+  };
+  let result=null;
+  const sectionCount=kind=>(document.querySelector(`.progress-section-${kind} .progress-section-count`)?.textContent||'').trim();
+  const iconState=(el)=>({
+    found:!!el,
+    className:el?.className||'',
+    text:(el?.textContent||'').trim(),
+    texture:el?.style?.getPropertyValue('--mc-icon-texture')||'',
+    background:el?String(getComputedStyle(el).backgroundImage||''):'',
+    cubeFaces:el?.querySelectorAll?.('.mc-cube-face')?.length||0,
+    entityFaceParts:el?.querySelectorAll?.('.mc-entity-face-base,.mc-entity-face-overlay')?.length||0
+  });
+  const hasTexture=(state,name)=>state.className.includes('real-texture')&&state.texture.includes(name);
+  const addMany=(selector,count)=>{for(let i=0;i<count;i++)document.querySelector(selector)?.click();};
+  const removeMany=(selector,count)=>{for(let i=0;i<count;i++)document.querySelector(selector)?.click();};
+  try{
+    const file='__progress_editor_selftest.json';
+    quests={[file]:{...defQ(),title:'Progress editor selftest',requirements:[],objectives:[],failures:[],rewards:[]}};
+    chapters={};
+    fileMeta={};
+    ensureFileMeta();
+    currentFile=file;
+    mode='quest';
+    setTab('progress');
+    renderFileList();
+    renderMain();
+    addMany('#addReq',3);removeMany('#reqList .progress-compact-remove',2);
+    addMany('#addObj',3);removeMany('#objList .progress-compact-remove',2);
+    addMany('#addFail',3);removeMany('#failList .progress-compact-remove',2);
+    addMany('#addRew',3);removeMany('#rewList .progress-compact-remove',2);
+    const counts={
+      req:sectionCount('req'),
+      obj:sectionCount('obj'),
+      fail:sectionCount('fail'),
+      rew:sectionCount('rew')
+    };
+    const sectionIcons=[...document.querySelectorAll('.progress-section-icon')].map(el=>({
+      text:(el.textContent||'').trim(),
+      svg:!!el.querySelector('svg'),
+      before:getComputedStyle(el,'::before').content
+    }));
+    const q=getCD();
+    q.objectives=[{type:'questlog:stat',stat:'minecraft:jump',required_amount:1}];
+    q.rewards=[{type:'questlog:experience',experience:25}];
+    setCD(q);
+    renderMain();
+    const fallbackIcons=[...document.querySelectorAll('#objList .progress-entry-symbol,#rewList .progress-entry-symbol')].map(el=>({
+      text:(el.textContent||'').trim(),
+      svg:!!el.querySelector('svg')
+    }));
+    setTab('display');
+    renderMain();
+    const group=document.querySelector('.display-toggle-group');
+    const groupStyle=group?getComputedStyle(group):null;
+    const fileNotifyGroup={
+      borderTopWidth:groupStyle?.borderTopWidth||'',
+      borderTopStyle:groupStyle?.borderTopStyle||'',
+      boxShadow:groupStyle?.boxShadow||''
+    };
+    setTab('progress');
+    q.objectives=[{type:'questlog:entity_kill',entity:'minecraft:zombie',required_amount:1}];
+    setCD(q);
+    renderMain();
+    const validationEntityTarget=targetForIssue({kind:'quest',file,path:'objectives[0].entity',msg:'Synthetic entity check'});
+    const entityInput=document.querySelector('#objList .obj-entity');
+    if(entityInput){
+      entityInput.value='minecraft:skeleton';
+      entityInput.dispatchEvent(new Event('input',{bubbles:true}));
+      entityInput.dispatchEvent(new Event('focusout',{bubbles:true}));
+      await new Promise(resolve=>setTimeout(resolve,80));
+    }
+    const blurIcon=iconState(document.querySelector('#objList .progress-entry-icon'));
+    q.objectives=[{type:'questlog:block_mine',block:'minecraft:stone',required_amount:1}];
+    setCD(q);
+    renderMain();
+    const blockInput=document.querySelector('#objList .obj-block');
+    if(blockInput){
+      blockInput.value='minecraft:dirt';
+      blockInput.dispatchEvent(new Event('input',{bubbles:true}));
+      blockInput.dispatchEvent(new Event('focusout',{bubbles:true}));
+      await new Promise(resolve=>setTimeout(resolve,80));
+    }
+    const blurBlockIcon=iconState(document.querySelector('#objList .progress-entry-icon'));
+    const furnaceHtml=previewIconTile({item:'minecraft:furnace'},'selftest');
+    const beeHtml=previewIconTile({entity:'minecraft:bee'},'selftest');
+    const zombieHtml=previewIconTile({entity:'minecraft:zombie'},'selftest');
+    const checks={
+      requirementCountAfterDelete:counts.req==='1 requirement',
+      objectiveCountAfterDelete:counts.obj==='1 objective',
+      failureCountAfterDelete:counts.fail==='1 failure',
+      rewardCountAfterDelete:counts.rew==='1 reward',
+      sectionIconsUseSvg:sectionIcons.length===4&&sectionIcons.every(i=>i.svg&&!i.text&&(i.before==='none'||i.before==='normal'||i.before==='""')),
+      fallbackIconsUseSvg:fallbackIcons.length===2&&fallbackIcons.every(i=>i.svg&&!i.text),
+      blurEntityIdRerendersTexture:hasTexture(blurIcon,'skeleton.png')&&(blurIcon.className||'').includes('entity-face-model')&&!(blurIcon.className||'').includes('entity-three-ready'),
+      blurBlockIdRerendersTexture:hasTexture(blurBlockIcon,'dirt.png')&&(blurBlockIcon.className||'').includes('block-flat-icon')&&!(blurBlockIcon.className||'').includes('three-ready'),
+      furnaceUsesFlatTexture:furnaceHtml.includes('furnace_front.png')&&furnaceHtml.includes('block-flat-icon')&&!furnaceHtml.includes('mc-cube-face'),
+      beeUsesFaceFallback:beeHtml.includes('entity-face-only')&&!beeHtml.includes('three-entity-model'),
+      zombieUsesFaceFallback:zombieHtml.includes('entity-face-only')&&!zombieHtml.includes('three-entity-model'),
+      validationLabelsReadable:validationPathLabel({kind:'quest',path:'objectives[0].entity'})==='Objectives #1 > Entity ID'&&validationPathLabel({kind:'quest',path:'rewards[2].count'})==='Rewards #3 > Item count',
+      validationTargetSpecific:!!validationEntityTarget?.querySelector?.('.obj-entity'),
+      fileNotifyGroupsBoxed:fileNotifyGroup.borderTopWidth==='1px'&&fileNotifyGroup.borderTopStyle==='solid'&&fileNotifyGroup.boxShadow==='none'
+    };
+    result={ok:Object.values(checks).every(Boolean),checks,counts,sectionIcons,fallbackIcons,blurIcon,blurBlockIcon,previewHtmlChecks:{furnaceHtml,beeHtml,zombieHtml},fileNotifyGroup};
+  }finally{
+    if(before.raw===null)localStorage.removeItem(AUTOSAVE_KEY);
+    else localStorage.setItem(AUTOSAVE_KEY,before.raw);
+    quests=before.quests;
+    chapters=before.chapters;
+    fileMeta=before.fileMeta;
+    currentFile=before.currentFile;
+    mode=before.mode;
+    if(before.activeTab===null)localStorage.removeItem('ql.activeTab');
+    else localStorage.setItem('ql.activeTab',before.activeTab);
+    renderFileList();
+    renderMain();
+    refreshOpenExportPreview();
+  }
+  result.restoredStorage=localStorage.getItem(AUTOSAVE_KEY)===before.raw&&localStorage.getItem('ql.activeTab')===before.activeTab;
+  return result;
+}
+window.questlogRunProgressEditorSelfTest=questlogRunProgressEditorSelfTest;
+async function questlogRunThemePaletteSelfTest(){
+  const expectedMinecraftLight=["crimson-ember","fire-coral","desert-sun","golden-savanna","bamboo-light","taiga-moss","warm-reef","glacial-bay","frostline","soul-dusk","end-violet","cherry-petal"];
+  const expectedRegularLight=["light","royal-steel","crimson-smoke","blush-clay","ocean-foam"];
+  const expectedMinecraftDark=["netherblood","badlands-dusk","dripstone-dark","eroded-gold","lush-cave","mangrove-dark","warped-dark","deep-dark","frozen-abyss","grove-indigo","end-barrens","mushroom-night","torched-dark","void"];
+  const expectedRegularDark=["neon-slate","matrix-lime","violet-laser","gilded-brute","mars-charcoal","emerald-spruce","valhalla-bloom","black-dark","white-dark"];
+  const expectedLight=[...expectedMinecraftLight,...expectedRegularLight];
+  const expectedDark=[...expectedMinecraftDark,...expectedRegularDark];
+  const expectedAll=[...expectedMinecraftLight,...expectedMinecraftDark,...expectedRegularLight,...expectedRegularDark];
+  const before={theme:cTheme,rootTheme:document.documentElement.dataset.theme};
+  const normalizeCssColor=(value)=>{
+    const raw=String(value||'').trim();
+    const hex=raw.match(/^#([0-9a-f]{6})$/i);
+    if(hex)return '#'+hex[1].toUpperCase();
+    const match=raw.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+    return match?'#'+[match[1],match[2],match[3]].map(v=>Number(v).toString(16).padStart(2,'0')).join('').toUpperCase():raw.toUpperCase();
+  };
+  const rgbFromCss=(value)=>{
+    const hex=normalizeCssColor(value).match(/^#([0-9A-F]{6})$/);
+    return hex?[0,2,4].map(i=>parseInt(hex[1].slice(i,i+2),16)):null;
+  };
+  const luminance=(rgb)=>{
+    const parts=rgb.map(v=>{
+      const c=v/255;
+      return c<=0.03928?c/12.92:Math.pow((c+0.055)/1.055,2.4);
+    });
+    return parts[0]*0.2126+parts[1]*0.7152+parts[2]*0.0722;
+  };
+  const contrast=(a,b)=>{
+    if(!a||!b)return 0;
+    const la=luminance(a),lb=luminance(b);
+    return (Math.max(la,lb)+0.05)/(Math.min(la,lb)+0.05);
+  };
+  const sameArray=(a,b)=>a.length===b.length&&a.every((value,index)=>value===b[index]);
+  const groupValues=(selector)=>[...document.querySelector(selector)?.querySelectorAll('optgroup')||[]].map(group=>({label:group.label,values:[...group.querySelectorAll('option')].map(option=>option.value)}));
+  const themeVars=(id)=>{
+    document.documentElement.dataset.theme=id;
+    const css=getComputedStyle(document.documentElement);
+    const read=prop=>css.getPropertyValue(prop).trim();
+    const source=THEME_PALETTES[id];
+    return {
+      id,
+      name:THEME_NAMES[id]||'',
+      type:source?.type||'',
+      bg:normalizeCssColor(read('--bg')),
+      ac:normalizeCssColor(read('--ac')),
+      tx:normalizeCssColor(read('--tx')),
+      source,
+      txBg:contrast(rgbFromCss(read('--tx')),rgbFromCss(read('--bg'))),
+      txSf:contrast(rgbFromCss(read('--tx')),rgbFromCss(read('--sf'))),
+      json:contrast(rgbFromCss(read('--json-tx')),rgbFromCss(read('--json-bg')))
+    };
+  };
+  let result=null;
+  try{
+    const registry=Object.keys(THEME_NAMES);
+    const lightOptions=[...document.querySelectorAll('#personalLightThemePreset option')].map(o=>o.value);
+    const darkOptions=[...document.querySelectorAll('#personalDarkThemePreset option')].map(o=>o.value);
+    const lightGroups=groupValues('#personalLightThemePreset');
+    const darkGroups=groupValues('#personalDarkThemePreset');
+    const checked=expectedAll.map(themeVars);
+    const checks={
+      exactLightOptions:sameArray(lightOptions,expectedLight),
+      exactDarkOptions:sameArray(darkOptions,expectedDark),
+      exactLightGroups:lightGroups.length===2&&lightGroups[0].label==='Minecraft themes'&&lightGroups[1].label==='Regular themes'&&sameArray(lightGroups[0].values,expectedMinecraftLight)&&sameArray(lightGroups[1].values,expectedRegularLight),
+      exactDarkGroups:darkGroups.length===2&&darkGroups[0].label==='Minecraft themes'&&darkGroups[1].label==='Regular themes'&&sameArray(darkGroups[0].values,expectedMinecraftDark)&&sameArray(darkGroups[1].values,expectedRegularDark),
+      exactRegistry:sameArray(registry,expectedAll),
+      lightRegistry:expectedLight.every(id=>THEME_NAMES[id]&&LIGHT_THEME_IDS.has(id)&&!DARK_THEME_IDS.has(id)),
+      darkRegistry:expectedDark.every(id=>THEME_NAMES[id]&&DARK_THEME_IDS.has(id)&&!LIGHT_THEME_IDS.has(id)),
+      noUnexpectedOptions:[...lightOptions,...darkOptions].every(id=>expectedAll.includes(id)),
+      sourceColorsExact:checked.every(t=>t.source&&t.bg===t.source.baseSurface&&t.ac===t.source.themeAccent&&t.tx===t.source.text),
+      contrastOk:checked.every(t=>t.txBg>=4.5&&t.txSf>=4.5&&t.json>=4.5)
+    };
+    result={ok:Object.values(checks).every(Boolean),checks,checked,lightOptions,darkOptions,lightGroups,darkGroups};
+  }finally{
+    document.documentElement.dataset.theme=before.rootTheme||before.theme||DEFAULT_DARK_THEME_ID;
+    applyTheme(before.theme||DEFAULT_DARK_THEME_ID);
+  }
+  return result;
+}
+window.questlogRunThemePaletteSelfTest=questlogRunThemePaletteSelfTest;
+async function questlogRunSoundDiscoverabilitySelfTest(){
+  renderUiSoundFeedbackCard();
+  const expected=['click','toggle','menu','panel','type','backtype','confirm','invalid','success','error'];
+  const fileNames=expected.map(route=>UI_SOUND_FILES[route]?.replace('ui-sounds/','')).filter(Boolean);
+  const checksum=buffer=>{
+    const bytes=new Uint8Array(buffer);
+    let sum=0;
+    for(let i=0;i<bytes.length;i++)sum=(sum+((i+1)*bytes[i]))%2147483647;
+    return sum;
+  };
+  const assetChecks=await Promise.all(expected.map(async route=>{
+    const path=UI_SOUND_FILES[route];
+    try{
+      const res=await fetch(path,{cache:'no-store'});
+      const buffer=res.ok?await res.arrayBuffer():new ArrayBuffer(0);
+      return {route,path,file:path.replace('ui-sounds/',''),ok:res.ok,bytes:buffer.byteLength,checksum:checksum(buffer)};
+    }catch(err){
+      return {route,path,file:path?.replace('ui-sounds/','')||'',ok:false,bytes:0,checksum:0,message:err?.message||String(err)};
+    }
+  }));
+  const checks={
+    routeMapComplete:expected.every(route=>UI_SOUND_FILES[route]&&UI_SOUND_GROUPS.some(group=>group.routes.includes(route))),
+    groupedSettingsOnly:UI_SOUND_GROUPS.length===3&&UI_SOUND_GROUPS.every(group=>['UI sounds','Typing sounds','Feedback sounds'].includes(group.setting)),
+    feedbackChecksRemoved:!$('#settingsFeedbackCard')&&!$('#settingsFeedbackRoutes'),
+    visibleTogglesPresent:!!$('#uiSoundsToggle')&&!!$('#uiTypingSoundsToggle')&&!!$('#uiFeedbackSoundsToggle'),
+    assetsLoad:assetChecks.every(asset=>asset.ok&&asset.bytes>0),
+    assetsUnique:new Set(assetChecks.map(asset=>`${asset.bytes}:${asset.checksum}`)).size===assetChecks.length
+  };
+  return {ok:Object.values(checks).every(Boolean),checks,assetChecks,fileNames};
+}
+window.questlogRunSoundDiscoverabilitySelfTest=questlogRunSoundDiscoverabilitySelfTest;
+async function questlogRunAnimationVisibilitySelfTest(){
+  const before={
+    raw:localStorage.getItem(PERSONALIZATION_KEY),
+    layout:currentPersonalLayout(),
+    rootMotion:document.documentElement.dataset.motionEffects||'',
+    settingsOpen:$('#settingsMenu')?.classList.contains('open')||false,
+    templateOpen:$('#templateModal')?.classList.contains('open')||false
+  };
+  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  const animNames=el=>String(getComputedStyle(el).animationName||'');
+  const hasAnim=(el,name)=>animNames(el).split(',').map(s=>s.trim()).includes(name);
+  let result=null;
+  try{
+    const cleanPrefs={...defaultPersonalization(),layout:before.layout,motionEffects:true};
+    localStorage.setItem(PERSONALIZATION_KEY,JSON.stringify(cleanPrefs));
+    applyPersonalization(loadPersonalization());
+    const settingsBtn=$('#btnSettings');
+    const themeBtn=$('#themeToggle');
+    const soundBtn=$('#muteToggle');
+    const feedbackCard=$('#settingsMenu');
+    const reducedMotionActive=!!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    const cssText=[
+      ...[...document.querySelectorAll('style')].map(style=>style.textContent||''),
+      ...[...document.styleSheets].flatMap(sheet=>{
+        try{return [...(sheet.cssRules||[])].map(rule=>rule.cssText||'');}
+        catch(_err){return[];}
+      })
+    ].join('\n');
+    const cssHas=name=>cssText.includes(name);
+    const motionEffectsOn=document.documentElement.dataset.motionEffects==='on';
+    const motionOk=(el,name)=>motionEffectsOn?hasAnim(el,name):animNames(el)==='none';
+    if(settingsBtn)triggerUiMotion(settingsBtn,'settings');
+    if(themeBtn)triggerUiMotion(themeBtn,'theme');
+    if(soundBtn)triggerUiMotion(soundBtn,'sound');
+    await wait(60);
+    openPersonalizationModal();
+    const settingsMenu=$('#settingsMenu');
+    if(settingsMenu)triggerSurfaceMotion(settingsMenu);
+    await wait(80);
+    openTemplateModal();
+    const templateModal=$('#templateModal');
+    if(templateModal)triggerSurfaceMotion(templateModal);
+    await wait(80);
+    previewSettingsMotion();
+    await wait(60);
+    const modalCard=templateModal?.querySelector('.modal-card');
+    const reducedMotionRule=cssText.includes('prefers-reduced-motion')&&cssText.includes('ui-motion-tap');
+    applyPersonalization({...cleanPrefs,motionEffects:false});
+    previewSettingsMotion();
+    await wait(40);
+    const motionOffSuppresses=feedbackCard?animNames(feedbackCard)==='none'&&document.documentElement.dataset.motionEffects==='off':false;
+    applyPersonalization(cleanPrefs);
+    const checks={
+      defaultMotionEffectsOn:motionEffectsOn&&loadPersonalization().motionEffects===true,
+      buttonTap:!!settingsBtn&&settingsBtn.classList.contains('ui-motion-tap')&&cssHas('qleTapFeedback')&&motionOk(settingsBtn,'qleTapFeedback'),
+      themeIcon:!!themeBtn?.querySelector('.button-icon')&&themeBtn.classList.contains('ui-motion-theme')&&cssHas('qleThemeSpinPulse')&&motionOk(themeBtn.querySelector('.button-icon'),'qleThemeSpinPulse'),
+      soundIcon:!!soundBtn?.querySelector('.button-icon')&&soundBtn.classList.contains('ui-motion-sound')&&cssHas('qleSoundPulse')&&motionOk(soundBtn.querySelector('.button-icon'),'qleSoundPulse'),
+      settingsSurface:!!settingsMenu&&settingsMenu.classList.contains('open')&&settingsMenu.classList.contains('motion-surface-pop')&&cssHas('qleSurfaceGlow')&&motionOk(settingsMenu,'qleSurfaceGlow'),
+      modalSurface:!!templateModal&&templateModal.classList.contains('open')&&templateModal.classList.contains('motion-surface-pop')&&!!modalCard&&cssHas('qleSurfaceGlow')&&motionOk(modalCard,'qleSurfaceGlow'),
+      previewPulse:!!feedbackCard&&feedbackCard.classList.contains('motion-preview-pulse')&&cssHas('qleMotionPreviewPulse')&&motionOk(feedbackCard,'qleMotionPreviewPulse'),
+      ambientPulse:document.body.classList.contains('reactive-ambient-on')&&document.body.classList.contains('reactive-ambient-pulse')&&!!$('#reactiveAmbientLight'),
+      motionOffSuppresses,
+      reducedMotionRule
+    };
+    result={ok:Object.values(checks).every(Boolean),checks,animations:{
+      reducedMotionActive,
+      motionEffectsOn,
+      settingsButtonClass:settingsBtn?.className||'',
+      themeButtonClass:themeBtn?.className||'',
+      soundButtonClass:soundBtn?.className||'',
+      settingsSurfaceClass:settingsMenu?.className||'',
+      modalClass:templateModal?.className||'',
+      settingsButton:settingsBtn?animNames(settingsBtn):'',
+      themeIcon:themeBtn?.querySelector('.button-icon')?animNames(themeBtn.querySelector('.button-icon')):'',
+      soundIcon:soundBtn?.querySelector('.button-icon')?animNames(soundBtn.querySelector('.button-icon')):'',
+      settingsSurface:settingsMenu?animNames(settingsMenu):'',
+      modalSurface:modalCard?animNames(modalCard):'',
+      feedbackCard:feedbackCard?animNames(feedbackCard):''
+    }};
+  }finally{
+    if(!before.templateOpen)closeTemplateModal();
+    if(!before.settingsOpen)closePersonalizationModal(false);
+    if(before.raw===null)localStorage.removeItem(PERSONALIZATION_KEY);
+    else localStorage.setItem(PERSONALIZATION_KEY,before.raw);
+    applyPersonalization(loadPersonalization());
+    applyPersonalLayout(before.layout);
+    if(before.rootMotion)document.documentElement.dataset.motionEffects=before.rootMotion;
+  }
+  return result;
+}
+window.questlogRunAnimationVisibilitySelfTest=questlogRunAnimationVisibilitySelfTest;
+async function questlogRunSurfaceTextureSelfTest(){
+  const before={
+    raw:localStorage.getItem(PERSONALIZATION_KEY),
+    layout:currentPersonalLayout(),
+    settingsOpen:$('#settingsMenu')?.classList.contains('open')||false,
+    selectedJson:currentFile&&mode?(mode==='quest'?JSON.stringify(quests[currentFile]||{}):JSON.stringify(chapters[currentFile]||{})):'',
+    rootSurface:document.documentElement.dataset.surfaceTexture||'',
+    rootAlpha:document.documentElement.style.getPropertyValue('--surface-texture-alpha')||'',
+    rootChromeAlpha:document.documentElement.style.getPropertyValue('--surface-texture-chrome-alpha')||''
+  };
+  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  const bg=el=>el?String(getComputedStyle(el).backgroundImage||''):'';
+  const textured=el=>{
+    const image=bg(el);
+    return image&&image!=='none'&&image.includes('gradient');
+  };
+  let result=null;
+  try{
+    localStorage.removeItem(PERSONALIZATION_KEY);
+    const defaultSurfaceGradientOff=loadPersonalization().surfaceTexture===false;
+    const cleanPrefs={...defaultPersonalization(),layout:before.layout,surfaceTexture:false,surfaceTextureIntensity:18};
+    localStorage.setItem(PERSONALIZATION_KEY,JSON.stringify(cleanPrefs));
+    applyPersonalization(loadPersonalization());
+    openPersonalizationModal();
+    personalizationDraft.surfaceTexture=true;
+    personalizationDraft.surfaceTextureIntensity=34;
+    updatePersonalSurfaceControls();
+    previewPersonalization();
+    await wait(80);
+    const chromeSelectors=['.topbar','.sidebar','.form-panel','#settingsMenu','.preferences-card','#surfaceTextureSample'];
+    const chrome=chromeSelectors.map(selector=>{
+      const el=$(selector);
+      return {selector,found:!!el,textured:textured(el),background:bg(el).slice(0,120)};
+    });
+    const sample=$('#surfaceTextureSample');
+    const sampleTextured=!!sample&&sample.dataset.enabled==='true'&&textured(sample);
+    const liveJson=$('#liveJson');
+    const liveJsonClean=!!liveJson&&!textured(liveJson);
+    applyPersonalLayout('canvas');
+    await wait(20);
+    const canvasWorkspace=$('.canvas-workspace');
+    const canvasDrawing=$('.canvas-drawing-surface');
+    const canvasWorkspaceClean=!canvasWorkspace||!textured(canvasWorkspace);
+    const canvasDrawingClean=!canvasDrawing||!textured(canvasDrawing);
+    applyPersonalLayout('workbench');
+    await wait(20);
+    const workbenchShell=$('.workbench-shell');
+    const workbenchShellClean=!workbenchShell||!textured(workbenchShell);
+    const cleanSurfaces={
+      liveJson:bg(liveJson),
+      canvasWorkspace:bg(canvasWorkspace),
+      canvasDrawing:bg(canvasDrawing),
+      workbenchShell:bg(workbenchShell)
+    };
+    closePersonalizationModal(false);
+    await wait(30);
+    const selectedJsonAfter=currentFile&&mode?(mode==='quest'?JSON.stringify(quests[currentFile]||{}):JSON.stringify(chapters[currentFile]||{})):'';
+    const checks={
+      autosavedSurface:localStorage.getItem(PERSONALIZATION_KEY)?.includes('"surfaceTexture":true'),
+      chromeTextureApplied:chrome.filter(item=>item.found).length>=5&&chrome.filter(item=>item.found).every(item=>item.textured),
+      sampleVisible:sampleTextured,
+      liveJsonClean,
+      canvasWorkspaceClean,
+      canvasDrawingClean,
+      workbenchShellClean,
+      defaultSurfaceGradientOff,
+      selectedJsonUnchanged:before.selectedJson===selectedJsonAfter,
+      storageDraftAutosaved:localStorage.getItem(PERSONALIZATION_KEY)!==JSON.stringify(cleanPrefs)
+    };
+    result={ok:Object.values(checks).every(Boolean),checks,chrome,cleanSurfaces};
+  }finally{
+    if(before.raw===null)localStorage.removeItem(PERSONALIZATION_KEY);
+    else localStorage.setItem(PERSONALIZATION_KEY,before.raw);
+    if(personalizationDraft)closePersonalizationModal(false);
+    personalizationDraft=null;
+    applyPersonalization(loadPersonalization());
+    applyPersonalLayout(before.layout);
+    if(before.rootSurface)document.documentElement.dataset.surfaceTexture=before.rootSurface;
+    if(before.rootAlpha)document.documentElement.style.setProperty('--surface-texture-alpha',before.rootAlpha);
+    if(before.rootChromeAlpha)document.documentElement.style.setProperty('--surface-texture-chrome-alpha',before.rootChromeAlpha);
+    if(before.settingsOpen)openPersonalizationModal();
+    else{
+      $('#settingsMenu')?.classList.remove('open');
+      document.body?.classList.remove('preferences-open');
+    }
+  }
+  return result;
+}
+window.questlogRunSurfaceTextureSelfTest=questlogRunSurfaceTextureSelfTest;
+async function handleExportPreviewZipClick(){
+  const paths=projectZipPaths();
+  const ready=exportReadiness(summarizeIssues(validateAll(false)),paths);
+  if(ready.level==='blocked'&&!exportReadinessOverrideActive()){
+    renderExportPreview();
+    showMsg('ZIP is not ready. Fix blocking checks before exporting.',false);
+    return;
+  }
+  if(ready.level==='blocked')showMsg('Readiness override enabled. Exporting ZIP with current warnings/errors.',true);
+  await exportProjectZip();
+  closeExportPreviewModal();
+}
+window.questlogExportZip=e=>{
+  e?.preventDefault?.();
+  e?.stopPropagation?.();
+  handleExportPreviewZipClick();
+};
+async function createProjectExportZip(options={}){
   const zip=new JSZip();
-  Object.entries(quests).forEach(([n,o])=>zip.file(`config/questlog/quests/${n}`,stringifyJson(buildQOut(o))));
+  const meta=loadExportMetadata();
+  const paths=projectZipPaths();
+  const layoutInfo=options.layoutInfo||guiStudioProjectLayoutExportInfo();
+  Object.entries(quests).forEach(([n,o])=>zip.file(`config/questlog/quests/${n}`,stringifyJson(buildQuestExportObject(n,o,{layoutInfo:options.layoutInfo||null,meta}))));
   Object.entries(chapters).forEach(([n,c])=>{
     const cp=JSON.parse(JSON.stringify(c));
     trimCh(cp);
     zip.file(`config/questlog/chapters/${n}`,stringifyJson(cp));
   });
+  const exportOptions={...options,layoutInfo,builderProject:true};
+  zip.file('questlog_export_manifest.json',stringifyJson(exportProjectManifest(meta,paths,exportOptions)));
+  const listConfig=guiStudioQuestListConfigPatch();
+  if(listConfig.changed.length){
+    const configText=questlogClientConfigToml(listConfig.gui);
+    questlogClientConfigExportPaths().forEach(path=>zip.file(path,configText));
+    zip.file('QUESTLIST_LAYOUT_INSTALL.txt',questlogClientConfigInstallReadme(listConfig.gui));
+  }
+  zip.file(`resourcepacks/${exportResourcePackZipName(meta)}`,await buildResourcePackZip(meta,paths,{...exportOptions,builderProject:false}));
+  return {zip,meta,paths,layoutInfo};
+}
+async function exportProjectZip(options={}){
+  if(typeof JSZip==='undefined'){showMsg('JSZip failed.',false);return;}
+  syncCurrentForExport();
+  const {zip}=await createProjectExportZip(options);
   const blob=await zip.generateAsync({type:'blob'});
   downloadBlob(blob,'questlog_export.zip');
-  recordActivity('Exported ZIP','project','',`${Object.keys(quests).length} quests, ${Object.keys(chapters).length} chapters`);
-  showMsg($('#compactJson')?.checked?'Compact ZIP exported.':'Pretty ZIP exported.',true);
+  recordActivity(options.prototype?'Exported prototype ZIP':'Exported ZIP','project','',`${Object.keys(quests).length} quests, ${Object.keys(chapters).length} chapters`);
+  showMsg(options.prototype?'Prototype ZIP exported with blocking issues.':($('#compactJson')?.checked?'Compact ZIP exported.':'Pretty ZIP exported.'),!options.prototype);
 }
 
 
@@ -1052,9 +6466,7390 @@ async function exportProjectZip(){
 function refreshJson(){const el=$('#liveJson');if(!currentFile||!getCD()||!el)return;if(jsonFocused)return;try{const d=getCD();el.value=mode==='quest'?stringifyJson(buildQOut(d)):stringifyJson(d);}catch(e){}}
 const dRefresh=debounce(refreshJson,180);
 
+function rightPanelLabel(m){return m==='json'?(rawMode?'JSON editor':'Live JSON'):'Checks';}
+function rightPanelTabMeta(m){
+  return '';
+}
+function fallbackCopyText(text){
+  const ta=document.createElement('textarea');
+  ta.value=text;
+  ta.setAttribute('readonly','');
+  ta.style.position='fixed';
+  ta.style.left='-9999px';
+  ta.style.top='0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  let ok=false;
+  try{ok=document.execCommand('copy');}finally{ta.remove();}
+  if(!ok)throw new Error('Copy command failed');
+}
+async function copyTextToClipboard(text){
+  if(navigator.clipboard?.writeText){
+    try{await navigator.clipboard.writeText(text);return;}
+    catch(err){console.warn('[copy clipboard]',err);}
+  }
+  fallbackCopyText(text);
+}
+async function copyLiveJson(){
+  const el=$('#liveJson'),btn=$('#btnCopyJson');
+  if(!el)return;
+  const old=btn?btn.textContent:'';
+  try{
+    if(!jsonFocused)refreshJson();
+    await copyTextToClipboard(el.value||'');
+    if(btn){btn.textContent='Copied';setTimeout(()=>{if(btn)btn.textContent=old||'Copy';},900);}
+  }catch(err){
+    console.warn('[copy json]',err);
+    showMsg('Could not copy JSON.',false);
+  }
+}
+function setRightPanelMode(m){
+  const next=['json','validation'].includes(m)?m:'json';
+  if(!rawMode){
+    rightPanelMode=next;
+    localStorage.setItem(RIGHT_PANEL_MODE_KEY,rightPanelMode);
+  }
+  updateRightPanelMode();
+  requestAnimationFrame(()=>setReactiveAmbientFromElement($('.right-panel-tab.active'),{pulse:true}));
+}
+function updateRightPanelMode(){
+  const active=rawMode?'json':(['json','validation'].includes(rightPanelMode)?rightPanelMode:'json');
+  const label=$('#jsonPanelLabel');if(label)label.textContent=rightPanelLabel(active);
+  $$('.right-panel-tab').forEach(btn=>{
+    const modeName=btn.dataset.rightMode;
+    const labels={json:'JSON',validation:'Checklist'};
+    const icons={json:guiStudioLucideIcon('file-code-2','right-tab-svg'),validation:guiStudioLucideIcon('check','right-tab-svg')};
+    const bubble=modeName==='validation'?'<span class="right-tab-bubble hidden" id="validationTabBadge"></span>':'';
+    btn.innerHTML=`<span class="right-tab-icon">${icons[modeName]||esc(modeName)}</span><span>${esc(labels[modeName]||modeName)}</span>${bubble}`;
+    const on=modeName===active;
+    btn.classList.toggle('active',on);
+    btn.disabled=rawMode&&modeName!=='json';
+    btn.setAttribute('aria-pressed',on?'true':'false');
+    btn.setAttribute('aria-label',labels[modeName]||modeName);
+  });
+  const copyBtn=$('#btnCopyJson');if(copyBtn)copyBtn.hidden=active!=='json';
+  $$('.right-panel-view').forEach(view=>view.classList.toggle('active',view.dataset.rightPanel===active));
+  refreshSideInfoPanel();
+  renderValidation();
+}
+function previewText(v){
+  if(v==null||v==='')return'';
+  const text=typeof v==='string'?v:JSON.stringify(v,null,2);
+  return text.replace(/(?:§|Â§)[0-9a-fk-or]/gi,'').trim();
+}
+const MC_PREVIEW_COLORS={
+  '0':'#000000','1':'#0000aa','2':'#00aa00','3':'#00aaaa','4':'#aa0000','5':'#aa00aa','6':'#ffaa00','7':'#aaaaaa',
+  '8':'#555555','9':'#5555ff',a:'#55ff55',b:'#55ffff',c:'#ff5555',d:'#ff55ff',e:'#ffff55',f:'#ffffff'
+};
+function rawPreviewText(v){
+  if(v==null||v==='')return'';
+  return typeof v==='string'?v:JSON.stringify(v,null,2);
+}
+function renderMinecraftPreviewText(text){
+  const input=String(text||'');
+  let html='',buffer='',style={color:null,bold:false,italic:false,underline:false,strike:false};
+  const flush=()=>{
+    if(!buffer)return;
+    const cls=[];
+    const css=[];
+    if(style.bold)cls.push('ql-mc-bold');
+    if(style.italic)css.push('font-style:italic');
+    if(style.underline)css.push('text-decoration:underline');
+    if(style.strike)css.push('text-decoration:line-through');
+    if(style.color)css.push(`color:${style.color}`);
+    html+=css.length||cls.length?`<span class="${cls.join(' ')}" style="${css.join(';')}">${esc(buffer)}</span>`:esc(buffer);
+    buffer='';
+  };
+  for(let i=0;i<input.length;i++){
+    const ch=input[i];
+    if((ch==='§'||(ch==='Â'&&input[i+1]==='§'))&&i<input.length-1){
+      if(ch==='Â')i++;
+      const code=String(input[++i]||'').toLowerCase();
+      if(/[0-9a-fk-or]/.test(code)){
+        flush();
+        if(MC_PREVIEW_COLORS[code])style={color:MC_PREVIEW_COLORS[code],bold:false,italic:false,underline:false,strike:false};
+        else if(code==='l')style.bold=true;
+        else if(code==='o')style.italic=true;
+        else if(code==='n')style.underline=true;
+        else if(code==='m')style.strike=true;
+        else if(code==='r')style={color:null,bold:false,italic:false,underline:false,strike:false};
+        continue;
+      }
+      buffer+=ch;
+      continue;
+    }
+    buffer+=ch;
+  }
+  flush();
+  return html;
+}
+function prettyType(t){
+  const raw=String(t||'questlog:unknown').split(':').pop().replace(/_/g,' ');
+  return raw.replace(/\b\w/g,c=>c.toUpperCase());
+}
+function renderableLabel(v){
+  if(!v)return'minecraft:book';
+  if(typeof v==='string')return v;
+  if(v.item)return v.item;
+  if(v.block)return v.block;
+  if(v.entity)return v.entity;
+  if(v.biome)return v.biome;
+  if(v.dimension)return v.dimension;
+  if(v.effect)return v.effect;
+  if(v.advancement)return v.advancement;
+  if(v.texture)return v.texture;
+  return JSON.stringify(v);
+}
+function previewIconLetters(v){
+  const id=renderableLabel(v).split(':').pop().replace(/[^a-z0-9]+/gi,' ').trim();
+  const words=id?id.split(/\s+/):['Q'];
+  return words.slice(0,2).map(w=>w[0]).join('').toUpperCase();
+}
+function previewIconKind(v){
+  const label=renderableLabel(v);
+  if(typeof v==='object'&&v?.entity)return'entity';
+  if(typeof v==='object'&&v?.block)return'block';
+  if(typeof v==='object'&&v?.texture)return'texture';
+  if(/_block|block|stone|dirt|log|planks|ore|copper|deepslate|sand|glass|brick/i.test(label))return'block';
+  if(/zombie|skeleton|creeper|villager|cow|pig|sheep|entity/i.test(label))return'entity';
+  return'item';
+}
+function hasPreviewIcon(v){
+  if(!v)return false;
+  if(typeof v==='string')return !!v.trim();
+  return !!(v.item||v.texture||v.block||v.entity||v.biome||v.dimension||v.effect||v.advancement);
+}
+function minecraftIconId(v){
+  const raw=renderableLabel(v).trim();
+  if(!raw)return'';
+  if(raw.startsWith('minecraft:textures/')){
+    const path=raw.slice('minecraft:textures/'.length).replace(/\.png$/i,'');
+    return `minecraft:${path.replace(/^(item|block)\//,'')}`;
+  }
+  if(raw.startsWith('minecraft:item/'))return `minecraft:${raw.slice('minecraft:item/'.length).replace(/\.png$/i,'')}`;
+  if(raw.startsWith('minecraft:block/'))return `minecraft:${raw.slice('minecraft:block/'.length).replace(/\.png$/i,'')}`;
+  return raw.includes(':')?raw:`minecraft:${raw}`;
+}
+function minecraftPreviewTextureUrl(v){
+  const textures=window.QUESTLOG_MINECRAFT_TEXTURES||{};
+  const id=minecraftIconId(v);
+  if(!id.startsWith('minecraft:'))return'';
+  return MINECRAFT_PREVIEW_TEXTURE_OVERRIDES[id]||textures[id]||'';
+}
+const MINECRAFT_PREVIEW_TEXTURE_OVERRIDES={
+  'minecraft:beacon':'questlog-assets/minecraft/textures/block/beacon.png',
+  'minecraft:cartography_table':'questlog-assets/minecraft/textures/block/cartography_table_top.png',
+  'minecraft:enchanting_table':'questlog-assets/minecraft/textures/block/enchanting_table_top.png',
+  'minecraft:lectern':'questlog-assets/minecraft/textures/block/lectern_front.png',
+  'minecraft:lingering_potion':'questlog-assets/minecraft/textures/item/lingering_potion.png',
+  'minecraft:potion':'questlog-assets/minecraft/textures/item/potion.png',
+  'minecraft:splash_potion':'questlog-assets/minecraft/textures/item/splash_potion.png',
+  'minecraft:stonecutter':'questlog-assets/minecraft/textures/block/stonecutter_top.png'
+};
+const MINECRAFT_ENTITY_TEXTURES={
+  'minecraft:zombie':'questlog-assets/minecraft/textures/entity/zombie/zombie.png',
+  'minecraft:zombie_villager':'questlog-assets/minecraft/textures/entity/zombie_villager/zombie_villager.png',
+  'minecraft:skeleton':'questlog-assets/minecraft/textures/entity/skeleton/skeleton.png',
+  'minecraft:stray':'questlog-assets/minecraft/textures/entity/skeleton/stray.png',
+  'minecraft:wither_skeleton':'questlog-assets/minecraft/textures/entity/skeleton/wither_skeleton.png',
+  'minecraft:husk':'questlog-assets/minecraft/textures/entity/zombie/husk.png',
+  'minecraft:drowned':'questlog-assets/minecraft/textures/entity/zombie/drowned.png',
+  'minecraft:creeper':'questlog-assets/minecraft/textures/entity/creeper/creeper.png',
+  'minecraft:enderman':'questlog-assets/minecraft/textures/entity/enderman/enderman.png',
+  'minecraft:spider':'questlog-assets/minecraft/textures/entity/spider/spider.png',
+  'minecraft:cave_spider':'questlog-assets/minecraft/textures/entity/spider/cave_spider.png',
+  'minecraft:cow':'questlog-assets/minecraft/textures/entity/cow/cow.png',
+  'minecraft:pig':'questlog-assets/minecraft/textures/entity/pig/pig.png',
+  'minecraft:sheep':'questlog-assets/minecraft/textures/entity/sheep/sheep.png',
+  'minecraft:chicken':'questlog-assets/minecraft/textures/entity/chicken.png',
+  'minecraft:villager':'questlog-assets/minecraft/textures/entity/villager/villager.png'
+};
+const MINECRAFT_ENTITY_FACE_META={
+  'minecraft:zombie':{textureHeight:64},
+  'minecraft:zombie_villager':{textureHeight:64},
+  'minecraft:husk':{textureHeight:64},
+  'minecraft:drowned':{textureHeight:64},
+  'minecraft:villager':{textureHeight:64},
+  'minecraft:skeleton':{textureHeight:32},
+  'minecraft:stray':{textureHeight:32},
+  'minecraft:wither_skeleton':{textureHeight:32},
+  'minecraft:creeper':{textureHeight:32},
+  'minecraft:enderman':{textureHeight:32},
+  'minecraft:spider':{textureHeight:32},
+  'minecraft:cave_spider':{textureHeight:32},
+  'minecraft:cow':{textureHeight:32},
+  'minecraft:pig':{textureHeight:32},
+  'minecraft:sheep':{textureHeight:32},
+  'minecraft:chicken':{textureHeight:32}
+};
+function minecraftEntityTextureUrl(v){
+  const id=minecraftIconId(v);
+  if(!minecraftEntityFaceSupported(id))return'';
+  const generated=window.QUESTLOG_MINECRAFT_ENTITY_TEXTURES||{};
+  return generated[id]||MINECRAFT_ENTITY_TEXTURES[id]||'';
+}
+function minecraftEntityFaceSupported(id){
+  if(MINECRAFT_ENTITY_FACE_META[id])return true;
+  const meta=(window.QUESTLOG_MINECRAFT_ENTITY_TEXTURE_META||{})[id];
+  if(!meta)return true;
+  const w=Number(meta.width||64),h=Number(meta.height||meta.textureHeight||64);
+  return w<=64&&h<=64;
+}
+function minecraftEntityFaceStyle(v){
+  const id=minecraftIconId(v);
+  const meta=(window.QUESTLOG_MINECRAFT_ENTITY_TEXTURE_META||{})[id]||MINECRAFT_ENTITY_FACE_META[id]||{height:64,textureHeight:64};
+  const textureHeight=Number(meta.height||meta.textureHeight||64);
+  const safeHeight=Math.max(textureHeight,16);
+  const yScale=(safeHeight/8)*100;
+  const yPosition=(8/Math.max(safeHeight-8,8))*100;
+  const overlayVisible=safeHeight>32;
+  return `--mc-entity-bg-y-scale:${yScale}%;--mc-entity-face-y:${yPosition}%;--mc-entity-face-overlay-opacity:${overlayVisible?'1':'0'}`;
+}
+function previewIconTile(v,classes=''){
+  if(!hasPreviewIcon(v))return '';
+  const label=renderableLabel(v);
+  const kind=previewIconKind(v);
+  const entityTexture=kind==='entity'?minecraftEntityTextureUrl(v):'';
+  const texture=minecraftPreviewTextureUrl(v)||entityTexture;
+  if(texture){
+    const blockModel=kind==='block'||/\/block\//.test(texture);
+    if(kind==='entity'&&entityTexture){
+      const parts='<span class="mc-entity-face" aria-hidden="true"><i class="mc-entity-face-base"></i><i class="mc-entity-face-overlay"></i></span>';
+      return `<span class="ql-icon-tile ${esc(classes)} entity-preview real-texture entity-face-model entity-face-only" title="${esc(label)}" aria-label="${esc(label)} entity face preview" data-mc-entity-id="${esc(minecraftIconId(v))}" data-mc-entity-texture="${esc(entityTexture)}" style="--mc-icon-texture:url(&quot;${esc(entityTexture)}&quot;);${minecraftEntityFaceStyle(v)}">${parts}<span>${esc(previewIconLetters(v)||'E')}</span></span>`;
+    }
+    if(blockModel){
+      return `<span class="ql-icon-tile ${esc(classes)} ${esc(kind)} real-texture block-flat-icon" title="${esc(label)}" aria-label="${esc(label)} block icon" style="--mc-icon-texture:url(&quot;${esc(texture)}&quot;)"><span>${esc(previewIconLetters(v))}</span></span>`;
+    }
+    return `<span class="ql-icon-tile ${esc(classes)} ${esc(kind)} real-texture" title="${esc(label)}" aria-label="${esc(label)} icon" style="--mc-icon-texture:url(&quot;${esc(texture)}&quot;)"><span>${esc(previewIconLetters(v))}</span></span>`;
+  }
+  if(kind==='entity')return `<span class="ql-icon-tile ${esc(classes)} entity-preview" title="Entity preview for ${esc(label)}. No bundled entity texture is available." aria-label="${esc(label)} entity preview"><span>${esc(previewIconLetters(v)||'E')}</span></span>`;
+  return `<span class="ql-icon-tile ${esc(classes)} ${esc(kind)} placeholder generic-placeholder" title="No bundled Minecraft texture match for ${esc(label)}." aria-label="Placeholder icon">${esc(previewIconLetters(v)||'P')}</span>`;
+}
+function previewEntryIconValue(item){
+  if(!item)return null;
+  if(item.icon)return item.icon;
+  if(item.item)return {item:item.item};
+  if(item.block)return {block:item.block};
+  if(item.entity)return {entity:item.entity};
+  if(item.biome||item.dimension||item.structure||item.quest||item.advancement||item.stat||item.effect||item.bounds)return null;
+  return null;
+}
+function previewCurrentId(kind=mode,file=currentFile){
+  if(!file)return'';
+  return kind==='chapter'?chapterIdFromFile(file):questIdFromFile(file);
+}
+function previewEntryTitle(item,fallback){
+  return previewText(item?.name)||previewText(item?.title)||previewText(item?.description)||prettyType(item?.type)||fallback;
+}
+function previewEntryTitleRaw(item,fallback){
+  return rawPreviewText(item?.name)||rawPreviewText(item?.title)||rawPreviewText(item?.description)||prettyType(item?.type)||fallback;
+}
+function previewTooltipText(value){
+  return previewText(value).replace(/\s+/g,' ').trim();
+}
+function previewEntryMark(item){
+  const raw=String(item?.type||'entry').split(':').pop().replace(/[^a-z0-9]+/gi,' ').trim();
+  const words=raw?raw.split(/\s+/):['entry'];
+  return words.slice(0,2).map(w=>w[0]).join('').toUpperCase();
+}
+function previewEntryBadge(item){
+  if(!item||typeof item!=='object')return'';
+  if(item.required_amount!==undefined)return `x${item.required_amount}`;
+  if(item.count!==undefined)return `x${item.count}`;
+  if(item.experience!==undefined)return `${item.experience} xp`;
+  if(Array.isArray(item.objectives))return `${item.objectives.length} option${item.objectives.length===1?'':'s'}`;
+  return '';
+}
+function previewEntryDetail(item){
+  if(!item||typeof item!=='object')return'';
+  const keys=['item','block','entity','biome','dimension','structure','quest','advancement','stat','effect','enchantment','loot_table','command'];
+  const parts=[];
+  keys.forEach(k=>{if(item[k]!==undefined&&item[k]!==null&&item[k]!=='')parts.push(`${k.replace(/_/g,' ')}: ${typeof item[k]==='object'?JSON.stringify(item[k]):item[k]}`);});
+  if(item.required_amount!==undefined)parts.push(`amount: ${item.required_amount}`);
+  if(item.count!==undefined)parts.push(`count: ${item.count}`);
+  if(item.experience!==undefined)parts.push(`xp: ${item.experience}`);
+  if(item.objectives&&Array.isArray(item.objectives))parts.push(`${item.objectives.length} option${item.objectives.length===1?'':'s'}`);
+  if(item.objective)parts.push('inverted objective');
+  return parts.join(' | ');
+}
+function renderPreviewList(title,items,empty,tone='neutral'){
+  const arr=Array.isArray(items)?items:[];
+  return`<div class="preview-section"><div class="preview-section-title">${esc(title)}</div><div class="preview-list">${
+    arr.length?arr.map((item,i)=>`<div class="preview-row ${esc(tone)}"><div class="preview-row-mark">${esc(previewEntryMark(item))}</div><div class="preview-row-copy"><div class="preview-row-title">${esc(previewEntryTitle(item,`${title} ${i+1}`))}</div><div class="preview-row-meta">${esc(prettyType(item?.type))}${previewEntryDetail(item)?` - ${esc(previewEntryDetail(item))}`:''}</div></div>${previewEntryBadge(item)?`<div class="preview-row-badge">${esc(previewEntryBadge(item))}</div>`:''}</div>`).join(''):`<div class="preview-muted">${esc(empty)}</div>`
+  }</div></div>`;
+}
+function questPreviewState(q){
+  const issues=validateAll(true).filter(i=>i.file===currentFile&&i.kind==='quest');
+  if(issues.some(i=>i.level==='error'||i.level==='missing'))return{cls:'needs-work',label:'Needs fixes'};
+  if((q.requirements||[]).length)return{cls:'locked',label:'Locked by requirements'};
+  if(q.hidden)return{cls:'hidden',label:'Hidden'};
+  return{cls:'ready',label:'Ready'};
+}
+function renderPreviewFacts(facts){
+  return`<div class="preview-facts">${facts.filter(Boolean).map(f=>`<div><span>${esc(f.label)}</span><strong>${esc(f.value)}</strong></div>`).join('')}</div>`;
+}
+function renderQuestPreview(q){
+  const desc=previewText(q.description);
+  const state=questPreviewState(q);
+  const chapter=q.chapter||'questlog:main';
+  return`<div class="preview-shell">
+    <div class="preview-hero">
+      <div class="preview-icon">${esc(previewIconLetters(q.icon))}</div>
+      <div class="preview-hero-copy"><div class="preview-kicker">Quest preview</div><div class="preview-title">${esc(q.title||currentFile?.replace(/\.json$/i,'')||'Untitled quest')}</div><div class="preview-sub">${esc(previewCurrentId('quest'))} - ${esc(renderableLabel(q.icon))}</div></div>
+      <div class="preview-state ${esc(state.cls)}">${esc(state.label)}</div>
+    </div>
+    <div class="preview-body">
+      <div class="preview-desc">${desc?esc(desc):'<span class="preview-muted">No description yet.</span>'}</div>
+      ${renderPreviewFacts([
+        {label:'Chapter',value:chapter},
+        {label:'Order',value:q.sort_order??0},
+        {label:'Objectives',value:(q.objectives||[]).length},
+        {label:'Rewards',value:(q.rewards||[]).length}
+      ])}
+      <div class="preview-pill-row">
+        ${q.include_in_main===false?'<span class="preview-pill warn">Not in main view</span>':'<span class="preview-pill">Main view</span>'}
+        ${q.translatable?'<span class="preview-pill">Translatable</span>':''}
+        ${q.toast_on_unlock===false?'<span class="preview-pill warn">Unlock toast off</span>':''}
+        ${q.toast_on_complete===false?'<span class="preview-pill warn">Complete toast off</span>':''}
+        ${q.show_popup_on_unlock?'<span class="preview-pill">Popup on unlock</span>':''}
+      </div>
+      ${renderPreviewList('Objectives',q.objectives,'No objectives yet.','objective')}
+      ${renderPreviewList('Requirements',q.requirements,'No unlock requirements.','requirement')}
+      ${renderPreviewList('Failures',q.failures,'No failure conditions.','failure')}
+      ${renderPreviewList('Rewards',q.rewards,'No rewards yet.','reward')}
+    </div>
+  </div>`;
+}
+function questMatchesRef(fn,ref){
+  if(!ref)return false;
+  const base=String(fn||'').replace(/\.json$/i,'');
+  const ns=getNs()||'questlog';
+  return [fn,base,`${ns}:${base}`,`questlog:${base}`].includes(String(ref));
+}
+function chapterQuestFiles(c){
+  if(!currentFile)return[];
+  const base=currentFile.replace(/\.json$/i,'');
+  const ns=getNs()||'questlog';
+  const chapterRefs=new Set([currentFile,base,`${ns}:${base}`,`questlog:${base}`]);
+  const found=new Set();
+  Object.entries(quests).forEach(([fn,q])=>{if(chapterRefs.has(q?.chapter||'questlog:main'))found.add(fn);});
+  if(Array.isArray(c?.quests))c.quests.forEach(ref=>{
+    Object.keys(quests).forEach(fn=>{if(questMatchesRef(fn,ref))found.add(fn);});
+  });
+  return [...found].sort((a,b)=>(Number(quests[a]?.sort_order)||0)-(Number(quests[b]?.sort_order)||0)||a.localeCompare(b));
+}
+function renderChapterQuestPreview(files){
+  if(!files.length)return'<div class="preview-muted">No quests are linked to this chapter yet.</div>';
+  return`<div class="preview-chapter-quests">${files.map(fn=>{
+    const q=quests[fn]||{};
+    return`<div class="preview-quest-chip"><div class="preview-row-mark">${esc(previewIconLetters(q.icon))}</div><div class="preview-row-copy"><div class="preview-row-title">${esc(q.title||fn.replace(/\.json$/i,''))}</div><div class="preview-row-meta">${esc(questIdFromFile(fn))}${q.description?` - ${esc(previewText(q.description).slice(0,90))}`:''}</div></div><div class="preview-row-badge">#${esc(q.sort_order??0)}</div></div>`;
+  }).join('')}</div>`;
+}
+function renderChapterPreview(c){
+  const name=c.name||currentFile?.replace(/\.json$/i,'')||'Untitled chapter';
+  const linked=chapterQuestFiles(c);
+  return`<div class="preview-shell">
+    <div class="preview-hero">
+      <div class="preview-icon">${esc(previewIconLetters(c.icon))}</div>
+      <div class="preview-hero-copy"><div class="preview-kicker">Chapter preview</div><div class="preview-title">${esc(name)}</div><div class="preview-sub">${esc(previewCurrentId('chapter'))} - ${esc(renderableLabel(c.icon))}</div></div>
+      <div class="preview-state ready">${linked.length} quest${linked.length===1?'':'s'}</div>
+    </div>
+    <div class="preview-body">
+      ${renderPreviewFacts([
+        {label:'Order',value:c.order??0},
+        {label:'Linked quests',value:linked.length},
+        {label:'File',value:currentFile||'new chapter'}
+      ])}
+      <div class="preview-pill-row">
+        ${c.default_chapter?'<span class="preview-pill">Default chapter</span>':''}
+        ${c.hidden?'<span class="preview-pill warn">Hidden</span>':''}
+        ${c.translatable?'<span class="preview-pill">Translatable</span>':''}
+      </div>
+      <div class="preview-section"><div class="preview-section-title">Quest cards</div>${renderChapterQuestPreview(linked)}</div>
+    </div>
+  </div>`;
+}
+function refreshQuestPreview(){
+  const host=$('#questPreviewPanel');if(!host)return;
+  if(!currentFile||!getCD()){host.innerHTML='<div class="preview-empty">Select or create a file to preview it.</div>';return;}
+  try{const d=getCD();host.innerHTML=mode==='quest'?renderQuestPreview(d):renderChapterPreview(d);}catch(e){host.innerHTML=`<div class="preview-empty">${esc(e.message||String(e))}</div>`;}
+}
+const dPreview=debounce(()=>{refreshQuestPreview();refreshSideInfoPanel();renderInlineQuestPreview();renderInlineChapterListPreview();},180);
+function refreshSideInfoPanel(){
+  const host=$('#sideInfoPanel');if(!host)return;
+  const qCount=Object.keys(quests).length,cCount=Object.keys(chapters).length;
+  const current=currentFile&&getCD()?getCD():null;
+  const title=currentFile?currentFile.replace(/\.json$/i,''):'No file selected';
+  const type=mode==='chapter'?'Chapter':'Quest';
+  host.innerHTML=`<div class="side-info-shell">
+    <div class="side-info-head"><div><span>${esc(type)}</span><strong>${esc(title)}</strong></div><button type="button" class="btn btn-sm" id="sideOpenQuestlogPreview">Questlog menu</button></div>
+    <div class="side-info-grid">
+      <div><span>Quests</span><strong>${qCount}</strong></div>
+      <div><span>Chapters</span><strong>${cCount}</strong></div>
+      <div><span>Namespace</span><strong>${esc(getNs())}</strong></div>
+      <div><span>Mode</span><strong>${esc(mode)}</strong></div>
+    </div>
+    <div class="side-info-section"><div class="preview-section-title">Useful next checks</div>
+      <button type="button" class="side-info-row" data-side-action="validation">Open checks for missing objectives and broken links.</button>
+      <button type="button" class="side-info-row" data-side-action="json">Open full live JSON for the selected file.</button>
+      <button type="button" class="side-info-row" data-side-action="menu">Open the source-backed Questlog menu preview.</button>
+    </div>
+  </div>`;
+  $('#sideOpenQuestlogPreview')?.addEventListener('click',openQuestlogListPreviewModal);
+  $$('[data-side-action]',host).forEach(btn=>btn.addEventListener('click',()=>{
+    const a=btn.dataset.sideAction;
+    if(a==='validation')setRightPanelMode('validation');
+    else if(a==='json')setRightPanelMode('json');
+    else openQuestlogListPreviewModal();
+  }));
+}
+
+function questPreviewDescription(q){
+  const map={default:'description',completed:'description_completed',failed:'description_failed'};
+  const key=map[questPreviewTextMode]||'description';
+  return rawPreviewText(q?.[key])||rawPreviewText(q?.description)||'No description yet.';
+}
+function questPreviewStateMode(){
+  if(currentFile&&questPreviewCompletedFiles.has(currentFile))return'completed';
+  if(currentFile&&questPreviewFailedFiles.has(currentFile))return'failed';
+  return questPreviewTextMode==='completed'?'completed':questPreviewTextMode==='failed'?'failed':'active';
+}
+function questPreviewTextOptions(q){
+  const out=[{mode:'default',label:'Main'},{mode:'completed',label:'Complete'}];
+  if(previewText(q?.description_failed)||(q?.failures||[]).length)out.push({mode:'failed',label:'Failure'});
+  return out;
+}
+function questPreviewEntries(q,kind=null){
+  kind=kind||(questPreviewStateMode()==='completed'?'rewards':'objectives');
+  const arr=Array.isArray(q?.[kind])?q[kind]:[];
+  return arr;
+}
+function questPreviewInfoTitle(kind=null){
+  return (kind||(questPreviewStateMode()==='completed'?'rewards':'objectives'))==='rewards'?'Rewards':'Objectives';
+}
+function questPreviewEntryStatus(item,kind=null){
+  if(kind==='rewards'||(!kind&&questPreviewStateMode()==='completed'))return item?.collected?'Collected':'Uncollected';
+  if(!kind&&questPreviewStateMode()==='failed')return 'Failed';
+  const amount=Number(item?.required_amount ?? item?.count ?? 1);
+  return amount>1?`0 / ${amount}`:'Uncompleted';
+}
+function questPreviewButtonUnits(label){
+  return String(label||'').length>7?88:54;
+}
+function questPreviewPrimaryStateText(q){
+  if(questPreviewStateMode()==='completed')return (q.collect_button_text||'Collect Rewards');
+  if((q.objectives||[]).some(o=>o.type==='questlog:read'))return 'Read';
+  return (q.back_button_text||'Back');
+}
+function questPreviewHasEntryIcon(item){
+  return !!(item&&(item.icon||item.item||item.block||item.entity||item.biome||item.dimension||item.effect||item.advancement));
+}
+function questPreviewCanScrollText(desc,leftWidth,contentHeight){
+  const text=String(desc||'');
+  const charsPerLine=Math.max(18,Math.floor((leftWidth-38)/5.5));
+  const wrapped=text.split(/\n/).reduce((sum,line)=>sum+Math.max(1,Math.ceil(line.length/charsPerLine)),0);
+  return wrapped*10>contentHeight;
+}
+function questPreviewActiveEntry(q,kind=null){
+  const arr=questPreviewEntries(q,kind);
+  return arr[Math.min(Math.max(questPreviewDetailIndex,0),Math.max(arr.length-1,0))]||null;
+}
+function renderQuestPreviewDetailPanel(q,{open=questPreviewDetailsOpen,kind=null}={}){
+  const list=questPreviewEntries(q,kind);
+  const selected=questPreviewActiveEntry(q,kind);
+  const title=questPreviewInfoTitle(kind);
+  const skin=guiStudioAppliedPreviewForQuest();
+  const panelStyle=skin?.pieces?.right?` style="background-image:url('${esc(skin.pieces.right)}');background-size:100% 100%;"`:'';
+  return`<aside class="ql-preview-details ${open?'open':''}" aria-label="Quest preview details"${panelStyle}>
+    <div class="ql-preview-side-title">${esc(title)}</div>
+    <div class="ql-preview-rule small"></div>
+    <div class="ql-preview-detail-list">${list.length?list.map((item,i)=>{const nameRaw=previewEntryTitleRaw(item,`${title} ${i+1}`);const statusRaw=questPreviewEntryStatus(item,kind);const tip=[previewTooltipText(nameRaw),previewTooltipText(statusRaw)].filter(Boolean).join(' - ');return`<div class="ql-preview-detail-row ${questPreviewHasEntryIcon(item)?'has-icon':''} ${i===questPreviewDetailIndex?'active':''}" title="${esc(tip)}">${questPreviewHasEntryIcon(item)?previewIconTile(previewEntryIconValue(item),'ql-preview-entry-icon'):''}<span class="ql-preview-detail-name-line" title="${esc(previewTooltipText(nameRaw))}">${renderMinecraftPreviewText(nameRaw)}</span><b title="${esc(previewTooltipText(statusRaw))}">${renderMinecraftPreviewText(statusRaw)}</b></div>`;}).join(''):`<div class="ql-preview-detail-empty">No ${title.toLowerCase()} yet.</div>`}</div>
+    ${selected?`<div class="ql-preview-detail-card"><div class="ql-preview-detail-name">${esc(previewEntryTitle(selected,'Detail'))}</div><div class="ql-preview-detail-type">${esc(prettyType(selected.type))}</div><div class="ql-preview-detail-meta">${esc(previewEntryDetail(selected)||'No extra fields yet.')}</div></div>`:''}
+  </aside>`;
+}
+function guiStudioAppliedPreviewForQuest(){
+  if(!guiStudioAppliedQuestPreview||mode!=='quest'||!currentFile)return null;
+  const scope=guiStudioAppliedQuestPreview.scope;
+  if(scope==='global-questlist')return null;
+  if(scope==='multiple'){
+    const targets=Array.isArray(guiStudioAppliedQuestPreview.targetFiles)?guiStudioAppliedQuestPreview.targetFiles:[];
+    return targets.includes(currentFile)?guiStudioAppliedQuestPreview:null;
+  }
+  if(scope==='selected'){
+    const targets=Array.isArray(guiStudioAppliedQuestPreview.targetFiles)?guiStudioAppliedQuestPreview.targetFiles:[];
+    return !targets.length||targets.includes(currentFile)?guiStudioAppliedQuestPreview:null;
+  }
+  return guiStudioAppliedQuestPreview.currentFile===currentFile?guiStudioAppliedQuestPreview:null;
+}
+function questPreviewDetailKindFromLayoutState(state){
+  const normalized=questlogDetailNormalizeState(state);
+  if(normalized==='rewards')return 'rewards';
+  if(normalized==='objectives')return 'objectives';
+  return '';
+}
+function questPreviewAppliedRightPanelChanged(){
+  const skin=guiStudioAppliedPreviewForQuest();
+  if(!skin?.layout?.layout||typeof withGuiStudioScopedDraft!=='function')return false;
+  return withGuiStudioScopedDraft(skin.layout,()=>{
+    ensureGuiStudioLayoutState();
+    return !guiStudioLayoutBoxUsesDefaultPlacement('right');
+  });
+}
+function questPreviewAppliedDetailKind(){
+  const skin=guiStudioAppliedPreviewForQuest();
+  return questPreviewDetailKindFromLayoutState(skin?.layout?.layoutState)||(questPreviewAppliedRightPanelChanged()?'objectives':'');
+}
+function guiStudioQuestPreviewButtonStyle(url){
+  return url?`background-image:url('${esc(url)}');background-size:100% 100%;background-repeat:no-repeat;`:'';
+}
+function questlogListSkinCssVar(name,url){
+  return url?`${name}:url('${esc(url)}');`:'';
+}
+function questlogAppliedQuestLayoutPatch(){
+  const skin=guiStudioAppliedPreviewForQuest();
+  if(!skin?.layout?.layout||typeof withGuiStudioScopedDraft!=='function')return {};
+  return withGuiStudioScopedDraft(skin.layout,()=>guiStudioQuestlogLayoutPatch().patch||{});
+}
+function questlogListPreviewLayoutRuntime(){
+  const skin=guiStudioAppliedQuestListPreview;
+  if(!skin?.layout?.layout||typeof guiStudioQuestListConfigPatchForDraft!=='function')return null;
+  const patch=guiStudioQuestListConfigPatchForDraft(skin.layout);
+  let background={changed:false,dx:0,dy:0,scaleX:1,scaleY:1};
+  if(typeof withGuiStudioScopedDraft==='function'&&typeof guiStudioQuestListBackgroundTransform==='function'){
+    background=withGuiStudioScopedDraft(skin.layout,()=>guiStudioQuestListBackgroundTransform());
+  }
+  return {patch,background};
+}
+function questlogListPreviewLayoutStyle(){
+  const runtime=questlogListPreviewLayoutRuntime();
+  const skin=guiStudioAppliedQuestListPreview;
+  const colors=skin?.layout?.colors||{};
+  const colorVars=[
+    `--ql-list-progress-color:${normalizeHexColor(colors.progress,GUI_STUDIO_COLOR_DEFAULTS.progress)};`,
+    `--ql-list-hover-color:${normalizeHexColor(colors.hover,GUI_STUDIO_COLOR_DEFAULTS.hover)};`
+  ];
+  if(!runtime?.patch?.gui)return colorVars.join('');
+  const gui=runtime.patch.gui;
+  const mainX=Math.round(Number(gui.mainPanelX)||0);
+  const mainY=Math.round(Number(gui.mainPanelY)||0);
+  const searchX=mainX+Math.round(Number(gui.searchBarX)||0);
+  const searchY=mainY+Math.round(Number(gui.searchBarY)||0);
+  const chapterX=mainX+Math.round(Number(gui.chapterButtonsX)||0);
+  const chapterY=mainY+Math.round(Number(gui.chapterButtonsY)||0);
+  const bg=runtime.background||{};
+  return [
+    ...colorVars,
+    `--ql-list-main-dx:${mainX}px;`,
+    `--ql-list-main-dy:${mainY}px;`,
+    `--ql-list-search-dx:${searchX}px;`,
+    `--ql-list-search-dy:${searchY}px;`,
+    `--ql-list-chapter-dx:${chapterX}px;`,
+    `--ql-list-chapter-dy:${chapterY}px;`,
+    `--ql-list-bg-dx:${Math.round(Number(bg.dx)||0)}px;`,
+    `--ql-list-bg-dy:${Math.round(Number(bg.dy)||0)}px;`
+  ].join('');
+}
+function questlogListPreviewSkinStyle(){
+  const skin=guiStudioAppliedQuestListPreview;
+  const layoutStyle=questlogListPreviewLayoutStyle();
+  if(!skin?.pieces)return layoutStyle;
+  const pieces=skin.pieces;
+  return [
+    layoutStyle,
+    questlogListSkinCssVar('--ql-list-main-preview',pieces.main),
+    questlogListSkinCssVar('--ql-list-search-min-preview',pieces.searchMin),
+    questlogListSkinCssVar('--ql-list-search-expanded-preview',pieces.searchExpanded),
+    questlogListSkinCssVar('--ql-list-visible-preview',pieces.visible),
+    questlogListSkinCssVar('--ql-list-hidden-preview',pieces.hidden),
+    questlogListSkinCssVar('--ql-list-condense-preview',pieces.condense),
+    questlogListSkinCssVar('--ql-list-expand-preview',pieces.expand),
+    questlogListSkinCssVar('--ql-list-main-tab-preview',pieces.mainTab),
+    questlogListSkinCssVar('--ql-list-main-tab-active-preview',pieces.mainTabActive),
+    questlogListSkinCssVar('--ql-list-secondary-tab-preview',pieces.secondaryTab),
+    questlogListSkinCssVar('--ql-list-secondary-tab-active-preview',pieces.secondaryTabActive)
+  ].join('');
+}
+function questlogDetailPreviewButtonLeft(key,leftPanelWidth,state='quest'){
+  const mainBase=questlogDetailSpecElement('main')?.base||{x:255,w:275};
+  const keyBase=questlogDetailSpecElement(key)?.base;
+  if(!keyBase)return 0;
+  const mainBox=questlogDetailStateDisplayBox('main',{...mainBase},state,true);
+  const buttonBox=questlogDetailStateDisplayBox(key,{...keyBase},state,true);
+  const scale=(Number(leftPanelWidth)||mainBase.w||275)/(mainBase.w||275);
+  return Math.round((buttonBox.x-mainBox.x)*scale*GUI_STUDIO_PIXEL_SCALE);
+}
+function questPreviewInlineLayoutVars({leftWidth,rightWidth,panelHeight,leftOffsetX,leftOffsetY,rightOffsetX,rightOffsetY,showDetails}){
+  const gap=12;
+  const actionH=40;
+  const leftX=leftOffsetX*GUI_STUDIO_PIXEL_SCALE;
+  const leftY=leftOffsetY*GUI_STUDIO_PIXEL_SCALE;
+  const leftW=leftWidth*GUI_STUDIO_PIXEL_SCALE;
+  const panelH=panelHeight*GUI_STUDIO_PIXEL_SCALE;
+  const boxes=[{x:leftX,y:leftY,w:leftW,h:panelH+actionH}];
+  if(showDetails){
+    boxes.push({
+      x:leftW+gap+rightOffsetX*GUI_STUDIO_PIXEL_SCALE,
+      y:rightOffsetY*GUI_STUDIO_PIXEL_SCALE,
+      w:rightWidth*GUI_STUDIO_PIXEL_SCALE,
+      h:panelH
+    });
+  }
+  const minX=Math.min(0,...boxes.map(box=>box.x));
+  const minY=Math.min(0,...boxes.map(box=>box.y));
+  const maxX=Math.max(leftW,...boxes.map(box=>box.x+box.w));
+  const maxY=Math.max(540,...boxes.map(box=>box.y+box.h));
+  const shiftX=Math.round(-minX);
+  const shiftY=Math.round(-minY);
+  const contentW=Math.round(Math.max(960,maxX-minX));
+  const contentH=Math.round(Math.max(540,maxY-minY));
+  return `--ql-inline-shift-x:${shiftX}px;--ql-inline-shift-y:${shiftY}px;--ql-inline-content-w:${contentW}px;--ql-inline-content-h:${contentH}px;`;
+}
+function renderQuestPreviewSurface(body,{inline=false,rerender=null}={}){
+  if(!body)return;
+  if(mode!=='quest'||!currentFile||!getCD()){body.innerHTML='<div class="ql-preview-empty">Select a quest before previewing it.</div>';return;}
+  if(inline){
+    const rect=body.getBoundingClientRect();
+    if(rect.width&&rect.height){
+      const fit=Math.min((rect.width-8)/960,(rect.height-8)/540);
+      body.style.setProperty('--ql-inline-quest-scale',Math.max(.25,Math.min(1.15,fit)).toFixed(3));
+    }
+    body.classList.add('inline-preview-fitting');
+  }
+  const sourceQuest=getCD();
+  const q={...sourceQuest,...questlogAppliedQuestLayoutPatch()};
+  const options=questPreviewTextOptions(q);
+  const desc=questPreviewDescription(q);
+  const status=questPreviewState(q);
+  const leftWidth=Number(q.left_panel_width)||275;
+  const rightWidth=Number(q.right_panel_width)||170;
+  const panelHeight=Number(q.panel_height)||166;
+  const contentHeight=Math.max(40,panelHeight-68);
+  const leftOffsetX=Number(q.left_panel_x_offset)||0;
+  const leftOffsetY=Number(q.left_panel_y_offset)||0;
+  const rightOffsetX=Number(q.right_panel_x_offset)||0;
+  const rightOffsetY=Number(q.right_panel_y_offset)||0;
+  const detailsDisabled=!!q.disable_details_button;
+  const appliedDetailKind=inline?questPreviewAppliedDetailKind():'';
+  const hasRealDetails=((q.objectives||[]).length||(q.rewards||[]).length)>0;
+  const hasDetails=hasRealDetails||!!appliedDetailKind;
+  const appliedPreviewWantsDetails=!!appliedDetailKind&&!questPreviewAppliedPanelDismissed;
+  const showDetails=hasDetails&&!detailsDisabled&&(questPreviewDetailsOpen||appliedPreviewWantsDetails);
+  const previewLayoutState=questPreviewStateMode()==='completed'?'rewards':(showDetails?(appliedDetailKind||'objectives'):'quest');
+  const primaryText=previewLayoutState==='rewards'?(q.collect_button_text||'Collect Rewards'):questPreviewPrimaryStateText(q);
+  const showPrimary=previewLayoutState==='rewards';
+  const primaryUnits=showPrimary?questPreviewButtonUnits(primaryText):0;
+  const completeText='Complete';
+  const completeUnits=questPreviewButtonUnits(completeText);
+  const primaryLeft=questlogDetailPreviewButtonLeft(previewLayoutState==='rewards'?'rewardButton':'backButton',leftWidth,previewLayoutState);
+  const detailsLeft=questlogDetailPreviewButtonLeft('detailsButton',leftWidth,previewLayoutState);
+  const completeLeft=detailsLeft+(54+6)*GUI_STUDIO_PIXEL_SCALE;
+  const canComplete=showDetails&&questPreviewStateMode()!=='completed'&&!appliedDetailKind;
+  const canScroll=questPreviewCanScrollText(desc,leftWidth,contentHeight);
+  const skin=guiStudioAppliedPreviewForQuest();
+  const paperStyle=skin?.pieces?.main?` style="background-image:url('${esc(skin.pieces.main)}');background-size:100% 100%;"`:'';
+  const buttonStyle=guiStudioQuestPreviewButtonStyle(skin?.pieces?.button);
+  const buttonHoverStyle=guiStudioQuestPreviewButtonStyle(skin?.pieces?.buttonHover||skin?.pieces?.button);
+  const inlineLayoutVars=inline?questPreviewInlineLayoutVars({leftWidth,rightWidth,panelHeight,leftOffsetX,leftOffsetY,rightOffsetX,rightOffsetY,showDetails}):'';
+  body.innerHTML=`<div class="ql-preview-stage ${inline?'ql-preview-inline-stage':''}" style="--ql-left-w:${leftWidth}px;--ql-right-w:${rightWidth}px;--ql-panel-h:${panelHeight}px;--ql-content-h:${contentHeight}px;--ql-left-x:${leftOffsetX}px;--ql-left-y:${leftOffsetY}px;--ql-right-x:${rightOffsetX}px;--ql-right-y:${rightOffsetY}px;${inlineLayoutVars}">
+    <div class="ql-preview-backdrop"></div>
+    <div class="ql-preview-layout ${showDetails?'details-open':''}">
+      <div class="ql-preview-book">
+        <div class="ql-preview-paper ql-panel-texture"${paperStyle}>
+          <div class="ql-preview-title-row ${hasPreviewIcon(q.icon)?'has-icon':'no-icon'}">
+            ${previewIconTile(q.icon,'ql-preview-title-icon')}
+            <div class="ql-preview-title-text" title="${esc(previewTooltipText(rawPreviewText(q.title)||currentFile.replace(/\.json$/i,'')))}">${renderMinecraftPreviewText(rawPreviewText(q.title)||currentFile.replace(/\.json$/i,''))}</div>
+          </div>
+          <div class="ql-preview-rule"></div>
+          <div class="ql-preview-scroll-area ${canScroll?'can-scroll':''}">
+            <div class="ql-preview-description" title="${esc(previewTooltipText(desc))}">${renderMinecraftPreviewText(desc)}</div>
+            <div class="ql-preview-scrollbar"><span></span></div>
+          </div>
+          <div class="ql-preview-state-line">${esc(status.label)} - ${esc(questIdFromFile(currentFile))}</div>
+        </div>
+        <div class="ql-preview-actions">
+          ${canComplete?`<button type="button" id="questPreviewCompleteBtn" class="${completeUnits===88?'long':''}" style="left:${completeLeft}px;${buttonStyle}">${completeText}</button>`:''}
+          ${!detailsDisabled&&hasDetails?`<button type="button" id="questPreviewDetailsBtn" style="left:${detailsLeft}px;${buttonHoverStyle}">Details</button>`:''}
+          ${showPrimary?`<button type="button" id="questPreviewBackBtn" class="ql-preview-primary-preview ${primaryUnits===88?'long':''}" style="left:${primaryLeft}px;${buttonStyle}">${esc(primaryText)}</button>`:''}
+        </div>
+      </div>
+      ${renderQuestPreviewDetailPanel(q,{open:showDetails,kind:previewLayoutState==='rewards'?'rewards':'objectives'})}
+    </div>
+  </div>`;
+  const rerenderPreview=rerender||(()=>inline?renderInlineQuestPreview():renderQuestPreviewModal());
+  $$('[data-preview-text-mode]',body).forEach(btn=>btn.onclick=()=>{
+    questPreviewTextMode=btn.dataset.previewTextMode||'default';
+    if(currentFile){
+      if(questPreviewTextMode==='completed'){questPreviewCompletedFiles.add(currentFile);questPreviewFailedFiles.delete(currentFile);}
+      else if(questPreviewTextMode==='failed'){questPreviewFailedFiles.add(currentFile);questPreviewCompletedFiles.delete(currentFile);}
+      else{questPreviewCompletedFiles.delete(currentFile);questPreviewFailedFiles.delete(currentFile);}
+    }
+    rerenderPreview();
+  });
+  $$('[data-preview-detail-index]',body).forEach(btn=>btn.onclick=()=>{questPreviewDetailIndex=Number(btn.dataset.previewDetailIndex)||0;rerenderPreview();});
+  const detailsBtn=body.querySelector('#questPreviewDetailsBtn');
+  if(detailsBtn)detailsBtn.onclick=()=>{
+    const nextOpen=!showDetails;
+    questPreviewDetailsOpen=nextOpen;
+    questPreviewAppliedPanelDismissed=!nextOpen;
+    rerenderPreview();
+  };
+  const completeBtn=body.querySelector('#questPreviewCompleteBtn');
+  if(completeBtn)completeBtn.onclick=()=>{questPreviewTextMode='completed';if(currentFile){questPreviewCompletedFiles.add(currentFile);questPreviewFailedFiles.delete(currentFile);}questPreviewDetailsOpen=true;questPreviewAppliedPanelDismissed=false;questPreviewDetailIndex=0;rerenderPreview();};
+  const primaryBtn=body.querySelector('#questPreviewBackBtn');
+  if(primaryBtn)primaryBtn.onclick=inline?()=>{collapseInlineQuestPreviewDetails();rerenderPreview();}:handleQuestPreviewPrimaryButton;
+  if(inline)fitInlineQuestlogPreviews(body);
+}
+function renderQuestPreviewModal(){
+  const body=$('#questPreviewModalBody');
+  renderQuestPreviewSurface(body,{inline:false});
+}
+function questlogShouldRenderHiddenPreviewSurface(selector){
+  return !!$(selector)?.classList.contains('open');
+}
+function renderOpenQuestPreviewModal(){
+  if(questlogShouldRenderHiddenPreviewSurface('#questPreviewModal'))renderQuestPreviewModal();
+}
+function renderInlineQuestPreview(){
+  const body=$('#displayQuestPreviewMount');if(!body)return;
+  if(['workbench','canvas'].includes(document.body?.dataset.layout)){body.innerHTML='';return;}
+  if((localStorage.getItem('ql.activeTab')||'display')!=='display'||mode!=='quest'){body.innerHTML='';return;}
+  renderQuestPreviewSurface(body,{inline:true});
+  body.insertAdjacentHTML('afterbegin',`<button type="button" class="gui-studio-launch gui-studio-launch-quest" id="questGuiStudioBtn">${guiStudioLucideIcon('palette','')}<span>GUI Editor</span></button>`);
+  body.querySelector('#questGuiStudioBtn')?.addEventListener('click',()=>openGuiStudio('quest-menu'));
+  fitInlineQuestlogPreviews(body);
+}
+function openQuestPreviewModal(fromList=false,chapterId=null){
+  if(mode!=='quest'){showMsg('Quest preview is available while editing a quest.',false);return;}
+  if(rawMode){showMsg('Turn off raw JSON editing before opening the visual preview.',false);return;}
+  syncQ();
+  const q=getCD();
+  questPreviewOpenedFromList=!!fromList;
+  if(chapterId)questlogListActiveChapter=chapterId;
+  questPreviewTextMode=currentFile&&questPreviewCompletedFiles.has(currentFile)?'completed':currentFile&&questPreviewFailedFiles.has(currentFile)?'failed':'default';
+  questPreviewDetailsOpen=!!q?.details_open_by_default&&!q?.disable_details_button&&(((q?.objectives||[]).length||(q?.rewards||[]).length)>0);
+  questPreviewDetailIndex=0;
+  renderQuestPreviewModal();
+  $('#questPreviewModal')?.classList.add('open');
+}
+function resetQuestPreviewEphemeralState(){
+  if(currentFile){
+    questPreviewCompletedFiles.delete(currentFile);
+    questPreviewFailedFiles.delete(currentFile);
+  }
+  questPreviewTextMode='default';
+  questPreviewDetailsOpen=false;
+  questPreviewAppliedPanelDismissed=false;
+  questPreviewDetailIndex=0;
+}
+function collapseInlineQuestPreviewDetails(){
+  if(currentFile){
+    questPreviewCompletedFiles.delete(currentFile);
+    questPreviewFailedFiles.delete(currentFile);
+  }
+  questPreviewTextMode='default';
+  questPreviewDetailsOpen=false;
+  questPreviewAppliedPanelDismissed=true;
+  questPreviewDetailIndex=0;
+}
+function reopenQuestlogListFromDetail(){
+  closeQuestPreviewModal(false);
+  renderQuestlogListPreviewModal(questlogListActiveChapter);
+  $('#questlogListPreviewModal')?.classList.add('open');
+}
+function handleQuestPreviewPrimaryButton(){
+  const wasCompleted=questPreviewStateMode()==='completed';
+  const returnToList=questPreviewOpenedFromList&&!wasCompleted;
+  resetQuestPreviewEphemeralState();
+  if(returnToList)reopenQuestlogListFromDetail();
+  else closeQuestPreviewModal(false);
+}
+function closeQuestPreviewModal(resetState=true){
+  if(resetState)resetQuestPreviewEphemeralState();
+  $('#questPreviewModal')?.classList.remove('open');
+  questPreviewOpenedFromList=false;
+}
+function questlogPreviewChapters(){
+  const entries=Object.entries(chapters).map(([file,c])=>({
+    file,id:chapterIdFromFile(file),name:previewText(c?.name)||file.replace(/\.json$/i,''),icon:c?.icon,hidden:!!c?.hidden,primary:!!c?.default_chapter
+  })).filter(c=>!c.hidden);
+  return entries.sort((a,b)=>(b.primary-a.primary)||a.name.localeCompare(b.name));
+}
+function questlogPreviewChapterEntry(chapterId){
+  const found=Object.entries(chapters).find(([file])=>chapterIdFromFile(file)===chapterId);
+  if(!found)return null;
+  const [file,c]=found;
+  return {file,id:chapterId,name:previewText(c?.name)||file.replace(/\.json$/i,''),icon:c?.icon,hidden:!!c?.hidden,primary:!!c?.default_chapter};
+}
+function questChapterRef(q){
+  const raw=q?.chapter||'questlog:main';
+  return String(raw).includes(':')?String(raw):`${getNs()}:${raw}`;
+}
+function questlogListPreviewQuests(chapterId='questlog:main',{strictChapter=false}={}){
+  return Object.entries(quests).filter(([fn,q])=>{
+    if(q?.hidden)return false;
+    const qChapter=questChapterRef(q);
+    if(questlogListHideCompleted&&questPreviewIsCompleted(fn,q))return false;
+    if(questlogListSearchQuery.trim()){
+      const needle=questlogListSearchQuery.trim().toLowerCase();
+      const hay=[q?.title,previewText(q?.description),fileSearchText(fn,'quest')].join(' ').toLowerCase();
+      if(!hay.includes(needle))return false;
+    }
+    return qChapter===chapterId||(!strictChapter&&chapterId.endsWith(':main')&&q.include_in_main!==false);
+  }).map(([file,q])=>({file,q})).sort((a,b)=>{
+    const ac=questPreviewIsCompleted(a.file,a.q),bc=questPreviewIsCompleted(b.file,b.q);
+    if(ac!==bc)return ac?1:-1;
+    const ao=Number(a.q?.sort_order)||0,bo=Number(b.q?.sort_order)||0;
+    if(ao!==bo)return ao-bo;
+    return String(a.q?.title||a.file).localeCompare(String(b.q?.title||b.file));
+  });
+}
+function questlogListPreviewRowsHtml(list){
+  return list.length?list.map(({file,q},i)=>{
+    const titleRaw=rawPreviewText(q?.title)||file.replace(/\.json$/i,'');
+    const state=questPreviewIsCompleted(file,q)?'Completed':questPreviewIsFailed(file,q)?'Failed':'';
+    const tip=[previewTooltipText(titleRaw),state].filter(Boolean).join(' - ');
+    return `<button type="button" class="ql-list-row ${hasPreviewIcon(q?.icon)?'has-icon':'no-icon'} ${questPreviewIsCompleted(file,q)?'completed':''} ${questPreviewIsFailed(file,q)?'failed':''}" data-quest-file="${esc(file)}" title="${esc(tip)}">${previewIconTile(q?.icon,'ql-list-row-icon')}<span title="${esc(previewTooltipText(titleRaw))}">${renderMinecraftPreviewText(titleRaw)}</span>${state?`<b title="${esc(state)}">${esc(state)}</b>`:''}${i<list.length-1?'<em></em>':''}</button>`;
+  }).join(''):'<div class="ql-list-empty">No quests</div>';
+}
+function bindQuestlogListQuestRows(body,active,{inline=false}={}){
+  $$('[data-quest-file]',body).forEach(btn=>btn.addEventListener('click',()=>{
+    const file=btn.dataset.questFile;
+    if(file&&quests[file]){
+      questlogListActiveChapter=active;
+      if(inline){
+        selectFile(file,'quest');
+      }else{
+        closeQuestlogListPreviewModal();
+        selectFile(file,'quest');
+        openQuestPreviewModal(true,active);
+      }
+    }
+  }));
+}
+function refreshQuestlogListPreviewRows(body,active,{inline=false}={}){
+  if(!body)return;
+  const list=questlogListPreviewQuests(active,{strictChapter:inline});
+  const scroll=$('.ql-list-scroll',body);
+  if(scroll)scroll.innerHTML=questlogListPreviewRowsHtml(list);
+  const panel=$('.ql-list-panel',body);
+  const existingBar=$('.ql-list-bar',body);
+  const needsBar=list.length>(questlogListCondensed?7:5);
+  if(existingBar&&!needsBar)existingBar.remove();
+  if(panel&&!existingBar&&needsBar)panel.insertAdjacentHTML('beforeend','<div class="ql-list-bar" role="scrollbar" aria-label="Quest list scroll"><span></span></div>');
+  syncQuestlogListScrollbar(body);
+  bindQuestlogListQuestRows(body,active,{inline});
+}
+function syncQuestlogListScrollbar(body){
+  const scroll=$('.ql-list-scroll',body);
+  const bar=$('.ql-list-bar',body);
+  const thumb=$('.ql-list-bar span',body);
+  if(!scroll||!bar||!thumb)return;
+  const maxScroll=Math.max(0,scroll.scrollHeight-scroll.clientHeight);
+  const trackHeight=Math.max(1,bar.clientHeight||136);
+  const thumbHeight=maxScroll?Math.max(18,Math.min(36,Math.round((scroll.clientHeight/scroll.scrollHeight)*trackHeight))):36;
+  const maxTop=Math.max(0,trackHeight-thumbHeight);
+  const top=maxScroll?Math.round((scroll.scrollTop/maxScroll)*maxTop):0;
+  thumb.style.height=`${thumbHeight}px`;
+  thumb.style.top=`${top}px`;
+  bar.setAttribute('aria-valuemin','0');
+  bar.setAttribute('aria-valuemax',String(maxScroll));
+  bar.setAttribute('aria-valuenow',String(Math.round(scroll.scrollTop)));
+}
+function scrollQuestlogListFromBarPointer(body,e,{drag=false,startY=0,startScroll=0}={}){
+  const scroll=$('.ql-list-scroll',body);
+  const bar=$('.ql-list-bar',body);
+  const thumb=$('.ql-list-bar span',body);
+  if(!scroll||!bar||!thumb)return;
+  const maxScroll=Math.max(0,scroll.scrollHeight-scroll.clientHeight);
+  if(!maxScroll)return;
+  const barRect=bar.getBoundingClientRect();
+  const thumbRect=thumb.getBoundingClientRect();
+  const maxTravel=Math.max(1,barRect.height-thumbRect.height);
+  if(drag){
+    scroll.scrollTop=startScroll+((e.clientY-startY)/maxTravel)*maxScroll;
+  }else{
+    const y=e.clientY-barRect.top-(thumbRect.height/2);
+    scroll.scrollTop=(y/maxTravel)*maxScroll;
+  }
+  syncQuestlogListScrollbar(body);
+}
+function bindQuestlogListPreviewSurface(body,active,{inline=false}={}){
+  $('#questlogListPreviewClose')?.addEventListener('click',closeQuestlogListPreviewModal);
+  $('#questlogSearchToggle',body)?.addEventListener('click',e=>{if(e.target?.id==='questlogPreviewSearchInput')return;questlogListSearchExpanded=!questlogListSearchExpanded;if(!questlogListSearchExpanded)questlogListSearchQuery='';renderQuestlogListPreviewSurface(body,active,{inline});});
+  $('#questlogSearchToggle',body)?.addEventListener('keydown',e=>{if(e.target?.id==='questlogPreviewSearchInput')return;if(e.key==='Enter'||e.key===' '){e.preventDefault();questlogListSearchExpanded=!questlogListSearchExpanded;if(!questlogListSearchExpanded)questlogListSearchQuery='';renderQuestlogListPreviewSurface(body,active,{inline});}});
+  $('#questlogPreviewSearchInput',body)?.addEventListener('click',e=>e.stopPropagation());
+  $('#questlogPreviewSearchInput',body)?.addEventListener('keydown',e=>e.stopPropagation());
+  $('#questlogPreviewSearchInput',body)?.addEventListener('input',e=>{questlogListSearchQuery=e.target.value;refreshQuestlogListPreviewRows(body,active,{inline});});
+  $('#questlogCondenseToggle',body)?.addEventListener('click',()=>{questlogListCondensed=!questlogListCondensed;renderQuestlogListPreviewSurface(body,active,{inline});});
+  $('#questlogHideCompletedToggle',body)?.addEventListener('click',()=>{questlogListHideCompleted=!questlogListHideCompleted;renderQuestlogListPreviewSurface(body,active,{inline});});
+  $('.ql-list-scroll',body)?.addEventListener('scroll',()=>syncQuestlogListScrollbar(body),{passive:true});
+  $('.ql-list-bar',body)?.addEventListener('pointerdown',e=>{
+    e.preventDefault();
+    const thumb=e.target.closest?.('.ql-list-bar span');
+    if(!thumb)scrollQuestlogListFromBarPointer(body,e);
+    const startY=e.clientY;
+    const startScroll=$('.ql-list-scroll',body)?.scrollTop||0;
+    const move=ev=>scrollQuestlogListFromBarPointer(body,ev,{drag:!!thumb,startY,startScroll});
+    const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);};
+    window.addEventListener('pointermove',move);
+    window.addEventListener('pointerup',up,{once:true});
+  });
+  $$('[data-chapter-id]',body).forEach(btn=>btn.addEventListener('click',()=>renderQuestlogListPreviewSurface(body,btn.dataset.chapterId,{inline})));
+  bindQuestlogListQuestRows(body,active,{inline});
+  syncQuestlogListScrollbar(body);
+}
+function renderQuestlogListPreviewSurface(body,chapterId,{inline=false}={}){
+  if(!body)return;
+  if(inline){
+    const rect=body.getBoundingClientRect();
+    if(rect.width&&rect.height){
+      const fit=Math.min((rect.width-8)/1920,(rect.height-8)/1080);
+      body.style.setProperty('--ql-inline-list-scale',Math.max(.25,Math.min(2,fit*2)).toFixed(3));
+    }
+    body.classList.add('inline-preview-fitting');
+  }
+  const selectedInlineChapter=inline?questlogPreviewChapterEntry(chapterId):null;
+  const chaptersVisible=inline?(selectedInlineChapter?[selectedInlineChapter]:[]):questlogPreviewChapters();
+  const fallback=chaptersVisible.find(c=>c.primary)?.id||chaptersVisible[0]?.id||'questlog:main';
+  const active=chapterId&&chaptersVisible.some(c=>c.id===chapterId)?chapterId:fallback;
+  const list=questlogListPreviewQuests(active,{strictChapter:inline});
+  const searchClass=questlogListSearchExpanded?'expanded':'minimized';
+  body.innerHTML=`<div class="ql-list-stage ${inline?'ql-list-inline-stage':''}">
+    <div class="ql-preview-backdrop"></div>
+    <div class="ql-list-screen ${questlogListCondensed?'condensed':''}" style="${questlogListPreviewSkinStyle()}">
+      ${inline?'':`<button type="button" class="ql-list-close" id="questlogListPreviewClose">Back</button>`}
+      <div class="ql-list-search ${searchClass}" id="questlogSearchToggle" role="button" tabindex="0" aria-label="Toggle search"><input type="text" id="questlogPreviewSearchInput" value="${esc(questlogListSearchQuery)}" aria-label="Search quests"></div>
+      ${questlogListSearchExpanded?`<button type="button" class="ql-list-tool ql-list-condense ${questlogListCondensed?'active':''}" id="questlogCondenseToggle" aria-label="Toggle compact list"></button><button type="button" class="ql-list-tool ql-list-hide ${questlogListHideCompleted?'active':''}" id="questlogHideCompletedToggle" aria-label="Hide completed quests"></button>`:''}
+      <div class="ql-list-panel">
+        <div class="ql-list-scroll">${questlogListPreviewRowsHtml(list)}</div>
+        ${list.length>(questlogListCondensed?7:5)?'<div class="ql-list-bar" role="scrollbar" aria-label="Quest list scroll"><span></span></div>':''}
+      </div>
+      <div class="ql-list-tabs">${chaptersVisible.slice(0,8).map(c=>`<button type="button" class="${c.id===active?'active':''} ${c.primary?'primary':'secondary'}" data-chapter-id="${esc(c.id)}">${previewIconTile(c.icon,'ql-list-tab-icon')}</button>`).join('')}</div>
+    </div>
+  </div>`;
+  bindQuestlogListPreviewSurface(body,active,{inline});
+  if(inline)fitInlineQuestlogPreviews(body);
+}
+function requestInlinePreviewFrame(callback){
+  const raf=typeof requestAnimationFrame==='function'?requestAnimationFrame:(fn=>setTimeout(fn,0));
+  raf(callback);
+}
+function inlinePreviewContentBounds(elements){
+  const rects=elements
+    .filter(el=>el&&getComputedStyle(el).display!=='none')
+    .map(el=>el.getBoundingClientRect())
+    .filter(rect=>rect.width&&rect.height);
+  if(!rects.length)return null;
+  const bounds=rects.reduce((bounds,rect)=>({
+    left:Math.min(bounds.left,rect.left),
+    top:Math.min(bounds.top,rect.top),
+    right:Math.max(bounds.right,rect.right),
+    bottom:Math.max(bounds.bottom,rect.bottom),
+    width:0,
+    height:0
+  }),{left:rects[0].left,top:rects[0].top,right:rects[0].right,bottom:rects[0].bottom,width:rects[0].width,height:rects[0].height});
+  return {...bounds,width:bounds.right-bounds.left,height:bounds.bottom-bounds.top};
+}
+function fitInlinePreviewContent(host,stageSelector,contentSelectors,scaleVar,panXVar,panYVar,maxScale,minScale=.25){
+  const stage=host.querySelector(stageSelector);
+  if(!stage)return;
+  host.style.setProperty(panXVar,'0px');
+  host.style.setProperty(panYVar,'0px');
+  requestInlinePreviewFrame(()=>{
+    const stageRect=stage.getBoundingClientRect();
+    if(!stageRect.width||!stageRect.height)return;
+    const elements=[...host.querySelectorAll(contentSelectors)];
+    const fitAndPan=()=>{
+      const bounds=inlinePreviewContentBounds(elements);
+      if(!bounds){host.classList.remove('inline-preview-fitting');return;}
+      const panX=Math.round(stageRect.left+stageRect.width/2-(bounds.left+bounds.width/2));
+      const panY=Math.round(stageRect.top+stageRect.height/2-(bounds.top+bounds.height/2));
+      host.style.setProperty(panXVar,`${panX}px`);
+      host.style.setProperty(panYVar,`${panY}px`);
+      host.classList.remove('inline-preview-fitting');
+    };
+    const bounds=inlinePreviewContentBounds(elements);
+    const scale=parseFloat(getComputedStyle(host).getPropertyValue(scaleVar))||1;
+    if(bounds&&scale>0){
+      const rawW=bounds.width/scale;
+      const rawH=bounds.height/scale;
+      const fit=Math.min((stageRect.width-12)/Math.max(1,rawW),(stageRect.height-12)/Math.max(1,rawH));
+      const nextScale=Math.max(minScale,Math.min(maxScale,scale,fit));
+      if(Number.isFinite(nextScale)&&nextScale<scale-.001){
+        host.style.setProperty(scaleVar,nextScale.toFixed(3));
+        requestInlinePreviewFrame(fitAndPan);
+        return;
+      }
+    }
+    fitAndPan();
+  });
+}
+function fitInlineQuestlogPreviews(root=document){
+  requestInlinePreviewFrame(()=>{
+    const hosts=[...(root?.querySelectorAll?.('.inline-quest-preview,.inline-chapter-list-preview,.workbench-quest-preview')||[])];
+    const self=root?.matches?.('.inline-quest-preview,.inline-chapter-list-preview,.workbench-quest-preview')?[root]:[];
+    [...self,...hosts].forEach(host=>{
+      const rect=host.getBoundingClientRect();
+      if(!rect.width||!rect.height)return;
+      if(host.classList.contains('inline-chapter-list-preview')){
+        const fit=Math.min((rect.width-8)/1920,(rect.height-8)/1080);
+        host.style.setProperty('--ql-inline-list-scale',Math.max(.25,Math.min(2,fit*2)).toFixed(3));
+        const refit=()=>fitInlinePreviewContent(host,'.ql-list-stage','.ql-list-screen','--ql-inline-list-scale','--ql-inline-list-pan-x','--ql-inline-list-pan-y',2);
+        refit();
+        requestInlinePreviewFrame(()=>requestInlinePreviewFrame(refit));
+      }else{
+        const minQuestScale=host.classList.contains('workbench-quest-preview') ? .08 : .25;
+        const fit=Math.min((rect.width-8)/960,(rect.height-8)/540);
+        host.style.setProperty('--ql-inline-quest-scale',Math.max(minQuestScale,Math.min(1.15,fit)).toFixed(3));
+        const refit=()=>fitInlinePreviewContent(host,'.ql-preview-stage','.ql-preview-layout,.ql-preview-book,.ql-preview-paper,.ql-preview-actions,.ql-preview-details.open','--ql-inline-quest-scale','--ql-inline-quest-pan-x','--ql-inline-quest-pan-y',1.15,minQuestScale);
+        refit();
+        requestInlinePreviewFrame(()=>requestInlinePreviewFrame(refit));
+      }
+    });
+  });
+}
+window.addEventListener('resize',()=>fitInlineQuestlogPreviews(document),{passive:true});
+function questPreviewIsCompleted(file,q){
+  return !!(file&&questPreviewCompletedFiles.has(file));
+}
+function questPreviewIsFailed(file,q){
+  return !!(file&&questPreviewFailedFiles.has(file));
+}
+function renderQuestlogListPreviewModal(chapterId){
+  const body=$('#questlogListPreviewBody');if(!body)return;
+  renderQuestlogListPreviewSurface(body,chapterId,{inline:false});
+}
+function renderOpenQuestlogListPreviewModal(chapterId=questlogListActiveChapter){
+  if(questlogShouldRenderHiddenPreviewSurface('#questlogListPreviewModal'))renderQuestlogListPreviewModal(chapterId);
+}
+function renderInlineChapterListPreview(){
+  const body=$('#chapterQuestListPreviewMount');if(!body)return;
+  if(mode!=='chapter'||!currentFile||!getCD()){body.innerHTML='';return;}
+  if(['workbench','canvas'].includes(document.body?.dataset.layout)){body.innerHTML='';return;}
+  renderQuestlogListPreviewSurface(body,chapterIdFromFile(currentFile),{inline:true});
+}
+const GUI_STUDIO_TARGETS={
+  'quest-menu':{
+    label:'Quest menu',
+    copy:'Edit the QuestDetails-style menu used for a selected quest.',
+    before:'Current QuestDetails skin',
+    after:'Draft QuestDetails skin'
+  },
+  'quest-list':{
+    label:'Quest list',
+    copy:'Edit the Questlog list screen used by chapters and quest selection.',
+    before:'Current Questlog list skin',
+    after:'Draft Questlog list skin'
+  }
+};
+function openGuiStudio(target='quest-menu'){
+  const modal=$('#guiStudioModal');if(!modal)return;
+  const info=GUI_STUDIO_TARGETS[target]||GUI_STUDIO_TARGETS['quest-menu'];
+  guiStudioLoadScopedDraftForTarget(target,currentFile);
+  modal.dataset.target=target;
+  syncGuiStudioSelectedPieceForTarget(target);
+  syncGuiStudioLayoutSelectedForTarget(target);
+  renderGuiStudioTargetTextureButtons(target);
+  const targetLabel=$('#guiStudioTargetLabel');
+  if(targetLabel)targetLabel.textContent=info.label;
+  const targetCopy=$('#guiStudioTargetCopy');
+  if(targetCopy)targetCopy.textContent=info.copy;
+  const selected=$('#guiStudioInspectorSelected');
+  if(selected)selected.textContent=target==='quest-list'?'Quest List Screen':'Main Quest Page (Left Panel)';
+  const beforeLabel=$('#guiStudioBeforeLabel');
+  if(beforeLabel)beforeLabel.textContent=info.before;
+  const afterLabel=$('#guiStudioAfterLabel');
+  if(afterLabel)afterLabel.textContent=info.after;
+  updateGuiStudioTargetChrome(target);
+  setGuiStudioMode('create');
+  fitGuiStudioFramePreview();
+  updateGuiStudioHistoryButtons();
+  modal.setAttribute('aria-hidden','false');
+  modal.classList.add('open');
+  playUiSound('panel');
+  renderGuiStudioDraft();
+  renderGuiStudioPieceThumbs({forceRefresh:true});
+  scheduleGuiStudioPreviewWarm(guiStudioCurrentWarmPieces(target),{forceRefresh:true});
+  requestAnimationFrame(renderGuiStudioAffectedZone);
+}
+function closeGuiStudio(){
+  if(typeof guiStudioSaveActiveHistoryToScope==='function')guiStudioSaveActiveHistoryToScope();
+  if(typeof guiStudioSaveActiveDraftToScope==='function')guiStudioSaveActiveDraftToScope();
+  if(typeof guiStudioRefreshAppliedPreviewsForCurrentSelection==='function')guiStudioRefreshAppliedPreviewsForCurrentSelection();
+  const modal=$('#guiStudioModal');
+  const wasOpen=modal?.classList.contains('open');
+  modal?.classList.remove('open');
+  modal?.setAttribute('aria-hidden','true');
+  if(wasOpen)playUiSound('panel');
+  updateHistoryButtons();
+}
+function updateGuiStudioTargetChrome(target=guiStudioModalTarget()){
+  const isQuestList=target==='quest-list';
+  const applyBtn=$('#guiStudioExportApplyBtn');
+  const exportBtn=$('#guiStudioExportQuestBtn');
+  if(applyBtn){
+    const strong=applyBtn.querySelector('strong');
+    const small=applyBtn.querySelector('small');
+    if(strong)strong.textContent=isQuestList?'Apply to Global QuestList':'Apply to Quest';
+    if(small)small.textContent=isQuestList
+      ? 'Attach this global QuestList draft to the preview resource pack.'
+      : 'Attach this visual draft to the current quest preview.';
+  }
+  if(exportBtn){
+    const strong=exportBtn.querySelector('strong');
+    const small=exportBtn.querySelector('small');
+    if(strong)strong.textContent='Open Export Menu';
+    if(small)small.textContent='Open the project ZIP preview and export controls.';
+  }
+  const packTitle=$('.gui-studio-pack-card-head strong');
+  if(packTitle)packTitle.textContent='Global QuestLog Builder GUI';
+  const scopeLabel=$('#guiStudioApplyScopeField')||$('#guiStudioApplyScope')?.closest('label');
+  if(scopeLabel)scopeLabel.hidden=isQuestList;
+  const applyScope=$('#guiStudioApplyScope');
+  if(applyScope){
+    applyScope.hidden=isQuestList;
+    applyScope.disabled=isQuestList;
+  }
+  const globalScope=$('#guiStudioGlobalApplyScope');
+  if(globalScope)globalScope.hidden=!isQuestList;
+  const questList=$('#guiStudioApplyQuestList');
+  if(questList&&isQuestList)questList.hidden=true;
+}
+const GUI_STUDIO_TAB_COPY={
+  create:'Autosaves this GUI draft as you work',
+  texture:'Edit and paint Questlog GUI textures',
+  layout:'See and position Questlog visuals',
+  labels:'Edit labels and colors used in the Questlog GUI',
+  badge:'Draft Minecraft toast-style badge overlays and visibility states',
+  export:'Review the final GUI draft',
+  states:'Compare quest screen states before applying a GUI draft'
+};
+const GUI_STUDIO_NEXT_MODE={create:'layout',layout:'export',export:'create'};
+const GUI_STUDIO_NEXT_LABEL={create:'Layout & Position',layout:'Final',export:'Apply to Quest'};
+let guiStudioFrameZoom=1;
+let guiStudioUndoStack=[];
+let guiStudioRedoStack=[];
+let guiStudioRestoring=false;
+let guiStudioAppliedQuestPreview=null;
+let guiStudioAppliedQuestListPreview=null;
+const GUI_STUDIO_CANVAS_W=1920;
+const GUI_STUDIO_CANVAS_H=1080;
+const GUI_STUDIO_LAYOUT_SCREEN_W=960;
+const GUI_STUDIO_LAYOUT_SCREEN_H=540;
+const GUI_STUDIO_CANVAS_VERSION=2;
+const GUI_STUDIO_PIXEL_SCALE=2;
+const GUI_STUDIO_MAX_IMPORTS=8;
+const GUI_STUDIO_IMPORT_BATCH_LIMIT=6;
+const GUI_STUDIO_SUPPORTED_IMPORT_TYPES=new Set(['image/png','image/jpeg','image/webp','image/gif']);
+const GUI_STUDIO_PALETTE_MAX_COLORS=14;
+const GUI_STUDIO_PALETTE_MAX_ROWS=24;
+const GUI_STUDIO_DEFAULT_ZONE_W=512;
+const GUI_STUDIO_DEFAULT_ZONE_H=512;
+const GUI_STUDIO_DEFAULT_CHECKER_SIZE=12;
+const GUI_STUDIO_COMPACT_FILL_MIN_PIXELS=4096;
+const GUI_STUDIO_TEXTURES={
+  questlog:'questlog-assets/gui/questlog.png',
+  questPage:'questlog-assets/gui/quest_page.png',
+  peripherals:'questlog-assets/gui/quest_peripherals.png',
+  searchTabs:'questlog-assets/gui/questlog_search_tab_buttons.png',
+  packIcon:'questlog-assets/pack.png'
+};
+let guiStudioPackTreeOpen={resourcepacks:true,pack:true,assets:true,questlog:true,textures:true,gui:true,lang:true};
+const GUI_STUDIO_LAYOUT_SCENES=[
+  {value:'screenshot:Country Flags.webp',label:'Country Flags',image:'questlog-assets/screenshots/Country Flags.webp'},
+  {value:'screenshot:Judgement Scale.webp',label:'Judgement Scale',image:'questlog-assets/screenshots/Judgement Scale.webp'},
+  {value:'screenshot:Lady Liberty.webp',label:'Lady Liberty',image:'questlog-assets/screenshots/Lady Liberty.webp'},
+  {value:'screenshot:Massive Building.webp',label:'Massive Building',image:'questlog-assets/screenshots/Massive Building.webp'},
+  {value:'screenshot:Power of The Journalist.webp',label:'Power of The Journalist',image:'questlog-assets/screenshots/Power of The Journalist.webp'},
+  {value:'screenshot:Uncensored Library.webp',label:'Uncensored Library',image:'questlog-assets/screenshots/Uncensored Library.webp'},
+  {value:'screenshot:World Map.webp',label:'World Map',image:'questlog-assets/screenshots/World Map.webp'}
+];
+const GUI_STUDIO_QUESTLIST_DEFAULT_SCENE='screenshot:World Map.webp';
+const GUI_STUDIO_QUESTDETAIL_SCENES=new Set();
+function loadSavedGuiStudioOptions(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(GUI_STUDIO_OPTIONS_KEY)||'{}');
+    return saved&&typeof saved==='object'?saved:{};
+  }catch(_err){
+    return {};
+  }
+}
+function saveGuiStudioToolOptions(){
+  try{localStorage.setItem(GUI_STUDIO_OPTIONS_KEY,JSON.stringify(ensureGuiStudioToolOptions()));}catch(_err){}
+}
+const GUI_STUDIO_NUMERIC_TOOL_OPTIONS={
+  brushSize:[1,64,2],
+  eraserSize:[1,64,2],
+  retouchSize:[1,16,2],
+  opacity:[1,100,100],
+  flow:[1,100,100],
+  smooth:[0,100,0],
+  tolerance:[0,64,16],
+  filterStrength:[0,255,0],
+  sprayDensity:[1,96,28],
+  feather:[0,32,0],
+  textSize:[6,96,12],
+  strokeWidth:[0,32,1],
+  zoneWidth:[1,GUI_STUDIO_CANVAS_W,GUI_STUDIO_DEFAULT_ZONE_W],
+  zoneHeight:[1,GUI_STUDIO_CANVAS_H,GUI_STUDIO_DEFAULT_ZONE_H],
+  checkerSize:[2,64,GUI_STUDIO_DEFAULT_CHECKER_SIZE]
+};
+const GUI_STUDIO_TEXT_FONT_CHOICES=[
+  'Minecraft Regular',
+  'Minecraft Bold',
+  'Minecraft Italic',
+  'Minecraft Bold Italic',
+  'Minecraft Legacy',
+  'Minecraft Legacy Bold',
+  'Minecraft Classic',
+  'Monospace',
+  'Serif',
+  'Sans Serif'
+];
+function normalizeGuiStudioNumericOption(key,value){
+  const rule=GUI_STUDIO_NUMERIC_TOOL_OPTIONS[key];
+  if(!rule)return value;
+  const n=Number(value);
+  if(!Number.isFinite(n))return rule[2];
+  if(n<rule[0])return rule[2];
+  return Math.min(rule[1],n);
+}
+function readGuiStudioToolOptionInput(target,key){
+  if(target.type==='checkbox')return !!target.checked;
+  if(target.type==='number'||target.type==='range'){
+    if(String(target.value).trim()==='')return undefined;
+    return normalizeGuiStudioNumericOption(key,target.value);
+  }
+  return target.value;
+}
+function guiStudioCenteredBounds(w,h){
+  return {x:Math.round((GUI_STUDIO_CANVAS_W-w)/2),y:Math.round((GUI_STUDIO_CANVAS_H-h)/2),w,h};
+}
+const GUI_STUDIO_PIECES={
+  'QuestList Main Panel':{short:'List Main Panel',texture:'questlog.png',bounds:guiStudioCenteredBounds(1024,512),editZone:{w:448,h:256},kind:'listPanel',scope:'chapterList',source:{type:'crop',image:'questlog',x:0,y:0,w:1024,h:512}},
+  'Quest Main':{short:'Quest Main',texture:'quest_page.png',bounds:guiStudioCenteredBounds(275,166),kind:'panel',source:{type:'nineSlice',image:'questPage',x:375,y:174,w:275,h:166,cw:16,ch:16}},
+  'Quest Objective (Right Panel)':{short:'Objective Panel',texture:'quest_page.png',bounds:guiStudioCenteredBounds(170,166),kind:'panelTall',source:{type:'nineSlice',image:'questPage',x:375,y:174,w:275,h:166,cw:16,ch:16}},
+  'Quest Reward (Right Panel)':{short:'Reward Panel',texture:'quest_page.png',bounds:guiStudioCenteredBounds(170,166),kind:'panelTall',source:{type:'nineSlice',image:'questPage',x:375,y:174,w:275,h:166,cw:16,ch:16}},
+  'Quest Button Long':{short:'Long Button',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(88,18),kind:'button',source:{type:'crop',image:'peripherals',x:12,y:105,w:88,h:18}},
+  'Quest Toast':{short:'Toast',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(173,51),kind:'toast',source:{type:'crop',image:'peripherals',x:81,y:2,w:173,h:51}},
+  'Quest Important Marker':{short:'Important Marker',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(28,36),kind:'overlay',source:{type:'crop',image:'peripherals',x:2,y:2,w:28,h:36}},
+  'Quest Button':{short:'Short Button',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(54,18),kind:'button',source:{type:'crop',image:'peripherals',x:46,y:65,w:54,h:18}},
+  'Quest Button Hovered':{short:'Short Button Hover',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(54,18),kind:'button',source:{type:'crop',image:'peripherals',x:122,y:65,w:54,h:18}},
+  'Quest Button Long Hovered':{short:'Button Long Hover',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(88,18),kind:'button',source:{type:'crop',image:'peripherals',x:122,y:105,w:88,h:18}},
+  'Panel Divider':{short:'Panel Divider',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(140,9),kind:'divider',source:{type:'crop',image:'peripherals',x:2,y:157,w:140,h:9}},
+  'Small Divider':{short:'Small Divider',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(252,9),kind:'divider',source:{type:'crop',image:'peripherals',x:2,y:135,w:252,h:9}},
+  'Big Divider':{short:'Big Divider',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(252,9),kind:'divider',scope:'all',source:{type:'crop',image:'peripherals',x:2,y:146,w:252,h:9}},
+  'Scrollbar Thumb':{short:'Scrollbar Thumb',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(28,36),kind:'scrollbar',scope:'all',source:{type:'crop',image:'peripherals',x:32,y:2,w:28,h:36}},
+  'Scrollbar Track':{short:'Scrollbar Track',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(16,1),kind:'scrollbar',scope:'all',source:{type:'crop',image:'peripherals',x:62,y:20,w:16,h:1}},
+  'Scrollbar Track Top':{short:'Scrollbar Top',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(16,1),kind:'scrollbar',scope:'all',source:{type:'crop',image:'peripherals',x:62,y:19,w:16,h:1}},
+  'Scrollbar Track Bottom':{short:'Scrollbar Bottom',texture:'quest_peripherals.png',bounds:guiStudioCenteredBounds(16,1),kind:'scrollbar',scope:'all',source:{type:'crop',image:'peripherals',x:62,y:21,w:16,h:1}},
+  'Search Tab Minimized':{short:'Search Min',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(58,55),kind:'search',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:2,y:2,w:58,h:55}},
+  'Search Tab Minimized Hovered':{short:'Search Min Hover',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(58,55),kind:'search',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:62,y:2,w:58,h:55}},
+  'Search Tab Expanded':{short:'Search Expanded',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(252,55),kind:'search',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:2,y:59,w:252,h:55}},
+  'Search Tab Expanded Hovered':{short:'Search Expanded Hover',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(252,55),kind:'search',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:2,y:116,w:252,h:55}},
+  'Chapter Arrow Left':{short:'Arrow Left',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(28,27),kind:'nav',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:2,y:173,w:28,h:27}},
+  'Chapter Arrow Left Hovered':{short:'Arrow Left Hover',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(28,27),kind:'nav',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:32,y:173,w:28,h:27}},
+  'Chapter Arrow Right':{short:'Arrow Right',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(28,27),kind:'nav',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:2,y:202,w:28,h:27}},
+  'Chapter Arrow Right Hovered':{short:'Arrow Right Hover',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(28,27),kind:'nav',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:32,y:202,w:28,h:27}},
+  'Secondary Chapter Tab':{short:'Secondary Tab',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(54,32),kind:'tab',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:62,y:174,w:54,h:32}},
+  'Secondary Chapter Tab Active':{short:'Secondary Tab Active',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(54,39),kind:'tab',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:62,y:208,w:54,h:39}},
+  'Main Chapter Tab':{short:'Main Tab',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(54,32),kind:'tab',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:118,y:174,w:54,h:32}},
+  'Main Chapter Tab Active':{short:'Main Tab Active',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(54,39),kind:'tab',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:118,y:208,w:54,h:39}},
+  'Expand Button':{short:'Expand Button',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(26,26),kind:'control',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:122,y:2,w:26,h:26}},
+  'Expand Button Hovered':{short:'Expand Hover',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(26,26),kind:'control',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:150,y:2,w:26,h:26}},
+  'Condense Button':{short:'Condense Button',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(26,26),kind:'control',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:122,y:30,w:26,h:26}},
+  'Condense Button Hovered':{short:'Condense Hover',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(26,26),kind:'control',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:150,y:30,w:26,h:26}},
+  'Hidden Button':{short:'Hidden Button',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(26,26),kind:'control',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:180,y:2,w:26,h:26}},
+  'Hidden Button Hovered':{short:'Hidden Hover',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(26,26),kind:'control',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:208,y:2,w:26,h:26}},
+  'Visible Button':{short:'Visible Button',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(26,26),kind:'control',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:180,y:30,w:26,h:26}},
+  'Visible Button Hovered':{short:'Visible Hover',texture:'questlog_search_tab_buttons.png',bounds:guiStudioCenteredBounds(26,26),kind:'control',scope:'chapterList',source:{type:'crop',image:'searchTabs',x:208,y:30,w:26,h:26}}
+};
+const GUI_STUDIO_PRIORITY_PIECES=['Quest Main','Quest Objective (Right Panel)','Quest Reward (Right Panel)','Quest Button','Quest Toast','Quest Important Marker'];
+const GUI_STUDIO_QUESTLIST_PRIORITY_PIECES=['QuestList Main Panel','Search Tab Minimized','Search Tab Expanded','Main Chapter Tab','Secondary Chapter Tab','Expand Button'];
+const GUI_STUDIO_QUEST_PIECES=Object.keys(GUI_STUDIO_PIECES).filter(piece=>GUI_STUDIO_PIECES[piece].scope!=='chapterList');
+const GUI_STUDIO_OTHER_PIECES=GUI_STUDIO_QUEST_PIECES.filter(piece=>!GUI_STUDIO_PRIORITY_PIECES.includes(piece));
+const GUI_STUDIO_QUESTLIST_PIECES=Object.keys(GUI_STUDIO_PIECES).filter(piece=>GUI_STUDIO_PIECES[piece].scope==='chapterList'||GUI_STUDIO_PIECES[piece].scope==='all');
+const GUI_STUDIO_QUESTLIST_OTHER_PIECES=GUI_STUDIO_QUESTLIST_PIECES.filter(piece=>!GUI_STUDIO_QUESTLIST_PRIORITY_PIECES.includes(piece));
+const GUI_STUDIO_GENERATED_ASSETS={
+  expand:'questlog-assets/gui/generated/expand_button.png',
+  condense:'questlog-assets/gui/generated/condense_button.png',
+  visible:'questlog-assets/gui/generated/visible_button.png',
+  hidden:'questlog-assets/gui/generated/hidden_button.png',
+  mainTab:'questlog-assets/gui/generated/tab_main.png',
+  mainTabActive:'questlog-assets/gui/generated/tab_main_active.png',
+  secondaryTab:'questlog-assets/gui/generated/tab_secondary.png',
+  secondaryTabActive:'questlog-assets/gui/generated/tab_secondary_active.png'
+};
+function guiStudioModalTarget(){
+  return $('#guiStudioModal')?.dataset.target==='quest-list'?'quest-list':'quest-menu';
+}
+function guiStudioTargetPriorityPieces(target=guiStudioModalTarget()){
+  return target==='quest-list'?GUI_STUDIO_QUESTLIST_PRIORITY_PIECES:GUI_STUDIO_PRIORITY_PIECES;
+}
+function guiStudioTargetPieces(target=guiStudioModalTarget()){
+  return target==='quest-list'?GUI_STUDIO_QUESTLIST_PIECES:GUI_STUDIO_QUEST_PIECES;
+}
+function guiStudioTargetOtherPieces(target=guiStudioModalTarget()){
+  return target==='quest-list'?GUI_STUDIO_QUESTLIST_OTHER_PIECES:GUI_STUDIO_OTHER_PIECES;
+}
+function guiStudioPieceAllowedForTarget(piece,target=guiStudioModalTarget()){
+  return guiStudioTargetPieces(target).includes(piece);
+}
+function guiStudioDefaultPieceForTarget(target=guiStudioModalTarget()){
+  return guiStudioTargetPriorityPieces(target)[0]||'Quest Button';
+}
+function syncGuiStudioSelectedPieceForTarget(target=guiStudioModalTarget()){
+  if(!guiStudioPieceAllowedForTarget(guiStudioDraft.selectedPiece,target)){
+    guiStudioDraft.selectedPiece=guiStudioDefaultPieceForTarget(target);
+    clearGuiStudioMultiSelectedLayers();
+  }
+  return guiStudioDraft.selectedPiece;
+}
+function guiStudioDefaultZoneForMeta(meta){
+  const bounds=meta?.bounds||guiStudioCenteredBounds(GUI_STUDIO_DEFAULT_ZONE_W,GUI_STUDIO_DEFAULT_ZONE_H);
+  return {
+    w:Math.min(GUI_STUDIO_CANVAS_W,Math.max(1,Math.ceil(Number(bounds.w)||GUI_STUDIO_DEFAULT_ZONE_W))),
+    h:Math.min(GUI_STUDIO_CANVAS_H,Math.max(1,Math.ceil(Number(bounds.h)||GUI_STUDIO_DEFAULT_ZONE_H)))
+  };
+}
+function sanitizeGuiStudioPieceZone(zone,meta){
+  return guiStudioDefaultZoneForMeta(meta);
+}
+const GUI_STUDIO_DRAW_TOOLS=new Set(['Pen Tool','Brush','Pencil','Color Replacement','Spray Paint']);
+const GUI_STUDIO_ERASE_TOOLS=new Set(['Eraser','Background Eraser','Magic Eraser']);
+const GUI_STUDIO_SELECTION_TOOLS=new Set(['Rectangle Select','Ellipse Select','Lasso Select','Polygonal Lasso','Magic Wand','Color Wand']);
+const GUI_STUDIO_SHAPE_TOOLS=new Set(['Rectangle','Ellipse','Line','Parametric Shape']);
+const GUI_STUDIO_RETOUCH_TOOLS=new Set(['Blur Tool','Sharpen Tool','Smudge Tool']);
+const GUI_STUDIO_MOVE_TOOLS=new Set(['Move Tool']);
+const GUI_STUDIO_BLEND_MODES=['normal','multiply','screen','overlay','darken','lighten'];
+let guiStudioActiveTool='Move Tool';
+let guiStudioPointer=null;
+let guiStudioDraft=createDefaultGuiStudioDraft();
+let guiStudioDraftScopes={questMenu:{},questList:null,activeKey:null};
+let guiStudioHistoryScopes={questMenu:{},questList:null,activeKey:null};
+let guiStudioLayerMenuLayerId=null;
+let guiStudioMultiSelectedLayerIds=new Set();
+let guiStudioLayerRenameBefore=null;
+let guiStudioSpaceHandActive=false;
+let guiStudioToolBeforeSpace=null;
+let guiStudioTextOverlayBefore=null;
+let guiStudioLayerFieldBefore=null;
+let guiStudioBrushCursorPoint=null;
+let guiStudioToolOptionBefore=null;
+let guiStudioPaletteEditTarget=null;
+let guiStudioClipboard=null;
+let guiStudioCanvasFramePending=false;
+let guiStudioCanvasDirtyBounds=null;
+let guiStudioSelectionMaskCache={key:null,mask:null,bounds:null};
+const guiStudioLayerCanvasCache=new Map();
+const guiStudioBaseEraseCanvasCache=new Map();
+const guiStudioStaticCompositeCache=new Map();
+const guiStudioLayerBitmapCache=new Map();
+const guiStudioLayerBitmapVersions=new Map();
+const guiStudioLayerBitmapDirty=new Set();
+let guiStudioRenderWorker=null;
+let guiStudioRenderWorkerUrl=null;
+let guiStudioRenderJobSeq=0;
+let guiStudioRenderGeneration=0;
+let guiStudioWorkerWarmPending=false;
+const guiStudioPiecePreviewCache=new Map();
+const guiStudioDirtyPreviewPieces=new Set();
+let guiStudioThumbRenderFrame=0;
+let guiStudioThumbRenderPending=null;
+let guiStudioPreviewWarmHandle=0;
+let guiStudioPreviewWarmQueue=[];
+const guiStudioPreviewWarmQueued=new Set();
+function cloneGuiStudioDraft(draft=guiStudioDraft){
+  try{
+    if(typeof structuredClone==='function')return structuredClone(draft);
+  }catch(_err){}
+  return JSON.parse(JSON.stringify(draft));
+}
+function cloneGuiStudioValue(value){
+  if(value===undefined)return undefined;
+  return cloneGuiStudioDraft(value);
+}
+function resetGuiStudioScopedDrafts(){
+  guiStudioDraftScopes={questMenu:{},questList:null,activeKey:null};
+  if(typeof resetGuiStudioHistoryScopes==='function')resetGuiStudioHistoryScopes();
+}
+function resetGuiStudioHistoryScopes(){
+  guiStudioHistoryScopes={questMenu:{},questList:null,activeKey:null};
+  guiStudioUndoStack=[];
+  guiStudioRedoStack=[];
+}
+function guiStudioQuestScopeFile(file=currentFile){
+  return file&&quests?.[file]?file:'__unsaved__';
+}
+function guiStudioTargetScopeKey(target=guiStudioModalTarget(),file=currentFile){
+  return target==='quest-list'?'quest-list':`quest:${guiStudioQuestScopeFile(file)}`;
+}
+function guiStudioScopeTargetFromKey(key){
+  return key==='quest-list'?'quest-list':'quest-menu';
+}
+function trimGuiStudioHistoryStack(stack=[]){
+  return Array.isArray(stack)?stack.filter(entry=>entry&&typeof entry==='object').slice(-30):[];
+}
+function cloneGuiStudioHistoryEntryList(stack=[]){
+  return trimGuiStudioHistoryStack(stack).map(entry=>cloneGuiStudioValue(entry));
+}
+function guiStudioSaveActiveHistoryToScope(){
+  if(!guiStudioHistoryScopes)resetGuiStudioHistoryScopes();
+  const key=guiStudioDraftScopes?.activeKey||guiStudioHistoryScopes.activeKey||guiStudioTargetScopeKey();
+  const history={undo:cloneGuiStudioHistoryEntryList(guiStudioUndoStack),redo:cloneGuiStudioHistoryEntryList(guiStudioRedoStack)};
+  if(key==='quest-list')guiStudioHistoryScopes.questList=history;
+  else if(String(key).startsWith('quest:')){
+    const file=String(key).slice(6)||guiStudioQuestScopeFile();
+    guiStudioHistoryScopes.questMenu[file]=history;
+  }
+  guiStudioHistoryScopes.activeKey=key;
+  return key;
+}
+function guiStudioLoadHistoryForScopeKey(key){
+  const history=key==='quest-list'
+    ? guiStudioHistoryScopes.questList
+    : (String(key||'').startsWith('quest:')?guiStudioHistoryScopes.questMenu?.[String(key).slice(6)||'__unsaved__']:null);
+  guiStudioUndoStack=cloneGuiStudioHistoryEntryList(history?.undo);
+  guiStudioRedoStack=cloneGuiStudioHistoryEntryList(history?.redo);
+  guiStudioHistoryScopes.activeKey=key;
+}
+function guiStudioPruneHistoryScopes(){
+  const clean={};
+  Object.entries(guiStudioHistoryScopes.questMenu||{}).forEach(([file,history])=>{
+    if(file==='__unsaved__'||quests?.[file])clean[file]=history;
+  });
+  guiStudioHistoryScopes.questMenu=clean;
+}
+function guiStudioHistoryBundle(){
+  guiStudioSaveActiveHistoryToScope();
+  guiStudioPruneHistoryScopes();
+  return {
+    version:1,
+    activeKey:guiStudioHistoryScopes.activeKey,
+    questList:guiStudioHistoryScopes.questList?cloneGuiStudioValue(guiStudioHistoryScopes.questList):null,
+    quests:cloneGuiStudioValue(guiStudioHistoryScopes.questMenu||{})
+  };
+}
+function restoreGuiStudioHistoryScopes(scopes){
+  resetGuiStudioHistoryScopes();
+  if(scopes&&typeof scopes==='object'){
+    guiStudioHistoryScopes.questMenu=scopes.quests&&typeof scopes.quests==='object'?cloneGuiStudioValue(scopes.quests):{};
+    guiStudioHistoryScopes.questList=scopes.questList&&typeof scopes.questList==='object'?cloneGuiStudioValue(scopes.questList):null;
+    guiStudioHistoryScopes.activeKey=scopes.activeKey||null;
+  }
+  const key=guiStudioTargetScopeKey(mode==='quest'?'quest-menu':'quest-list',currentFile);
+  guiStudioLoadHistoryForScopeKey(key);
+}
+function guiStudioSaveActiveDraftToScope(){
+  if(!guiStudioDraftScopes)resetGuiStudioScopedDrafts();
+  const key=guiStudioDraftScopes.activeKey||guiStudioTargetScopeKey();
+  const copy=cloneGuiStudioDraft(guiStudioDraft);
+  if(key==='quest-list')guiStudioDraftScopes.questList=copy;
+  else if(String(key).startsWith('quest:')){
+    const file=String(key).slice(6)||guiStudioQuestScopeFile();
+    guiStudioDraftScopes.questMenu[file]=copy;
+  }
+  guiStudioDraftScopes.activeKey=key;
+  return key;
+}
+function guiStudioDraftForScopeKey(key){
+  if(key==='quest-list')return guiStudioDraftScopes.questList?cloneGuiStudioDraft(guiStudioDraftScopes.questList):createDefaultGuiStudioDraft();
+  if(String(key||'').startsWith('quest:')){
+    const file=String(key).slice(6)||'__unsaved__';
+    return guiStudioDraftScopes.questMenu?.[file]?cloneGuiStudioDraft(guiStudioDraftScopes.questMenu[file]):createDefaultGuiStudioDraft();
+  }
+  return createDefaultGuiStudioDraft();
+}
+function guiStudioLoadScopedDraftForTarget(target=guiStudioModalTarget(),file=currentFile){
+  guiStudioSaveActiveHistoryToScope();
+  guiStudioSaveActiveDraftToScope();
+  const key=guiStudioTargetScopeKey(target,file);
+  guiStudioDraft=guiStudioDraftForScopeKey(key);
+  guiStudioDraftScopes.activeKey=key;
+  guiStudioLoadHistoryForScopeKey(key);
+  invalidateGuiStudioAllPreviews();
+  syncGuiStudioSelectedPieceForTarget(target);
+  syncGuiStudioLayoutSelectedForTarget(target);
+  updateGuiStudioHistoryButtons();
+  return key;
+}
+function guiStudioSyncActiveScopeForSelection(){
+  const modal=$('#guiStudioModal');
+  if(!modal?.classList.contains('open')||guiStudioModalTarget()!=='quest-menu')return;
+  guiStudioLoadScopedDraftForTarget('quest-menu',currentFile);
+}
+function guiStudioPruneScopedDrafts(){
+  const clean={};
+  Object.entries(guiStudioDraftScopes.questMenu||{}).forEach(([file,draft])=>{
+    if(file==='__unsaved__'||quests?.[file])clean[file]=draft;
+  });
+  guiStudioDraftScopes.questMenu=clean;
+}
+function guiStudioScopedDraftBundle(){
+  guiStudioSaveActiveDraftToScope();
+  guiStudioPruneScopedDrafts();
+  return {
+    version:1,
+    activeKey:guiStudioDraftScopes.activeKey,
+    questList:guiStudioDraftScopes.questList?cloneGuiStudioDraft(guiStudioDraftScopes.questList):null,
+    quests:cloneGuiStudioDraft(guiStudioDraftScopes.questMenu||{})
+  };
+}
+function guiStudioSplitLegacyDraftIntoScopes(legacyDraft){
+  if(!legacyDraft||typeof legacyDraft!=='object')return;
+  const copy=cloneGuiStudioDraft(legacyDraft);
+  const targetFile=guiStudioQuestScopeFile(currentFile);
+  guiStudioDraftScopes.questMenu[targetFile]=copy;
+  guiStudioDraftScopes.questList=cloneGuiStudioDraft(copy);
+  guiStudioDraftScopes.activeKey=mode==='quest'?`quest:${targetFile}`:'quest-list';
+  guiStudioDraft=guiStudioDraftForScopeKey(guiStudioDraftScopes.activeKey);
+}
+function restoreGuiStudioScopedDrafts(scopes,legacyDraft=null){
+  resetGuiStudioScopedDrafts();
+  if(scopes&&typeof scopes==='object'){
+    guiStudioDraftScopes.questMenu=scopes.quests&&typeof scopes.quests==='object'?cloneGuiStudioDraft(scopes.quests):{};
+    guiStudioDraftScopes.questList=scopes.questList&&typeof scopes.questList==='object'?cloneGuiStudioDraft(scopes.questList):null;
+    guiStudioDraftScopes.activeKey=scopes.activeKey||null;
+  }else if(legacyDraft&&typeof legacyDraft==='object'){
+    guiStudioSplitLegacyDraftIntoScopes(legacyDraft);
+  }
+  const key=guiStudioTargetScopeKey(mode==='quest'?'quest-menu':'quest-list',currentFile);
+  guiStudioDraft=guiStudioDraftForScopeKey(key);
+  guiStudioDraftScopes.activeKey=key;
+  invalidateGuiStudioAllPreviews();
+}
+function withGuiStudioScopedDraft(draft,fn){
+  const before=guiStudioDraft;
+  try{
+    guiStudioDraft=cloneGuiStudioDraft(draft||createDefaultGuiStudioDraft());
+    invalidateGuiStudioAllPreviews();
+    return fn();
+  }finally{
+    guiStudioDraft=before;
+    invalidateGuiStudioAllPreviews();
+  }
+}
+async function withGuiStudioScopedDraftAsync(draft,fn){
+  const before=guiStudioDraft;
+  try{
+    guiStudioDraft=cloneGuiStudioDraft(draft||createDefaultGuiStudioDraft());
+    invalidateGuiStudioAllPreviews();
+    return await fn();
+  }finally{
+    guiStudioDraft=before;
+    invalidateGuiStudioAllPreviews();
+  }
+}
+function guiStudioQuestDraftForFile(file){
+  guiStudioSaveActiveDraftToScope();
+  return guiStudioDraftScopes.questMenu?.[file]||null;
+}
+function guiStudioRefreshAppliedPreviewsForCurrentSelection(){
+  if(typeof createGuiStudioQuestPreviewSnapshot!=='function')return;
+  guiStudioSaveActiveDraftToScope();
+  guiStudioAppliedQuestPreview=null;
+  if(currentFile&&quests?.[currentFile]){
+    const draft=guiStudioQuestDraftForFile(currentFile);
+    const applied=draft?.appliedPreview;
+    if(applied&&applied.scope!=='global-questlist'){
+      guiStudioAppliedQuestPreview=withGuiStudioScopedDraft(draft,()=>createGuiStudioQuestPreviewSnapshot(applied.scope||'current',applied.pieces||guiStudioEditedPieceNames(),applied.targetFiles||[currentFile]));
+    }
+  }
+  const listDraft=guiStudioDraftScopes.questList;
+  const listApplied=listDraft?.appliedPreview;
+  guiStudioAppliedQuestListPreview=listApplied
+    ? withGuiStudioScopedDraft(listDraft,()=>createGuiStudioQuestListPreviewSnapshot('global-questlist',listApplied.pieces||guiStudioEditedPieceNames()))
+    : null;
+}
+function invalidateGuiStudioPiecePreview(piece=selectedGuiStudioPiece()){
+  if(piece){
+    guiStudioDirtyPreviewPieces.add(piece);
+    scheduleGuiStudioPreviewWarm([piece],{forceRefresh:true});
+  }
+}
+function clearGuiStudioLayerCanvasCache(piece=null){
+  guiStudioRenderGeneration++;
+  if(!piece){
+    guiStudioLayerCanvasCache.clear();
+    guiStudioBaseEraseCanvasCache.clear();
+    guiStudioStaticCompositeCache.clear();
+    guiStudioLayerBitmapCache.clear();
+    guiStudioLayerBitmapDirty.clear();
+    guiStudioLayerBitmapVersions.clear();
+    return;
+  }
+  const prefix=`${piece}:`;
+  [...guiStudioLayerCanvasCache.keys()].forEach(key=>{if(key.startsWith(prefix))guiStudioLayerCanvasCache.delete(key);});
+  guiStudioBaseEraseCanvasCache.delete(piece);
+  [...guiStudioStaticCompositeCache.keys()].forEach(key=>{if(key.startsWith(`${piece}:`))guiStudioStaticCompositeCache.delete(key);});
+  [...guiStudioLayerBitmapCache.keys()].forEach(key=>{if(key.startsWith(prefix))guiStudioLayerBitmapCache.delete(key);});
+  [...guiStudioLayerBitmapVersions.keys()].forEach(key=>{if(key.startsWith(prefix))guiStudioLayerBitmapVersions.delete(key);});
+  [...guiStudioLayerBitmapDirty].forEach(key=>{if(key.startsWith(prefix))guiStudioLayerBitmapDirty.delete(key);});
+}
+function clearGuiStudioLayerCanvasForLayer(piece,layerId,{clearStatic=false}={}){
+  if(!piece||!layerId)return;
+  const key=`${piece}:${layerId}`;
+  guiStudioLayerCanvasCache.delete(key);
+  invalidateGuiStudioLayerBitmapKey(key);
+  if(clearStatic){
+    [...guiStudioStaticCompositeCache.keys()].forEach(key=>{if(key.startsWith(`${piece}:`))guiStudioStaticCompositeCache.delete(key);});
+  }
+}
+function invalidateGuiStudioAllPreviews(){
+  Object.keys(GUI_STUDIO_PIECES).forEach(piece=>guiStudioDirtyPreviewPieces.add(piece));
+  guiStudioPiecePreviewCache.clear();
+  guiStudioPreviewWarmQueue=[];
+  guiStudioPreviewWarmQueued.clear();
+  clearGuiStudioLayerCanvasCache();
+}
+function guiStudioModalIsOpen(){
+  return !!$('#guiStudioModal')?.classList.contains('open');
+}
+function guiStudioCurrentWarmPieces(target=guiStudioModalTarget()){
+  const pieces=[
+    selectedGuiStudioPiece(),
+    ...guiStudioTargetPriorityPieces(target),
+    ...guiStudioEditedPieceNamesForTarget(target)
+  ];
+  const seen=new Set();
+  return pieces.filter(piece=>{
+    if(!piece||seen.has(piece)||!guiStudioPieceAllowedForTarget(piece,target))return false;
+    seen.add(piece);
+    return true;
+  });
+}
+function guiStudioQueueIdleWork(callback){
+  if(typeof requestIdleCallback==='function')return requestIdleCallback(callback,{timeout:180});
+  return setTimeout(()=>callback({timeRemaining:()=>6}),16);
+}
+function guiStudioCancelIdleWork(handle){
+  if(!handle)return;
+  if(typeof cancelIdleCallback==='function')cancelIdleCallback(handle);
+  else clearTimeout(handle);
+}
+function scheduleGuiStudioPreviewWarm(pieces=guiStudioCurrentWarmPieces(),{forceRefresh=false}={}){
+  if(!guiStudioModalIsOpen())return false;
+  const target=guiStudioModalTarget();
+  pieces.forEach(piece=>{
+    if(!piece||!guiStudioPieceAllowedForTarget(piece,target))return;
+    const cached=guiStudioPiecePreviewCache.get(piece);
+    if(cached&&!forceRefresh&&!guiStudioDirtyPreviewPieces.has(piece))return;
+    if(guiStudioPreviewWarmQueued.has(piece))return;
+    guiStudioPreviewWarmQueued.add(piece);
+    guiStudioPreviewWarmQueue.push({piece,forceRefresh});
+  });
+  if(!guiStudioPreviewWarmQueue.length||guiStudioPreviewWarmHandle)return guiStudioPreviewWarmQueue.length>0;
+  guiStudioPreviewWarmHandle=guiStudioQueueIdleWork(processGuiStudioPreviewWarmQueue);
+  return true;
+}
+function processGuiStudioPreviewWarmQueue(deadline=null){
+  guiStudioPreviewWarmHandle=0;
+  if(!guiStudioModalIsOpen()){
+    guiStudioPreviewWarmQueue=[];
+    guiStudioPreviewWarmQueued.clear();
+    return;
+  }
+  const started=typeof performance==='object'&&performance.now?performance.now():Date.now();
+  while(guiStudioPreviewWarmQueue.length){
+    const budget=deadline&&typeof deadline.timeRemaining==='function'?deadline.timeRemaining():8-((typeof performance==='object'&&performance.now?performance.now():Date.now())-started);
+    if(budget<=2)break;
+    const job=guiStudioPreviewWarmQueue.shift();
+    guiStudioPreviewWarmQueued.delete(job.piece);
+    createGuiStudioPiecePreview(job.piece,{allowDirtyRefresh:true});
+    warmGuiStudioLayerWorkerCache(job.piece);
+  }
+  if(guiStudioPreviewWarmQueue.length&&!guiStudioPreviewWarmHandle){
+    guiStudioPreviewWarmHandle=guiStudioQueueIdleWork(processGuiStudioPreviewWarmQueue);
+  }
+}
+function guiStudioPieceEditCount(piece=selectedGuiStudioPiece()){
+  const data=guiStudioDraft.pieces[piece];
+  if(!data)return 0;
+  const layerCount=(data.layers||[]).reduce((sum,layer)=>sum+Object.keys(layer.pixels||{}).length+guiStudioLayerFillEditCount(layer),0);
+  const baseEraseFills=(data.baseEraseFills||[]).reduce((sum,fill)=>{
+    if(fill?.type==='spans'&&Array.isArray(fill.spans))return sum+fill.spans.length;
+    if(fill?.type==='rect')return sum+1;
+    return sum;
+  },0);
+  return layerCount+baseEraseFills+Object.keys(data.baseErase||{}).length;
+}
+function createGuiStudioLayer(name,pixels={}){
+  return {
+    id:`layer_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
+    name,
+    visible:true,
+    locked:false,
+    opacity:1,
+    blend:'normal',
+    kind:'paint',
+    pixels:{...pixels},
+    fills:[],
+    eraseMask:{},
+    eraseFills:[]
+  };
+}
+function guiStudioLayerFillEditCount(layer){
+  const fills=(layer?.fills||[]).reduce((sum,fill)=>{
+    if(fill?.type==='spans'&&Array.isArray(fill.spans))return sum+fill.spans.length;
+    if(fill?.type==='rect')return sum+1;
+    return sum;
+  },0);
+  const eraseFills=(layer?.eraseFills||[]).reduce((sum,fill)=>{
+    if(fill?.type==='spans'&&Array.isArray(fill.spans))return sum+fill.spans.length;
+    if(fill?.type==='rect')return sum+1;
+    return sum;
+  },0);
+  return fills+eraseFills+Object.keys(layer?.eraseMask||{}).length;
+}
+function guiStudioNormalizeFillList(fills=[],fallbackColor=guiStudioDraft.primary){
+  return Array.isArray(fills)?fills.filter(fill=>{
+    if(!fill||typeof fill!=='object')return false;
+    fill.color=normalizeHexColor(fill.color,fallbackColor);
+    if(fill.type==='spans'){
+      fill.spans=(Array.isArray(fill.spans)?fill.spans:[]).map(span=>({
+        x:Math.round(Number(span.x)||0),
+        y:Math.round(Number(span.y)||0),
+        w:Math.max(1,Math.round(Number(span.w)||1))
+      })).filter(span=>span.w>0);
+      fill.bounds=guiStudioBoundsFromSpans(fill.spans);
+      return !!fill.spans.length;
+    }
+    if(fill.type==='rect'){
+      fill.x=Math.round(Number(fill.x)||0);
+      fill.y=Math.round(Number(fill.y)||0);
+      fill.w=Math.max(1,Math.round(Number(fill.w)||1));
+      fill.h=Math.max(1,Math.round(Number(fill.h)||1));
+      fill.bounds={x:fill.x,y:fill.y,w:fill.w,h:fill.h};
+      return true;
+    }
+    return false;
+  }):[];
+}
+function guiStudioNormalizeLayerFills(layer){
+  layer.fills=guiStudioNormalizeFillList(layer.fills,guiStudioDraft.primary);
+  layer.eraseFills=guiStudioNormalizeFillList(layer.eraseFills,'#000000');
+  return layer.fills;
+}
+function guiStudioBoundsFromSpans(spans=[]){
+  if(!spans.length)return null;
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  spans.forEach(span=>{
+    const x=Number(span.x),y=Number(span.y),w=Number(span.w);
+    if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(w)||w<=0)return;
+    minX=Math.min(minX,x);
+    minY=Math.min(minY,y);
+    maxX=Math.max(maxX,x+w-1);
+    maxY=Math.max(maxY,y);
+  });
+  if(!Number.isFinite(minX))return null;
+  return {x:minX,y:minY,w:maxX-minX+1,h:maxY-minY+1};
+}
+function guiStudioPointsToSpans(points=[]){
+  const rows=new Map();
+  points.forEach(p=>{
+    if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))return;
+    const y=Math.round(p.y),x=Math.round(p.x);
+    const row=rows.get(y)||[];
+    row.push(x);
+    rows.set(y,row);
+  });
+  const spans=[];
+  [...rows.keys()].sort((a,b)=>a-b).forEach(y=>{
+    const xs=[...new Set(rows.get(y))].sort((a,b)=>a-b);
+    let start=null,last=null;
+    xs.forEach(x=>{
+      if(start===null){start=x;last=x;return;}
+      if(x===last+1){last=x;return;}
+      spans.push({x:start,y,w:last-start+1});
+      start=x;
+      last=x;
+    });
+    if(start!==null)spans.push({x:start,y,w:last-start+1});
+  });
+  return spans;
+}
+function guiStudioAddSpanFill(layer,points,color){
+  const spans=guiStudioPointsToSpans(points);
+  if(!spans.length)return false;
+  const fill={type:'spans',color:normalizeHexColor(color,guiStudioDraft.primary),spans,bounds:guiStudioBoundsFromSpans(spans)};
+  layer.fills=Array.isArray(layer.fills)?layer.fills:[];
+  layer.fills.push(fill);
+  return fill;
+}
+function guiStudioAddRectFillToLayer(layer,bounds,color,piece=selectedGuiStudioPiece()){
+  if(!layer||layer.locked||!bounds||bounds.w<=0||bounds.h<=0)return false;
+  const clipped=guiStudioBoundsIntersection(bounds,guiStudioActiveZone());
+  if(!clipped)return false;
+  const fill={type:'rect',color:normalizeHexColor(color,guiStudioDraft.primary),x:clipped.x,y:clipped.y,w:clipped.w,h:clipped.h,bounds:{...clipped}};
+  const data=guiStudioPieceData(piece);
+  layer.fills=Array.isArray(layer.fills)?layer.fills:[];
+  layer.fills.push(fill);
+  updateGuiStudioLayerCanvasRect(piece,layer,clipped,fill.color);
+  expandGuiStudioBoundsToBounds(data,clipped);
+  guiStudioExpandDirtyBounds(clipped,3);
+  invalidateGuiStudioPiecePreview(piece);
+  return fill;
+}
+function guiStudioAddSpanListFillToLayer(layer,spans,color,piece=selectedGuiStudioPiece()){
+  if(!layer||layer.locked||!Array.isArray(spans)||!spans.length)return false;
+  const zone=guiStudioActiveZone();
+  const clipped=[];
+  spans.forEach(span=>{
+    const b=guiStudioBoundsIntersection({x:span.x,y:span.y,w:span.w,h:1},zone);
+    if(b)clipped.push({x:b.x,y:b.y,w:b.w});
+  });
+  if(!clipped.length)return false;
+  const fill={type:'spans',color:normalizeHexColor(color,guiStudioDraft.primary),spans:clipped,bounds:guiStudioBoundsFromSpans(clipped)};
+  const data=guiStudioPieceData(piece);
+  layer.fills=Array.isArray(layer.fills)?layer.fills:[];
+  layer.fills.push(fill);
+  clipped.forEach(span=>updateGuiStudioLayerCanvasRect(piece,layer,{x:span.x,y:span.y,w:span.w,h:1},fill.color));
+  expandGuiStudioBoundsToBounds(data,fill.bounds);
+  guiStudioExpandDirtyBounds(fill.bounds,3);
+  invalidateGuiStudioPiecePreview(piece);
+  return fill;
+}
+function addGuiStudioLayer(name,pixels={},props={}){
+  const data=guiStudioPieceData();
+  const layer=createGuiStudioLayer(name,pixels);
+  Object.assign(layer,props);
+  data.layers.push(layer);
+  data.activeLayerId=layer.id;
+  invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+  return layer;
+}
+function createGuiStudioPaletteRow(index=0,colors=[null]){
+  return {
+    id:`palette_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`,
+    name:`Palette ${index+1}`,
+    colors:colors.slice(0,GUI_STUDIO_PALETTE_MAX_COLORS)
+  };
+}
+function normalizeGuiStudioPaletteLibrary(library){
+  const rows=(Array.isArray(library)?library:[])
+    .slice(0,GUI_STUDIO_PALETTE_MAX_ROWS)
+    .map((row,index)=>{
+      const colors=(Array.isArray(row?.colors)?row.colors:[])
+        .slice(0,GUI_STUDIO_PALETTE_MAX_COLORS)
+        .map(color=>color?normalizeHexColor(color,''):null)
+        .map(color=>color||null);
+      return {
+        id:row?.id||`palette_${index+1}`,
+        name:String(row?.name||`Palette ${index+1}`).slice(0,40),
+        colors:colors.length?colors:[null]
+      };
+    });
+  return rows.length?rows:[createGuiStudioPaletteRow(0,[null])];
+}
+function loadSavedGuiStudioPaletteLibrary(){
+  try{
+    return normalizeGuiStudioPaletteLibrary(JSON.parse(localStorage.getItem(GUI_STUDIO_PALETTE_KEY)||'[]'));
+  }catch(_err){
+    return normalizeGuiStudioPaletteLibrary([]);
+  }
+}
+function saveGuiStudioPaletteLibrary(){
+  try{
+    localStorage.setItem(GUI_STUDIO_PALETTE_KEY,JSON.stringify(normalizeGuiStudioPaletteLibrary(guiStudioDraft.paletteLibrary)));
+  }catch(_err){}
+}
+function ensureGuiStudioPaletteLibrary(){
+  guiStudioDraft.paletteLibrary=normalizeGuiStudioPaletteLibrary(guiStudioDraft.paletteLibrary);
+  guiStudioDraft.palette=guiStudioPaletteColors(guiStudioDraft.paletteLibrary);
+  if(!guiStudioDraft.primary&&guiStudioDraft.palette[0])guiStudioDraft.primary=guiStudioDraft.palette[0];
+  if(!guiStudioDraft.secondary&&guiStudioDraft.palette[1])guiStudioDraft.secondary=guiStudioDraft.palette[1];
+  const picked=normalizeHexColor(guiStudioDraft.palettePick,null);
+  if(picked&&guiStudioDraft.palette.includes(picked)){
+    guiStudioDraft.palettePick=picked;
+    guiStudioDraft.selectedPaletteIndex=guiStudioDraft.palette.indexOf(picked);
+  }else if(Number.isInteger(guiStudioDraft.selectedPaletteIndex)&&guiStudioDraft.palette[guiStudioDraft.selectedPaletteIndex]){
+    guiStudioDraft.palettePick=guiStudioDraft.palette[guiStudioDraft.selectedPaletteIndex];
+  }else{
+    guiStudioDraft.palettePick=null;
+    guiStudioDraft.selectedPaletteIndex=-1;
+  }
+  return guiStudioDraft.paletteLibrary;
+}
+function guiStudioPaletteColors(library=guiStudioDraft.paletteLibrary){
+  return normalizeGuiStudioPaletteLibrary(library).flatMap(row=>row.colors).filter(Boolean).slice(0,12);
+}
+function commitGuiStudioPaletteLibrary(save=true){
+  ensureGuiStudioPaletteLibrary();
+  if(save)saveGuiStudioPaletteLibrary();
+  renderGuiStudioPalette();
+}
+function createDefaultGuiStudioDraft(){
+  const paletteLibrary=loadSavedGuiStudioPaletteLibrary();
+  const flatPalette=guiStudioPaletteColors(paletteLibrary);
+  const pieces={};
+  Object.entries(GUI_STUDIO_PIECES).forEach(([name,meta])=>{
+    const layer=createGuiStudioLayer(`${meta.short} Texture`,{});
+    layer.id='base';
+    pieces[name]={layers:[layer],activeLayerId:layer.id,bounds:{...meta.bounds},baseErase:{},baseEraseFills:[],zone:guiStudioDefaultZoneForMeta(meta),canvasVersion:GUI_STUDIO_CANVAS_VERSION};
+  });
+  return {
+    selectedPiece:'Quest Button',
+    primary:'#ffffff',
+    secondary:'#000000',
+    palette:flatPalette,
+    paletteLibrary,
+    palettePick:null,
+    selectedPaletteIndex:-1,
+    pieces,
+    layout:{
+      images:{},
+      elements:{
+        selected:'description',
+        version:21,
+        order:['detailsButton','backButton','rewardButton','description','title','icon','main','right','entries','customImage1','customImage2','customImage3'],
+        detailsButton:{x:404,y:356,w:54,h:18,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100},
+        backButton:{x:464,y:356,w:54,h:18,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100},
+        rewardButton:{x:429,y:356,w:88,h:18,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100},
+        description:{x:272,y:223,w:236,h:84,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100},
+        title:{x:392,y:202,w:160,h:16,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100},
+        icon:{x:375,y:200,w:14,h:14,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100},
+        main:{x:255,y:188,w:275,h:166,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100},
+        right:{x:536,y:188,w:170,h:166,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100},
+        entries:{x:552,y:224,w:126,h:86,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100},
+        customImage1:{x:24,y:24,w:80,h:80,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100},
+        customImage2:{x:120,y:24,w:80,h:80,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100},
+        customImage3:{x:216,y:24,w:80,h:80,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100}
+      }
+    },
+    labels:{
+      title:'Minecraft quest',
+      details:'Details',
+      back:'Back',
+      reward:'Collect Reward'
+    },
+    colors:{
+      title:'#4b371b',
+      text:'#4b371b',
+      progress:'#519c51',
+      hover:'#9c7751'
+    },
+    secondaryPriority:false,
+    selection:null,
+    cloneSource:null,
+    lastPenPoint:null,
+    canvasPan:{x:0,y:0},
+    showAffectedZone:false,
+    toolOptions:{
+      autoSelect:true,
+      transformControls:false,
+      brushSize:2,
+      eraserSize:2,
+      retouchSize:2,
+      opacity:100,
+      flow:100,
+      smooth:0,
+      tolerance:16,
+      filterStrength:0,
+      sprayDensity:28,
+      contiguous:true,
+      feather:0,
+      fillMode:'foreground',
+      gradientMode:'linear',
+      textDirection:'horizontal',
+      textSize:12,
+      textFont:'Minecraft Regular',
+      textColor:'#4b371b',
+      shapeFill:true,
+      shapeFillColor:'#d9c29e',
+      shapeStroke:true,
+      shapeStrokeColor:'#7d5137',
+      strokeWidth:1,
+      zoneWidth:GUI_STUDIO_DEFAULT_ZONE_W,
+      zoneHeight:GUI_STUDIO_DEFAULT_ZONE_H,
+      checkerSize:GUI_STUDIO_DEFAULT_CHECKER_SIZE,
+      showGrid:false,
+      ...loadSavedGuiStudioOptions()
+    },
+    imports:[],
+    savedPalettes:[],
+    savedPaletteNames:[],
+    badge:{visible:true,x:-8,y:-8,scale:1,u:0,v:0,w:18,h:18},
+    layoutState:'quest',
+    layoutScale:'2',
+    layoutBackground:GUI_STUDIO_LAYOUT_SCENES[0]?.value||'screenshot:Country Flags.webp',
+    layoutGuides:{safeZone:true,snap:true},
+    finalState:'quest',
+    appliedPreview:null
+  };
+}
+function selectedGuiStudioPiece(){
+  const piece=guiStudioDraft.selectedPiece||guiStudioDefaultPieceForTarget();
+  return guiStudioPieceAllowedForTarget(piece)?piece:guiStudioDefaultPieceForTarget();
+}
+function guiStudioPieceData(piece=selectedGuiStudioPiece()){
+  if(!guiStudioDraft.pieces[piece]){
+    const meta=GUI_STUDIO_PIECES[piece]||GUI_STUDIO_PIECES['Quest Main'];
+    const layer=createGuiStudioLayer(`${meta.short} Texture`,{});
+    layer.id='base';
+    guiStudioDraft.pieces[piece]={layers:[layer],activeLayerId:layer.id,bounds:{...meta.bounds},baseErase:{},zone:guiStudioDefaultZoneForMeta(meta),canvasVersion:GUI_STUDIO_CANVAS_VERSION};
+  }
+  return ensureGuiStudioPieceLayers(guiStudioDraft.pieces[piece],piece);
+}
+function ensureGuiStudioToolOptions(){
+  guiStudioDraft.toolOptions={
+    autoSelect:true,
+    transformControls:false,
+    brushSize:2,
+    eraserSize:2,
+    retouchSize:2,
+    opacity:100,
+    flow:100,
+    smooth:0,
+    tolerance:16,
+    filterStrength:0,
+    sprayDensity:28,
+    contiguous:true,
+    feather:0,
+    fillMode:'foreground',
+    gradientMode:'linear',
+    textDirection:'horizontal',
+    textSize:12,
+    textFont:'Minecraft Regular',
+    textColor:'#4b371b',
+    shapeFill:true,
+    shapeFillColor:'#d9c29e',
+    shapeStroke:true,
+    shapeStrokeColor:'#7d5137',
+    strokeWidth:1,
+    zoneWidth:GUI_STUDIO_DEFAULT_ZONE_W,
+    zoneHeight:GUI_STUDIO_DEFAULT_ZONE_H,
+    checkerSize:GUI_STUDIO_DEFAULT_CHECKER_SIZE,
+    showGrid:false,
+    ...(guiStudioDraft.toolOptions||{})
+  };
+  Object.keys(GUI_STUDIO_NUMERIC_TOOL_OPTIONS).forEach(key=>{
+    guiStudioDraft.toolOptions[key]=normalizeGuiStudioNumericOption(key,guiStudioDraft.toolOptions[key]);
+  });
+  guiStudioDraft.toolOptions.textFont=guiStudioNormalizeTextFontName(guiStudioDraft.toolOptions.textFont);
+  return guiStudioDraft.toolOptions;
+}
+function ensureGuiStudioPieceLayers(data,piece=selectedGuiStudioPiece()){
+  const meta=GUI_STUDIO_PIECES[piece]||GUI_STUDIO_PIECES['Quest Main'];
+  if(!data.bounds)data.bounds={...meta.bounds};
+  if(!data.baseErase||typeof data.baseErase!=='object')data.baseErase={};
+  data.baseEraseFills=guiStudioNormalizeFillList(data.baseEraseFills,'#000000');
+  data.zone=sanitizeGuiStudioPieceZone(data.zone,meta);
+  if(!Array.isArray(data.layers)||!data.layers.length){
+    const layer=createGuiStudioLayer(`${meta.short} Texture`,data.pixels||{});
+    layer.id='base';
+    data.layers=[layer];
+    data.activeLayerId=layer.id;
+    delete data.pixels;
+  }
+  if(data.canvasVersion!==GUI_STUDIO_CANVAS_VERSION){
+    const b=data.bounds;
+    if(b&&b.x<420&&b.y<260){
+      const dx=Math.round(GUI_STUDIO_CANVAS_W/2-160);
+      const dy=Math.round(GUI_STUDIO_CANVAS_H/2-90);
+      b.x+=dx;
+      b.y+=dy;
+      data.layers.forEach(layer=>{
+        const shifted={};
+        Object.entries(layer.pixels||{}).forEach(([key,color])=>{
+          const [x,y]=key.split(',').map(Number);
+          if(Number.isFinite(x)&&Number.isFinite(y))shifted[`${Math.max(0,Math.min(GUI_STUDIO_CANVAS_W-1,x+dx))},${Math.max(0,Math.min(GUI_STUDIO_CANVAS_H-1,y+dy))}`]=color;
+        });
+        layer.pixels=shifted;
+        const shiftedErase={};
+        Object.keys(layer.eraseMask||{}).forEach(key=>{
+          const [x,y]=key.split(',').map(Number);
+          if(Number.isFinite(x)&&Number.isFinite(y))shiftedErase[`${Math.max(0,Math.min(GUI_STUDIO_CANVAS_W-1,x+dx))},${Math.max(0,Math.min(GUI_STUDIO_CANVAS_H-1,y+dy))}`]=true;
+        });
+        layer.eraseMask=shiftedErase;
+        if(Array.isArray(layer.fills)){
+          layer.fills.forEach(fill=>{
+            if(fill.type==='spans'&&Array.isArray(fill.spans)){
+              fill.spans=fill.spans.map(span=>({x:span.x+dx,y:span.y+dy,w:span.w}));
+              fill.bounds=guiStudioBoundsFromSpans(fill.spans);
+            }else if(fill.type==='rect'){
+              fill.x+=dx;
+              fill.y+=dy;
+              fill.bounds={x:fill.x,y:fill.y,w:fill.w,h:fill.h};
+            }
+          });
+        }
+      });
+    }
+    data.canvasVersion=GUI_STUDIO_CANVAS_VERSION;
+  }
+  data.layers.forEach((layer,index)=>{
+    if(!layer.id)layer.id=index?'layer_'+index:'base';
+    if(!layer.name)layer.name=index?'Paint Layer':'Texture Layer';
+    if(typeof layer.visible!=='boolean')layer.visible=true;
+    if(typeof layer.locked!=='boolean')layer.locked=false;
+    layer.opacity=clampGuiNumber(layer.opacity,0,1,1);
+    layer.blend=GUI_STUDIO_BLEND_MODES.includes(layer.blend)?layer.blend:'normal';
+    layer.kind=layer.kind||'paint';
+    layer.pixels=layer.pixels||{};
+    layer.eraseMask=layer.eraseMask||{};
+    layer.eraseFills=Array.isArray(layer.eraseFills)?layer.eraseFills:[];
+    guiStudioNormalizeLayerFills(layer);
+  });
+  if(!data.layers.some(layer=>layer.id===data.activeLayerId))data.activeLayerId=data.layers[0].id;
+  return data;
+}
+function guiStudioActiveLayer(piece=selectedGuiStudioPiece()){
+  const data=guiStudioPieceData(piece);
+  return data.layers.find(layer=>layer.id===data.activeLayerId)||data.layers[0];
+}
+function guiStudioLayerById(id,piece=selectedGuiStudioPiece()){
+  const data=guiStudioPieceData(piece);
+  return data.layers.find(layer=>layer.id===id)||null;
+}
+function pruneGuiStudioMultiSelectedLayers(piece=selectedGuiStudioPiece()){
+  const data=guiStudioPieceData(piece);
+  const valid=new Set((data.layers||[]).map(layer=>layer.id));
+  guiStudioMultiSelectedLayerIds=new Set([...guiStudioMultiSelectedLayerIds].filter(id=>valid.has(id)));
+  return guiStudioMultiSelectedLayerIds;
+}
+function guiStudioSelectedLayerIds(piece=selectedGuiStudioPiece()){
+  const data=guiStudioPieceData(piece);
+  pruneGuiStudioMultiSelectedLayers(piece);
+  const ids=[...guiStudioMultiSelectedLayerIds].filter(id=>data.layers.some(layer=>layer.id===id));
+  if(ids.length>1)return ids;
+  return data.activeLayerId?[data.activeLayerId]:[];
+}
+function guiStudioLayerIdsForMenuAction(layerId,piece=selectedGuiStudioPiece()){
+  const selected=guiStudioSelectedLayerIds(piece);
+  return selected.length>1&&selected.includes(layerId)?selected:[layerId];
+}
+function clearGuiStudioMultiSelectedLayers(){
+  guiStudioMultiSelectedLayerIds.clear();
+}
+function setGuiStudioLayerSelection(layerId,{multi=false}={}){
+  const data=guiStudioPieceData();
+  if(!data.layers.some(layer=>layer.id===layerId))return;
+  if(!multi){
+    clearGuiStudioMultiSelectedLayers();
+    data.activeLayerId=layerId;
+    renderGuiStudioLayerPanel();
+    return;
+  }
+  if(guiStudioMultiSelectedLayerIds.size===0&&data.activeLayerId&&data.activeLayerId!==layerId){
+    guiStudioMultiSelectedLayerIds.add(data.activeLayerId);
+  }
+  if(guiStudioMultiSelectedLayerIds.has(layerId))guiStudioMultiSelectedLayerIds.delete(layerId);
+  else guiStudioMultiSelectedLayerIds.add(layerId);
+  if(!guiStudioMultiSelectedLayerIds.size)guiStudioMultiSelectedLayerIds.add(layerId);
+  data.activeLayerId=layerId;
+  renderGuiStudioLayerPanel();
+}
+function guiStudioLayerAtPoint(point,piece=selectedGuiStudioPiece()){
+  if(!point)return null;
+  const data=guiStudioPieceData(piece);
+  for(let i=data.layers.length-1;i>=0;i--){
+    const layer=data.layers[i];
+    if(layer.visible===false||layer.locked)continue;
+    if(guiStudioLayerColorAt(layer,point.x,point.y))return layer;
+  }
+  return null;
+}
+function guiStudioLucideIcon(name,classes=''){
+  const paths={
+    search:'<circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path>',
+    plus:'<path d="M5 12h14"></path><path d="M12 5v14"></path>',
+    eye:'<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path><circle cx="12" cy="12" r="3"></circle>',
+    'eye-off':'<path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"></path><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"></path><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"></path><path d="m2 2 20 20"></path>',
+    lock:'<rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>',
+    'lock-open':'<rect width="18" height="11" x="3" y="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path>',
+    'key-round':'<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21h2.172a2 2 0 0 0 1.414-.586l8.128-8.128"></path><circle cx="16.5" cy="7.5" r="5.5"></circle><path d="m18 6-1.5 1.5L15 6"></path>',
+    target:'<circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle>',
+    'circle-x':'<circle cx="12" cy="12" r="10"></circle><path d="m15 9-6 6"></path><path d="m9 9 6 6"></path>',
+    gift:'<rect x="3" y="8" width="18" height="4" rx="1"></rect><path d="M12 8v13"></path><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"></path><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5"></path>',
+    'map-pin':'<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle>',
+    trees:'<path d="M10 10v.2A3 3 0 0 1 7 13h0a3 3 0 0 1-3-3v-.2A5 5 0 0 1 7 1a5 5 0 0 1 3 9Z"></path><path d="M7 13v8"></path><path d="M13 17v4"></path><path d="M17 17v4"></path><path d="M19 17a4 4 0 1 0-6 0"></path>',
+    'door-open':'<path d="M13 4h3a2 2 0 0 1 2 2v14"></path><path d="M2 20h3"></path><path d="M13 20h9"></path><path d="M10 12v.01"></path><path d="M13 20V4a2 2 0 0 0-2.75-1.85L5 4v16"></path>',
+    landmark:'<path d="M3 22h18"></path><path d="M6 18v-7"></path><path d="M10 18v-7"></path><path d="M14 18v-7"></path><path d="M18 18v-7"></path><path d="m12 2 8 5H4z"></path>',
+    sparkles:'<path d="M9.94 15.5 8.5 19l-1.44-3.5L3.5 14l3.56-1.5L8.5 9l1.44 3.5L13.5 14z"></path><path d="M18 3v4"></path><path d="M20 5h-4"></path><path d="M18 17v4"></path><path d="M20 19h-4"></path>',
+    activity:'<path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>',
+    'rotate-ccw':'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path>',
+    'trash-2':'<path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path>',
+    x:'<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
+    grid:'<rect width="18" height="18" x="3" y="3" rx="2"></rect><path d="M3 9h18"></path><path d="M3 15h18"></path><path d="M9 3v18"></path><path d="M15 3v18"></path>',
+    palette:'<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"></circle><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"></circle><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"></circle><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"></circle><path d="M12 22a10 10 0 1 1 10-10 3.5 3.5 0 0 1-3.5 3.5h-1.8a2 2 0 0 0-1.4 3.4l.3.3A1.8 1.8 0 0 1 14.3 22z"></path>',
+    'image-plus':'<path d="M16 5h6"></path><path d="M19 2v6"></path><rect width="18" height="18" x="2" y="4" rx="2"></rect><circle cx="8.5" cy="10.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path>',
+    'arrow-left-right':'<path d="M8 3 4 7l4 4"></path><path d="M4 7h16"></path><path d="m16 21 4-4-4-4"></path><path d="M20 17H4"></path>',
+    'scan-line':'<path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path><path d="M7 12h10"></path>',
+    maximize:'<path d="M8 3H5a2 2 0 0 0-2 2v3"></path><path d="M16 3h3a2 2 0 0 1 2 2v3"></path><path d="M21 16v3a2 2 0 0 1-2 2h-3"></path><path d="M8 21H5a2 2 0 0 1-2-2v-3"></path>',
+    'arrow-left':'<path d="m12 19-7-7 7-7"></path><path d="M19 12H5"></path>',
+    'arrow-right':'<path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path>',
+    'chevron-right':'<path d="m9 18 6-6-6-6"></path>',
+    'chevron-down':'<path d="m6 9 6 6 6-6"></path>',
+    'chevron-up':'<path d="m18 15-6-6-6 6"></path>',
+    check:'<path d="M20 6 9 17l-5-5"></path>',
+    folder:'<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.2a2 2 0 0 1-1.6-.8L10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z"></path>',
+    'folder-open':'<path d="m6 14 1.5-2.9A2 2 0 0 1 9.2 10H20a2 2 0 0 1 1.8 2.9l-2.2 4.4A3 3 0 0 1 16.9 19H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.2a2 2 0 0 1 1.6.8L12 5h4a2 2 0 0 1 2 2v3"></path>',
+    image:'<rect width="18" height="18" x="3" y="3" rx="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L7 20"></path>',
+    'file-code-2':'<path d="M4 22h16a2 2 0 0 0 2-2V8l-6-6H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2Z"></path><path d="M14 2v6h6"></path><path d="m10 13-2 2 2 2"></path><path d="m14 17 2-2-2-2"></path>',
+    copy:'<rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>',
+    download:'<path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path>',
+    package:'<path d="m7.5 4.27 9 5.15"></path><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 22V12"></path>',
+    'alert-triangle':'<path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path>',
+    info:'<circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path>',
+    user:'<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>',
+    tag:'<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"></circle>',
+    undo:'<path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path>',
+    redo:'<path d="m15 14 5-5-5-5"></path><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"></path>',
+    settings:'<path d="M9.671 4.136a2.34 2.34 0 0 1 4.658 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.658 0 2.34 2.34 0 0 0-3.319-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx="12" cy="12" r="3"></circle>',
+    'sliders-horizontal':'<line x1="21" x2="14" y1="4" y2="4"></line><line x1="10" x2="3" y1="4" y2="4"></line><line x1="21" x2="12" y1="12" y2="12"></line><line x1="8" x2="3" y1="12" y2="12"></line><line x1="21" x2="16" y1="20" y2="20"></line><line x1="12" x2="3" y1="20" y2="20"></line><line x1="14" x2="14" y1="2" y2="6"></line><line x1="8" x2="8" y1="10" y2="14"></line><line x1="16" x2="16" y1="18" y2="22"></line>',
+    'circle-help':'<circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2.5-3 4"></path><path d="M12 17h.01"></path>',
+    puzzle:'<path d="M15.39 4.39a1.5 1.5 0 0 0-2.12 0l-.68.68a1.5 1.5 0 0 1-2.56-1.06V3a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v5.03a1 1 0 0 0 1 1h1.01a1.5 1.5 0 0 1 1.06 2.56l-.68.68a1.5 1.5 0 0 0 0 2.12l2.22 2.22a1.5 1.5 0 0 0 2.12 0l.68-.68A1.5 1.5 0 0 1 12 17.99V19a1 1 0 0 0 1 1h5a2 2 0 0 0 2-2v-5.03a1 1 0 0 0-1-1h-1.01a1.5 1.5 0 0 1-1.06-2.56l.68-.68a1.5 1.5 0 0 0 0-2.12z"></path>',
+    sun:'<circle cx="12" cy="12" r="4"></circle><path d="M12 2v2"></path><path d="M12 20v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="m17.66 17.66 1.41 1.41"></path><path d="M2 12h2"></path><path d="M20 12h2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="m19.07 4.93-1.41 1.41"></path>',
+    moon:'<path d="M12 3a6 6 0 0 0 9 7.5 9 9 0 1 1-9-7.5"></path>',
+    'volume-2':'<path d="M11 5 6 9H2v6h4l5 4z"></path><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>',
+    'volume-x':'<path d="M11 5 6 9H2v6h4l5 4z"></path><path d="m22 9-6 6"></path><path d="m16 9 6 6"></path>',
+    minus:'<path d="M5 12h14"></path>',
+    pencil:'<path d="M21.17 6.83 17.17 2.83a2.8 2.8 0 0 0-3.96 0L3 13.04V21h7.96L21.17 10.79a2.8 2.8 0 0 0 0-3.96Z"></path><path d="m15 5 4 4"></path>',
+    eraser:'<path d="M4 16.5 14.5 6a3 3 0 0 1 4.25 0l1.25 1.25a3 3 0 0 1 0 4.25L11 20.5H5.5L4 19z"></path><path d="m12.5 8 5 5"></path><path d="M9 20.5h11"></path>',
+    hand:'<path d="M8 11V5.5a1.5 1.5 0 0 1 3 0V11"></path><path d="M11 10V4.5a1.5 1.5 0 0 1 3 0V11"></path><path d="M14 11V6a1.5 1.5 0 0 1 3 0v7"></path><path d="M17 13v-1.5a1.5 1.5 0 0 1 3 0V15c0 4-2.5 6-6.5 6H11c-2.1 0-3.8-.9-5-2.5L3.7 15.3a1.6 1.6 0 0 1 2.5-2l1.8 1.9V8a1.5 1.5 0 0 1 3 0v3"></path>',
+    'book-open-check':'<path d="M12 21V7"></path><path d="m16 12 2 2 4-4"></path><path d="M22 6V4a1 1 0 0 0-1-1h-5a4 4 0 0 0-4 4 4 4 0 0 0-4-4H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h6a3 3 0 0 1 3 3 3 3 0 0 1 3-3h7"></path>',
+    'external-link':'<path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>'
+  };
+  return `<svg class="lucide lucide-${esc(name)} gui-studio-lucide ${esc(classes)}" viewBox="0 0 24 24" aria-hidden="true">${paths[name]||paths.search}</svg>`;
+}
+function guiStudioLayerEyeIcon(visible=true){
+  return guiStudioLucideIcon(visible?'eye':'eye-off','gui-studio-eye-icon');
+}
+function guiStudioLayoutLockIcon(locked=false){
+  return guiStudioLucideIcon(locked?'lock':'lock-open','gui-studio-lock-icon');
+}
+const GUI_STUDIO_TOOLTIP_TEXT={
+  'Move Tool':'Move layers or selected pixels on the active texture.',
+  'Rectangle Select':'Drag a rectangular pixel selection.',
+  'Ellipse Select':'Drag an oval pixel selection.',
+  'Lasso Select':'Drag a freehand pixel selection.',
+  'Polygonal Lasso':'Click points to build a straight-edge selection; close it near the start.',
+  'Magic Wand':'Select connected pixels close to the clicked color.',
+  'Color Wand':'Select every matching pixel of the clicked color in the active texture zone.',
+  Eyedropper:'Pick a color from the current texture.',
+  Ruler:'Measure pixel distance inside the active texture zone.',
+  'Pen Tool':'Hard pixel drawing tool. Uses Size, Opacity, Flow, and Smooth.',
+  Brush:'Round brush for softer freehand painting.',
+  'Spray Paint':'Scatter dots inside the brush radius. Density controls coverage.',
+  Pencil:'Hard one-pixel style drawing subtool.',
+  'Color Replacement':'Paint by replacing matching colors.',
+  Eraser:'Erase pixels from the active layer or source texture mask.',
+  'Background Eraser':'Erase with a larger background-focused brush.',
+  'Magic Eraser':'Erase connected pixels close to the clicked color.',
+  'Paint Bucket':'Fill connected pixels or the current selection.',
+  'Gradient Tool':'Fill the active area with a simple color gradient.',
+  'Blur Tool':'Blend visible neighboring pixels without painting empty space black.',
+  'Sharpen Tool':'Increase local color contrast on painted pixels.',
+  'Smudge Tool':'Drag the current pixel color through nearby pixels.',
+  'Text Type Tool':'Place text using the selected font, size, color, and direction.',
+  Rectangle:'Draw rectangle shapes on a new layer.',
+  Ellipse:'Draw circles or ellipses on a new layer.',
+  Line:'Draw straight pixel lines on a new layer.',
+  'Parametric Shape':'Draw a preset geometric shape on a new layer.',
+  'Hand Tool':'Pan around the large texture canvas.',
+  'Rotate Tool':'Rotate the current selection.',
+  'New paint layer':'Create a new editable paint layer.',
+  'Toggle layer lock':'Lock or unlock the active layer.',
+  'Toggle active zone grid':'Show or hide the active texture grid.',
+  'Reset current texture to the Questlog default':'Restore this texture piece to the source default.',
+  'Open color palette':'Open saved palette slots.',
+  'Swap active colors':'Swap primary and secondary paint colors.',
+  'Zoom out':'Zoom out of the texture workspace.',
+  'Zoom in':'Zoom into the texture workspace.',
+  'Fit to view':'Fit the active texture zone into the workspace.',
+  'Import Image':'Import an image as a placeable draft layer.',
+  'Reset selected layer':'Reset only the selected Layout layer.',
+  'Delete selected layer':'Delete the selected custom Layout image layer when allowed.',
+  'Reset All Layers':'Restore Layout layer positions, sizes, locks, visibility, and anchors.',
+  'Apply to Quest':'Apply supported layout fields and keep edited textures in the GUI draft preview.'
+};
+function guiStudioTooltipForLabel(label){
+  const clean=String(label||'').replace(/\s+/g,' ').trim();
+  return GUI_STUDIO_TOOLTIP_TEXT[clean]||clean;
+}
+function applyGuiStudioTooltipMetadata(root=$('#guiStudioModal')){
+  if(!root)return;
+  root.querySelectorAll('[title]').forEach(el=>{
+    const rawTitle=el.getAttribute('title')||'';
+    if(!el.dataset.tip)el.dataset.tip=guiStudioTooltipForLabel(rawTitle);
+    el.removeAttribute('title');
+  });
+  root.querySelectorAll('button,label,select,input,[role="button"],[data-layout-anchor]').forEach(el=>{
+    const label=el.dataset.toolOption
+      || el.getAttribute('aria-label')
+      || el.querySelector?.('strong')?.textContent
+      || el.textContent;
+    const tip=guiStudioTooltipForLabel(label);
+    if(tip&&(!el.dataset.tip||el.dataset.tip===String(label||'').trim()))el.dataset.tip=tip;
+  });
+}
+function guiStudioCanvasBlendMode(blend='normal'){
+  return {
+    normal:'source-over',
+    multiply:'multiply',
+    screen:'screen',
+    overlay:'overlay',
+    darken:'darken',
+    lighten:'lighten'
+  }[blend]||'source-over';
+}
+function guiStudioMergedPixels(piece=selectedGuiStudioPiece()){
+  const data=guiStudioPieceData(piece);
+  return data.layers.reduce((pixels,layer)=>{
+    if(!layer.visible)return pixels;
+    (layer.fills||[]).forEach(fill=>{
+      if(fill.type==='spans'){
+        (fill.spans||[]).forEach(span=>{
+          for(let x=span.x;x<span.x+span.w;x++)pixels[`${x},${span.y}`]=fill.color;
+        });
+      }else if(fill.type==='rect'){
+        for(let y=fill.y;y<fill.y+fill.h;y++)for(let x=fill.x;x<fill.x+fill.w;x++)pixels[`${x},${y}`]=fill.color;
+      }
+    });
+    Object.entries(layer.pixels||{}).forEach(([key,color])=>{pixels[key]=color;});
+    Object.keys(layer.eraseMask||{}).forEach(key=>{delete pixels[key];});
+    return pixels;
+  },{});
+}
+function guiStudioLayerFillColorAt(layer,x,y){
+  return guiStudioFillListColorAt(layer?.fills||[],x,y);
+}
+function guiStudioFillListColorAt(fills,x,y){
+  for(let i=fills.length-1;i>=0;i--){
+    const fill=fills[i];
+    if(fill.type==='rect'){
+      if(x>=fill.x&&y>=fill.y&&x<fill.x+fill.w&&y<fill.y+fill.h)return fill.color;
+    }else if(fill.type==='spans'){
+      const spans=fill.spans||[];
+      for(let j=0;j<spans.length;j++){
+        const span=spans[j];
+        if(y===span.y&&x>=span.x&&x<span.x+span.w)return fill.color;
+      }
+    }
+  }
+  return null;
+}
+function guiStudioLayerColorAt(layer,x,y){
+  const key=`${x},${y}`;
+  if(Object.prototype.hasOwnProperty.call(layer?.eraseMask||{},key))return null;
+  if(guiStudioFillListColorAt(layer?.eraseFills||[],x,y))return null;
+  if(Object.prototype.hasOwnProperty.call(layer?.pixels||{},key))return layer.pixels[key];
+  return guiStudioLayerFillColorAt(layer,x,y);
+}
+function guiStudioPixelColorAtPiece(piece,x,y){
+  const data=guiStudioPieceData(piece);
+  const key=`${x},${y}`;
+  for(let i=data.layers.length-1;i>=0;i--){
+    const layer=data.layers[i];
+    if(layer.visible===false)continue;
+    if(layer.id==='base'&&(data.baseErase?.[key]||guiStudioFillListColorAt(data.baseEraseFills||[],x,y)))continue;
+    const color=guiStudioLayerColorAt(layer,x,y);
+    if(color)return color;
+  }
+  return null;
+}
+function drawGuiStudioLayerContent(ctx,layer,zone=null){
+  (layer.fills||[]).forEach(fill=>{
+    ctx.fillStyle=fill.color;
+    if(fill.type==='rect'){
+      if(!zone||guiStudioBoundsInActiveZone({x:fill.x,y:fill.y,w:fill.w,h:fill.h},zone))ctx.fillRect(fill.x,fill.y,fill.w,fill.h);
+    }else if(fill.type==='spans'){
+      (fill.spans||[]).forEach(span=>{
+        if(zone&&(span.y<zone.y||span.y>=zone.y+zone.h))return;
+        const x=zone?Math.max(span.x,zone.x):span.x;
+        const right=zone?Math.min(span.x+span.w,zone.x+zone.w):span.x+span.w;
+        if(right>x)ctx.fillRect(x,span.y,right-x,1);
+      });
+    }
+  });
+  Object.entries(layer.pixels||{}).forEach(([key,color])=>{
+    const [x,y]=key.split(',').map(Number);
+    if(Number.isFinite(x)&&Number.isFinite(y)&&(!zone||guiStudioPointInActiveZone({x,y},zone))){
+      ctx.fillStyle=color;
+      ctx.fillRect(x,y,1,1);
+    }
+  });
+  const eraseKeys=Object.keys(layer.eraseMask||{});
+  if(eraseKeys.length||(layer.eraseFills||[]).length){
+    ctx.save();
+    ctx.globalCompositeOperation='destination-out';
+    ctx.fillStyle='#000';
+    (layer.eraseFills||[]).forEach(fill=>{
+      if(fill.type==='rect'){
+        if(!zone||guiStudioBoundsInActiveZone({x:fill.x,y:fill.y,w:fill.w,h:fill.h},zone))ctx.fillRect(fill.x,fill.y,fill.w,fill.h);
+      }else if(fill.type==='spans'){
+        (fill.spans||[]).forEach(span=>{
+          if(zone&&(span.y<zone.y||span.y>=zone.y+zone.h))return;
+          const x=zone?Math.max(span.x,zone.x):span.x;
+          const right=zone?Math.min(span.x+span.w,zone.x+zone.w):span.x+span.w;
+          if(right>x)ctx.fillRect(x,span.y,right-x,1);
+        });
+      }
+    });
+    eraseKeys.forEach(key=>{
+      const [x,y]=key.split(',').map(Number);
+      if(Number.isFinite(x)&&Number.isFinite(y)&&(!zone||guiStudioPointInActiveZone({x,y},zone)))ctx.fillRect(x,y,1,1);
+    });
+    ctx.restore();
+  }
+}
+function guiStudioLayerCanvasKey(piece,layer){
+  return `${piece}:${layer?.id||'unknown'}`;
+}
+function invalidateGuiStudioLayerBitmapKey(key){
+  if(!key)return;
+  if(!guiStudioLayerBitmapDirty.has(key)){
+    guiStudioLayerBitmapVersions.set(key,(guiStudioLayerBitmapVersions.get(key)||0)+1);
+    guiStudioLayerBitmapDirty.add(key);
+  }
+  const cached=guiStudioLayerBitmapCache.get(key);
+  try{cached?.bitmap?.close?.();}catch(_err){}
+  guiStudioLayerBitmapCache.delete(key);
+}
+function invalidateGuiStudioLayerBitmap(piece,layer){
+  if(!piece||!layer)return;
+  invalidateGuiStudioLayerBitmapKey(guiStudioLayerCanvasKey(piece,layer));
+}
+function createGuiStudioScratchCanvas(){
+  const canvas=document.createElement('canvas');
+  canvas.width=GUI_STUDIO_CANVAS_W;
+  canvas.height=GUI_STUDIO_CANVAS_H;
+  return canvas;
+}
+function guiStudioRenderWorkerSupported(){
+  return typeof Worker==='function'&&typeof Blob==='function'&&typeof URL!=='undefined'&&typeof OffscreenCanvas==='function'&&typeof createImageBitmap==='function';
+}
+function ensureGuiStudioRenderWorker(){
+  if(guiStudioRenderWorker)return guiStudioRenderWorker;
+  if(!guiStudioRenderWorkerSupported())return null;
+  const workerCode=`
+    const W=${GUI_STUDIO_CANVAS_W};
+    const H=${GUI_STUDIO_CANVAS_H};
+    function drawLayer(ctx,layer){
+      (layer.fills||[]).forEach(fill=>{
+        ctx.fillStyle=fill.color||'#000000';
+        if(fill.type==='rect')ctx.fillRect(fill.x,fill.y,fill.w,fill.h);
+        else if(fill.type==='spans')(fill.spans||[]).forEach(span=>ctx.fillRect(span.x,span.y,span.w,1));
+      });
+      Object.entries(layer.pixels||{}).forEach(([key,color])=>{
+        const parts=key.split(',');
+        const x=Number(parts[0]),y=Number(parts[1]);
+        if(Number.isFinite(x)&&Number.isFinite(y)){
+          ctx.fillStyle=color||'#000000';
+          ctx.fillRect(x,y,1,1);
+        }
+      });
+      const eraseKeys=Object.keys(layer.eraseMask||{});
+      if(eraseKeys.length||(layer.eraseFills||[]).length){
+        ctx.save();
+        ctx.globalCompositeOperation='destination-out';
+        ctx.fillStyle='#000';
+        (layer.eraseFills||[]).forEach(fill=>{
+          if(fill.type==='rect')ctx.fillRect(fill.x,fill.y,fill.w,fill.h);
+          else if(fill.type==='spans')(fill.spans||[]).forEach(span=>ctx.fillRect(span.x,span.y,span.w,1));
+        });
+        eraseKeys.forEach(key=>{
+          const parts=key.split(',');
+          const x=Number(parts[0]),y=Number(parts[1]);
+          if(Number.isFinite(x)&&Number.isFinite(y))ctx.fillRect(x,y,1,1);
+        });
+        ctx.restore();
+      }
+    }
+    self.onmessage=event=>{
+      const msg=event.data||{};
+      if(msg.type!=='renderLayer')return;
+      try{
+        const canvas=new OffscreenCanvas(W,H);
+        const ctx=canvas.getContext('2d');
+        ctx.imageSmoothingEnabled=false;
+        drawLayer(ctx,msg.layer||{});
+        const bitmap=canvas.transferToImageBitmap();
+        self.postMessage({type:'layerBitmap',jobId:msg.jobId,key:msg.key,version:msg.version,generation:msg.generation,bitmap},[bitmap]);
+      }catch(err){
+        self.postMessage({type:'layerBitmapError',jobId:msg.jobId,key:msg.key,version:msg.version,generation:msg.generation,message:err&&err.message?err.message:String(err)});
+      }
+    };
+  `;
+  try{
+    const blob=new Blob([workerCode],{type:'text/javascript'});
+    guiStudioRenderWorkerUrl=URL.createObjectURL(blob);
+    guiStudioRenderWorker=new Worker(guiStudioRenderWorkerUrl);
+    guiStudioRenderWorker.onmessage=event=>{
+      const msg=event.data||{};
+      if(msg.type==='layerBitmap'&&msg.bitmap&&msg.key){
+        const expected=guiStudioLayerBitmapVersions.get(msg.key)||0;
+        if(expected===msg.version&&msg.generation===guiStudioRenderGeneration){
+          const old=guiStudioLayerBitmapCache.get(msg.key);
+          try{old?.bitmap?.close?.();}catch(_err){}
+          guiStudioLayerBitmapCache.set(msg.key,{bitmap:msg.bitmap,version:msg.version,generation:msg.generation});
+        }else{
+          try{msg.bitmap.close?.();}catch(_err){}
+        }
+      }
+    };
+    guiStudioRenderWorker.onerror=()=>{guiStudioRenderWorker=null;};
+    return guiStudioRenderWorker;
+  }catch(_err){
+    guiStudioRenderWorker=null;
+    return null;
+  }
+}
+function scheduleGuiStudioLayerWorkerRender(piece,layer){
+  if(!piece||!layer||layer.visible===false)return;
+  const worker=ensureGuiStudioRenderWorker();
+  if(!worker)return;
+  const key=guiStudioLayerCanvasKey(piece,layer);
+  const version=guiStudioLayerBitmapVersions.get(key)||0;
+  if(guiStudioLayerBitmapCache.get(key)?.version===version)return;
+  guiStudioLayerBitmapDirty.delete(key);
+  const payload={type:'renderLayer',jobId:++guiStudioRenderJobSeq,key,version,generation:guiStudioRenderGeneration,layer:cloneGuiStudioDraft(layer)};
+  try{worker.postMessage(payload);}catch(_err){}
+}
+function warmGuiStudioLayerWorkerCache(piece=selectedGuiStudioPiece()){
+  if(!guiStudioRenderWorkerSupported())return;
+  const data=guiStudioPieceData(piece);
+  (data.layers||[]).forEach(layer=>scheduleGuiStudioLayerWorkerRender(piece,layer));
+}
+function scheduleGuiStudioWorkerCacheWarm(piece=selectedGuiStudioPiece()){
+  if(guiStudioWorkerWarmPending||!guiStudioRenderWorkerSupported())return;
+  guiStudioWorkerWarmPending=true;
+  const run=()=>{
+    guiStudioWorkerWarmPending=false;
+    warmGuiStudioLayerWorkerCache(piece);
+  };
+  if(typeof requestIdleCallback==='function')requestIdleCallback(run,{timeout:800});
+  else setTimeout(run,0);
+}
+function getGuiStudioLayerCanvas(piece,layer){
+  if(!layer)return null;
+  const key=guiStudioLayerCanvasKey(piece,layer);
+  let canvas=guiStudioLayerCanvasCache.get(key);
+  if(!canvas){
+    canvas=createGuiStudioScratchCanvas();
+    const ctx=canvas.getContext('2d');
+    ctx.imageSmoothingEnabled=false;
+    drawGuiStudioLayerContent(ctx,layer);
+    guiStudioLayerCanvasCache.set(key,canvas);
+  }
+  return canvas;
+}
+function drawGuiStudioLayerBitmapIfReady(ctx,piece,layer,bounds,dx=0,dy=0){
+  const key=guiStudioLayerCanvasKey(piece,layer);
+  const cached=guiStudioLayerBitmapCache.get(key);
+  const expected=guiStudioLayerBitmapVersions.get(key)||0;
+  if(!cached||cached.version!==expected||cached.generation!==guiStudioRenderGeneration||!cached.bitmap)return false;
+  const b=bounds||{x:0,y:0,w:GUI_STUDIO_CANVAS_W,h:GUI_STUDIO_CANVAS_H};
+  const srcX=Math.max(0,Math.floor(b.x-dx));
+  const srcY=Math.max(0,Math.floor(b.y-dy));
+  const srcRight=Math.min(GUI_STUDIO_CANVAS_W,Math.ceil(b.x+b.w-dx));
+  const srcBottom=Math.min(GUI_STUDIO_CANVAS_H,Math.ceil(b.y+b.h-dy));
+  const w=srcRight-srcX;
+  const h=srcBottom-srcY;
+  if(w<=0||h<=0)return true;
+  ctx.drawImage(cached.bitmap,srcX,srcY,w,h,srcX+dx,srcY+dy,w,h);
+  return true;
+}
+function updateGuiStudioLayerCanvasPoint(piece,layer,x,y,color,{erase=false}={}){
+  if(!layer)return;
+  invalidateGuiStudioLayerBitmap(piece,layer);
+  const canvas=guiStudioLayerCanvasCache.get(guiStudioLayerCanvasKey(piece,layer));
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  if(erase){
+    ctx.save();
+    ctx.globalCompositeOperation='destination-out';
+    ctx.fillStyle='#000';
+    ctx.fillRect(x,y,1,1);
+    ctx.restore();
+    return;
+  }
+  if(color){
+    ctx.clearRect(x,y,1,1);
+    ctx.fillStyle=normalizeHexColor(color,guiStudioDraft.primary);
+    ctx.fillRect(x,y,1,1);
+  }else{
+    ctx.clearRect(x,y,1,1);
+  }
+}
+function updateGuiStudioLayerCanvasRect(piece,layer,bounds,color,{erase=false}={}){
+  if(!layer||!bounds||bounds.w<=0||bounds.h<=0)return;
+  invalidateGuiStudioLayerBitmap(piece,layer);
+  const canvas=guiStudioLayerCanvasCache.get(guiStudioLayerCanvasKey(piece,layer));
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  if(erase){
+    ctx.save();
+    ctx.globalCompositeOperation='destination-out';
+    ctx.fillStyle='#000';
+    ctx.fillRect(bounds.x,bounds.y,bounds.w,bounds.h);
+    ctx.restore();
+    return;
+  }
+  if(color){
+    ctx.fillStyle=normalizeHexColor(color,guiStudioDraft.primary);
+    ctx.fillRect(bounds.x,bounds.y,bounds.w,bounds.h);
+  }else{
+    ctx.clearRect(bounds.x,bounds.y,bounds.w,bounds.h);
+  }
+}
+function drawGuiStudioLayerCached(ctx,piece,layer,bounds){
+  if(drawGuiStudioLayerBitmapIfReady(ctx,piece,layer,bounds,0,0))return;
+  const canvas=getGuiStudioLayerCanvas(piece,layer);
+  if(!canvas)return;
+  const b=bounds||{x:0,y:0,w:GUI_STUDIO_CANVAS_W,h:GUI_STUDIO_CANVAS_H};
+  ctx.drawImage(canvas,b.x,b.y,b.w,b.h,b.x,b.y,b.w,b.h);
+}
+function drawGuiStudioLayerCachedOffset(ctx,piece,layer,bounds,dx=0,dy=0){
+  if(drawGuiStudioLayerBitmapIfReady(ctx,piece,layer,bounds,dx,dy))return;
+  const canvas=getGuiStudioLayerCanvas(piece,layer);
+  if(!canvas)return;
+  const b=bounds||{x:0,y:0,w:GUI_STUDIO_CANVAS_W,h:GUI_STUDIO_CANVAS_H};
+  const srcX=Math.max(0,Math.floor(b.x-dx));
+  const srcY=Math.max(0,Math.floor(b.y-dy));
+  const srcRight=Math.min(GUI_STUDIO_CANVAS_W,Math.ceil(b.x+b.w-dx));
+  const srcBottom=Math.min(GUI_STUDIO_CANVAS_H,Math.ceil(b.y+b.h-dy));
+  const w=srcRight-srcX;
+  const h=srcBottom-srcY;
+  if(w<=0||h<=0)return;
+  ctx.drawImage(canvas,srcX,srcY,w,h,srcX+dx,srcY+dy,w,h);
+}
+function getGuiStudioBaseEraseCanvas(piece,data){
+  let canvas=guiStudioBaseEraseCanvasCache.get(piece);
+  if(!canvas){
+    canvas=createGuiStudioScratchCanvas();
+    const ctx=canvas.getContext('2d');
+    ctx.imageSmoothingEnabled=false;
+    ctx.fillStyle='#000';
+    (data?.baseEraseFills||[]).forEach(fill=>{
+      if(fill.type==='rect')ctx.fillRect(fill.x,fill.y,fill.w,fill.h);
+      else if(fill.type==='spans')(fill.spans||[]).forEach(span=>ctx.fillRect(span.x,span.y,span.w,1));
+    });
+    Object.keys(data?.baseErase||{}).forEach(key=>{
+      const [x,y]=key.split(',').map(Number);
+      if(Number.isFinite(x)&&Number.isFinite(y))ctx.fillRect(x,y,1,1);
+    });
+    guiStudioBaseEraseCanvasCache.set(piece,canvas);
+  }
+  return canvas;
+}
+function updateGuiStudioBaseEraseCanvasPoint(piece,x,y,erased){
+  const canvas=guiStudioBaseEraseCanvasCache.get(piece);
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  if(erased){
+    ctx.fillStyle='#000';
+    ctx.fillRect(x,y,1,1);
+  }else{
+    ctx.clearRect(x,y,1,1);
+  }
+}
+function updateGuiStudioBaseEraseCanvasRect(piece,bounds,erased){
+  if(!bounds||bounds.w<=0||bounds.h<=0)return;
+  const canvas=guiStudioBaseEraseCanvasCache.get(piece);
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  if(erased){
+    ctx.fillStyle='#000';
+    ctx.fillRect(bounds.x,bounds.y,bounds.w,bounds.h);
+  }else{
+    ctx.clearRect(bounds.x,bounds.y,bounds.w,bounds.h);
+  }
+}
+function guiStudioMaybeCompactLayerStorage(piece=selectedGuiStudioPiece(),layer=guiStudioActiveLayer(piece)){
+  if(!layer)return;
+  const opCount=Object.keys(layer.pixels||{}).length+Object.keys(layer.eraseMask||{}).length+(layer.fills||[]).length+(layer.eraseFills||[]).length;
+  if(opCount<260)return;
+  const canvas=getGuiStudioLayerCanvas(piece,layer);
+  if(!canvas)return;
+  const zone=guiStudioActiveZone();
+  const ctx=canvas.getContext('2d');
+  let raw;
+  try{raw=ctx.getImageData(zone.x,zone.y,zone.w,zone.h).data;}catch(_err){return;}
+  const fillsByColor=new Map();
+  for(let y=0;y<zone.h;y++){
+    let runColor=null,runStart=0;
+    const flush=x=>{
+      if(!runColor)return;
+      const list=fillsByColor.get(runColor)||[];
+      list.push({x:zone.x+runStart,y:zone.y+y,w:x-runStart});
+      fillsByColor.set(runColor,list);
+      runColor=null;
+    };
+    for(let x=0;x<zone.w;x++){
+      const i=(y*zone.w+x)*4;
+      const color=raw[i+3]>12?guiStudioRgbToHex(raw[i],raw[i+1],raw[i+2]):null;
+      if(color!==runColor){
+        flush(x);
+        if(color){runColor=color;runStart=x;}
+      }
+    }
+    flush(zone.w);
+  }
+  layer.pixels={};
+  layer.eraseMask={};
+  layer.eraseFills=[];
+  layer.fills=[...fillsByColor.entries()].map(([color,spans])=>({type:'spans',color,spans,bounds:guiStudioBoundsFromSpans(spans)}));
+  clearGuiStudioLayerCanvasCache(piece);
+  invalidateGuiStudioPiecePreview(piece);
+}
+function guiStudioBaseLayer(piece=selectedGuiStudioPiece()){
+  return guiStudioPieceData(piece).layers.find(layer=>layer.id==='base')||null;
+}
+function guiStudioApplyBaseEraseMask(ctx,data){
+  const keys=Object.keys(data?.baseErase||{});
+  if(!keys.length&&!(data?.baseEraseFills||[]).length)return;
+  ctx.save();
+  ctx.globalCompositeOperation='destination-out';
+  ctx.fillStyle='#000';
+  (data?.baseEraseFills||[]).forEach(fill=>{
+    if(fill.type==='rect')ctx.fillRect(fill.x,fill.y,fill.w,fill.h);
+    else if(fill.type==='spans')(fill.spans||[]).forEach(span=>ctx.fillRect(span.x,span.y,span.w,1));
+  });
+  keys.forEach(key=>{
+    const [x,y]=key.split(',').map(Number);
+    if(Number.isFinite(x)&&Number.isFinite(y))ctx.fillRect(x,y,1,1);
+  });
+  ctx.restore();
+}
+function guiStudioApplyBaseEraseMaskCached(ctx,piece,data,bounds){
+  if(!data?.baseErase&&!Array.isArray(data?.baseEraseFills))return;
+  if(!Object.keys(data.baseErase||{}).length&&!(data.baseEraseFills||[]).length)return;
+  const canvas=getGuiStudioBaseEraseCanvas(piece,data);
+  const b=bounds||{x:0,y:0,w:GUI_STUDIO_CANVAS_W,h:GUI_STUDIO_CANVAS_H};
+  ctx.save();
+  ctx.globalCompositeOperation='destination-out';
+  ctx.drawImage(canvas,b.x,b.y,b.w,b.h,b.x,b.y,b.w,b.h);
+  ctx.restore();
+}
+function guiStudioLayerUsesSimpleComposite(layer){
+  if(!layer||layer.visible===false)return true;
+  return guiStudioCanvasBlendMode(layer.blend)==='source-over'&&clampGuiNumber(layer.opacity,0,1,1)===1;
+}
+function guiStudioCanUseStaticComposite(data,activeLayer){
+  if(!activeLayer||activeLayer.id==='base')return false;
+  return (data.layers||[]).every(layer=>layer.id===activeLayer.id||guiStudioLayerUsesSimpleComposite(layer));
+}
+function drawGuiStudioLayerSimple(ctx,piece,layer){
+  if(!layer||layer.visible===false)return;
+  drawGuiStudioLayerCached(ctx,piece,layer);
+}
+function guiStudioBuildStaticComposite(piece,data,meta,activeLayer){
+  const key=`${piece}:${activeLayer.id}`;
+  let cached=guiStudioStaticCompositeCache.get(key);
+  if(cached)return cached;
+  const under=createGuiStudioScratchCanvas();
+  const over=createGuiStudioScratchCanvas();
+  const underCtx=under.getContext('2d');
+  const overCtx=over.getContext('2d');
+  underCtx.imageSmoothingEnabled=false;
+  overCtx.imageSmoothingEnabled=false;
+  const baseLayer=guiStudioBaseLayer(piece);
+  if(baseLayer?.visible!==false){
+    drawGuiStudioBase(underCtx,meta,{clear:false});
+    drawGuiStudioLayerSimple(underCtx,piece,baseLayer);
+    guiStudioApplyBaseEraseMaskCached(underCtx,piece,data);
+  }
+  let seenActive=false;
+  (data.layers||[]).forEach(layer=>{
+    if(layer.id==='base'||layer.visible===false)return;
+    if(layer.id===activeLayer.id){
+      seenActive=true;
+      return;
+    }
+    drawGuiStudioLayerSimple(seenActive?overCtx:underCtx,piece,layer);
+  });
+  cached={under,over};
+  guiStudioStaticCompositeCache.set(key,cached);
+  return cached;
+}
+function resetGuiStudioPieceToDefault(piece=selectedGuiStudioPiece()){
+  const meta=GUI_STUDIO_PIECES[piece]||GUI_STUDIO_PIECES['Quest Main'];
+  const data=guiStudioPieceData(piece);
+  const base=data.layers.find(layer=>layer.id==='base')||data.layers[0];
+  data.layers=[base];
+  base.id='base';
+  base.name=`${meta.short} Texture`;
+  base.visible=true;
+  base.locked=false;
+  base.opacity=1;
+  base.blend='normal';
+  base.kind='paint';
+  base.pixels={};
+  base.fills=[];
+  base.eraseFills=[];
+  base.eraseMask={};
+  data.activeLayerId='base';
+  data.bounds={...meta.bounds};
+  data.baseErase={};
+  data.baseEraseFills=[];
+  data.zone=guiStudioDefaultZoneForMeta(meta);
+  guiStudioDraft.selection=null;
+  invalidateGuiStudioPiecePreview(piece);
+}
+function refreshGuiStudioPreviewSurfaces(piece=selectedGuiStudioPiece(),{syncApplied=false}={}){
+  if(piece)invalidateGuiStudioPiecePreview(piece);
+  renderGuiStudioDraft();
+  renderGuiStudioPieceThumbs({forceRefresh:true});
+  renderGuiStudioImports({forceRefresh:true});
+  renderGuiStudioLayout();
+  if(syncApplied&&guiStudioDraft.appliedPreview){
+    const scope=guiStudioDraft.appliedPreview.scope||'current';
+    const pieces=guiStudioEditedPieceNames();
+    const targetFiles=Array.isArray(guiStudioDraft.appliedPreview.targetFiles)?guiStudioDraft.appliedPreview.targetFiles:[];
+    guiStudioDraft.appliedPreview={...guiStudioDraft.appliedPreview,scope,pieces,targetFiles,currentFile:currentFile||null,updatedAt:new Date().toISOString()};
+    if(scope==='global-questlist'){
+      guiStudioAppliedQuestListPreview=createGuiStudioQuestListPreviewSnapshot(scope,pieces);
+    }else{
+      guiStudioAppliedQuestPreview=createGuiStudioQuestPreviewSnapshot(scope,pieces,targetFiles);
+    }
+    renderInlineQuestPreview();
+    renderInlineChapterListPreview();
+    renderOpenQuestPreviewModal();
+    renderOpenQuestlogListPreviewModal(questlogListActiveChapter);
+  }
+}
+function openGuiStudioResetConfirm(piece=selectedGuiStudioPiece()){
+  const panel=$('#guiStudioResetConfirm');
+  const title=$('#guiStudioResetConfirmTitle');
+  const text=$('#guiStudioResetConfirmText');
+  if(!panel){
+    withGuiStudioHistory(()=>{
+      resetGuiStudioPieceToDefault(piece);
+      refreshGuiStudioPreviewSurfaces(piece,{syncApplied:true});
+      showMsg(`${piece} reset to the Questlog default source texture.`,true);
+    });
+    return;
+  }
+  panel.dataset.resetPiece=piece;
+  if(title)title.textContent=`Reset ${piece}?`;
+  if(text)text.textContent='This restores only this texture piece to the Questlog source default. Other pieces, quest JSON, and project assets stay untouched.';
+  panel.hidden=false;
+  $('#guiStudioResetConfirmBtn')?.focus?.();
+}
+function closeGuiStudioResetConfirm(){
+  const panel=$('#guiStudioResetConfirm');
+  if(panel){
+    panel.hidden=true;
+    delete panel.dataset.resetPiece;
+  }
+}
+function confirmGuiStudioResetDefault(){
+  const piece=$('#guiStudioResetConfirm')?.dataset.resetPiece||selectedGuiStudioPiece();
+  closeGuiStudioResetConfirm();
+  withGuiStudioHistory(()=>{
+    resetGuiStudioPieceToDefault(piece);
+    refreshGuiStudioPreviewSurfaces(piece,{syncApplied:true});
+    showMsg(`${piece} reset to the Questlog default source texture.`,true);
+  });
+}
+function normalizeHexColor(value,fallback='#254e56'){
+  const raw=String(value||'').trim();
+  if(/^#[0-9a-f]{6}$/i.test(raw))return raw.toLowerCase();
+  if(/^#[0-9a-f]{3}$/i.test(raw))return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`.toLowerCase();
+  return fallback;
+}
+const GUI_STUDIO_COLOR_DEFAULTS={
+  title:'#4b371b',
+  text:'#4b371b',
+  progress:'#519c51',
+  hover:'#9c7751'
+};
+function guiStudioColorKeyFromInput(input){
+  const key=input?.dataset?.guiStudioColor||'';
+  return Object.prototype.hasOwnProperty.call(GUI_STUDIO_COLOR_DEFAULTS,key)?key:'';
+}
+function syncGuiStudioColorControlsFromDraft(){
+  $$('[data-gui-studio-color]').forEach(input=>{
+    const key=guiStudioColorKeyFromInput(input);
+    if(!key)return;
+    const value=normalizeHexColor(guiStudioDraft.colors?.[key],GUI_STUDIO_COLOR_DEFAULTS[key]);
+    input.value=value;
+    const row=input.closest('.gui-studio-color-row');
+    if(row)row.style.setProperty('--swatch',value);
+  });
+}
+function clampGuiNumber(value,min,max,fallback){
+  const n=Number(value);
+  if(!Number.isFinite(n))return fallback;
+  return Math.max(min,Math.min(max,n));
+}
+function guiStudioZoneOptions(){
+  const opts=ensureGuiStudioToolOptions();
+  const piece=selectedGuiStudioPiece();
+  const data=guiStudioPieceData(piece);
+  data.zone=sanitizeGuiStudioPieceZone(data.zone,GUI_STUDIO_PIECES[piece]||GUI_STUDIO_PIECES['Quest Main']);
+  return {
+    w:data.zone.w,
+    h:data.zone.h,
+    checker:Math.round(clampGuiNumber(opts.checkerSize,2,64,GUI_STUDIO_DEFAULT_CHECKER_SIZE)),
+    showGrid:!!opts.showGrid
+  };
+}
+function guiStudioActiveZone(){
+  const zone=guiStudioZoneOptions();
+  return {
+    x:Math.round((GUI_STUDIO_CANVAS_W-zone.w)/2),
+    y:Math.round((GUI_STUDIO_CANVAS_H-zone.h)/2),
+    w:zone.w,
+    h:zone.h
+  };
+}
+function guiStudioPointInActiveZone(point,zone=guiStudioActiveZone()){
+  return !!point&&point.x>=zone.x&&point.y>=zone.y&&point.x<zone.x+zone.w&&point.y<zone.y+zone.h;
+}
+function guiStudioClampPointToActiveZone(point,zone=guiStudioActiveZone()){
+  if(!point)return null;
+  const maxX=zone.x+zone.w-1,maxY=zone.y+zone.h-1;
+  return {
+    x:Math.max(zone.x,Math.min(maxX,Math.round(point.x))),
+    y:Math.max(zone.y,Math.min(maxY,Math.round(point.y)))
+  };
+}
+function guiStudioBoundsInActiveZone(bounds,zone=guiStudioActiveZone()){
+  if(!bounds)return false;
+  return bounds.x+bounds.w>zone.x&&bounds.y+bounds.h>zone.y&&bounds.x<zone.x+zone.w&&bounds.y<zone.y+zone.h;
+}
+function guiStudioHexToRgb(hex){
+  const value=normalizeHexColor(hex,'#000000').slice(1);
+  return {r:parseInt(value.slice(0,2),16),g:parseInt(value.slice(2,4),16),b:parseInt(value.slice(4,6),16)};
+}
+function guiStudioRgbToHex(r,g,b){
+  const h=v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0');
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+function guiStudioPaintColor(e){
+  const paletteColor=normalizeHexColor(guiStudioDraft.palettePick||guiStudioDraft.palette?.[guiStudioDraft.selectedPaletteIndex],null);
+  if(e?.button!==2&&paletteColor)return paletteColor;
+  const primary=guiStudioDraft.secondaryPriority?guiStudioDraft.secondary:guiStudioDraft.primary;
+  const secondary=guiStudioDraft.secondaryPriority?guiStudioDraft.primary:guiStudioDraft.secondary;
+  return e?.button===2?secondary:primary;
+}
+function setGuiStudioActiveSwapperColor(which){
+  guiStudioDraft.palettePick=null;
+  guiStudioDraft.selectedPaletteIndex=-1;
+  guiStudioDraft.secondaryPriority=which==='secondary';
+  renderGuiStudioPalette();
+}
+function openGuiStudioSwapperPicker(which){
+  const input=$(which==='secondary'?'#guiStudioSecondaryColor':'#guiStudioPrimaryColor');
+  if(!input)return;
+  setGuiStudioActiveSwapperColor(which);
+  captureGuiStudioFieldBefore({currentTarget:input});
+  try{
+    if(typeof input.showPicker==='function')input.showPicker();
+    else input.click();
+  }catch(_err){
+    input.click();
+  }
+}
+function guiStudioModalOpen(){
+  return !!$('#guiStudioModal')?.classList.contains('open');
+}
+function guiStudioIsTypingTarget(target=document.activeElement){
+  return !!target?.closest?.('input,textarea,select,[contenteditable="true"]');
+}
+function guiStudioSelectionStrokeColor(){
+  const style=getComputedStyle(document.body);
+  const bg=style.getPropertyValue('--bg')||style.backgroundColor||'#111111';
+  const hex=String(bg).match(/#([0-9a-f]{6})/i);
+  if(hex){
+    const c=guiStudioHexToRgb(`#${hex[1]}`);
+    const lum=(c.r*.299+c.g*.587+c.b*.114)/255;
+    return lum>.55?'#ffffff':'#050505';
+  }
+  const nums=(bg.match(/\d+(\.\d+)?/g)||[]).map(Number);
+  if(nums.length>=3){
+    const lum=(nums[0]*.299+nums[1]*.587+nums[2]*.114)/255;
+    return lum>.55?'#ffffff':'#050505';
+  }
+  return document.body.classList.contains('light')?'#ffffff':'#050505';
+}
+function guiStudioSelectionShadowColor(){
+  return 'transparent';
+}
+function guiStudioCurrentCanvasTool(){
+  if(guiStudioActiveTool==='Clone Tool')guiStudioActiveTool='Move Tool';
+  return guiStudioSpaceHandActive?'Hand Tool':guiStudioActiveTool;
+}
+function guiStudioSelectionForPiece(){
+  const sel=guiStudioDraft.selection;
+  return sel&&sel.piece===selectedGuiStudioPiece()?sel:null;
+}
+function guiStudioNormalizeBounds(a,b){
+  if(!a||!b)return null;
+  return {x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),w:Math.abs(a.x-b.x)+1,h:Math.abs(a.y-b.y)+1};
+}
+function guiStudioBoundsUnion(...items){
+  const bounds=items.filter(b=>b&&b.w>0&&b.h>0);
+  if(!bounds.length)return null;
+  const x=Math.min(...bounds.map(b=>b.x));
+  const y=Math.min(...bounds.map(b=>b.y));
+  const right=Math.max(...bounds.map(b=>b.x+b.w));
+  const bottom=Math.max(...bounds.map(b=>b.y+b.h));
+  return {x,y,w:right-x,h:bottom-y};
+}
+function guiStudioBoundsIntersection(a,b){
+  if(!a||!b)return null;
+  const x=Math.max(a.x,b.x);
+  const y=Math.max(a.y,b.y);
+  const right=Math.min(a.x+a.w,b.x+b.w);
+  const bottom=Math.min(a.y+a.h,b.y+b.h);
+  return right>x&&bottom>y?{x,y,w:right-x,h:bottom-y}:null;
+}
+function guiStudioBoundsContains(outer,inner){
+  return !!(outer&&inner&&inner.x>=outer.x&&inner.y>=outer.y&&inner.x+inner.w<=outer.x+outer.w&&inner.y+inner.h<=outer.y+outer.h);
+}
+function guiStudioOffsetBounds(bounds,dx=0,dy=0){
+  return bounds?{x:bounds.x+dx,y:bounds.y+dy,w:bounds.w,h:bounds.h}:null;
+}
+function guiStudioPointsBounds(points=[]){
+  if(!points.length)return null;
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  points.forEach(p=>{
+    if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))return;
+    minX=Math.min(minX,p.x);
+    minY=Math.min(minY,p.y);
+    maxX=Math.max(maxX,p.x);
+    maxY=Math.max(maxY,p.y);
+  });
+  if(!Number.isFinite(minX))return null;
+  return {x:minX,y:minY,w:maxX-minX+1,h:maxY-minY+1};
+}
+function guiStudioPointDistance(a,b){
+  if(!a||!b)return Infinity;
+  return Math.hypot(a.x-b.x,a.y-b.y);
+}
+function guiStudioAddLassoPoint(point,tool=guiStudioCurrentCanvasTool(),{force=false}={}){
+  if(!point||!guiStudioPointer)return;
+  point=guiStudioClampPointToActiveZone(point);
+  const points=guiStudioPointer.points||(guiStudioPointer.points=[]);
+  const last=points[points.length-1]||guiStudioPointer.start;
+  if(tool==='Polygonal Lasso'){
+    if(guiStudioPointDistance(last,point)>=1)points.push(point);
+  }else{
+    if(guiStudioPointDistance(last,point)>=2)points.push(point);
+  }
+}
+function guiStudioRemoveLastLassoAnchor(){
+  if(!guiStudioPointer||guiStudioCurrentCanvasTool()!=='Polygonal Lasso')return false;
+  const points=guiStudioPointer.points||[];
+  if(points.length<=1)return false;
+  points.pop();
+  guiStudioPointer.shapeEnd=points[points.length-1]||guiStudioPointer.start;
+  guiStudioSelectionMaskCache={key:null,mask:null,bounds:null};
+  renderGuiStudioPixelCanvas({refreshChrome:true,refreshUi:false});
+  return true;
+}
+function guiStudioSelectionCacheKey(selection){
+  if(!selection)return '';
+  const b=selection.bounds;
+  const bounds=b?`${b.x},${b.y},${b.w},${b.h}`:'';
+  if(selection.keys)return `keys:${bounds}:${Object.keys(selection.keys).length}`;
+  if(selection.spans){
+    const last=selection.spans[selection.spans.length-1]||{};
+    return `spans:${bounds}:${selection.spans.length}:${selection.spans[0]?.x||0},${selection.spans[0]?.y||0}:${last.x||0},${last.y||0}`;
+  }
+  if(selection.points?.length)return `points:${bounds}:${selection.points.map(p=>`${p.x},${p.y}`).join('|')}`;
+  return `${selection.type||'rect'}:${bounds}`;
+}
+function guiStudioSelectionContainsRaw(x,y,selection=guiStudioSelectionForPiece()){
+  if(!selection)return true;
+  if(selection.keys)return !!selection.keys[`${x},${y}`];
+  const b=selection.bounds;
+  if(!b||x<b.x||y<b.y||x>=b.x+b.w||y>=b.y+b.h)return false;
+  if(selection.spans?.length){
+    return selection.spans.some(span=>span.y===y&&x>=span.x&&x<span.x+span.w);
+  }
+  if(selection.type==='ellipse'){
+    const cx=b.x+b.w/2,cy=b.y+b.h/2,rx=Math.max(1,b.w/2),ry=Math.max(1,b.h/2);
+    return ((x+.5-cx)*(x+.5-cx))/(rx*rx)+((y+.5-cy)*(y+.5-cy))/(ry*ry)<=1;
+  }
+  if(selection.points?.length>=3){
+    let inside=false;
+    for(let i=0,j=selection.points.length-1;i<selection.points.length;j=i++){
+      const a=selection.points[i],bp=selection.points[j];
+      if(((a.y>y)!==(bp.y>y))&&(x<(bp.x-a.x)*(y-a.y)/(bp.y-a.y||1)+a.x))inside=!inside;
+    }
+    return inside;
+  }
+  return true;
+}
+function guiStudioSelectionMask(selection=guiStudioSelectionForPiece()){
+  if(!selection?.bounds||selection.keys||selection.type==='rect')return null;
+  const b=selection.bounds;
+  const area=b.w*b.h;
+  if(area<=0||area>GUI_STUDIO_CANVAS_W*GUI_STUDIO_CANVAS_H)return null;
+  const key=guiStudioSelectionCacheKey(selection);
+  if(guiStudioSelectionMaskCache.key===key)return guiStudioSelectionMaskCache;
+  const mask=new Uint8Array(area);
+  if(selection.spans?.length){
+    selection.spans.forEach(span=>{
+      const y=span.y-b.y;
+      if(y<0||y>=b.h)return;
+      const x0=Math.max(0,span.x-b.x);
+      const x1=Math.min(b.w,span.x+span.w-b.x);
+      for(let x=x0;x<x1;x++)mask[y*b.w+x]=1;
+    });
+  }else{
+    for(let y=0;y<b.h;y++){
+      for(let x=0;x<b.w;x++){
+        if(guiStudioSelectionContainsRaw(b.x+x,b.y+y,selection))mask[y*b.w+x]=1;
+      }
+    }
+  }
+  guiStudioSelectionMaskCache={key,mask,bounds:{...b}};
+  return guiStudioSelectionMaskCache;
+}
+function guiStudioSelectionContains(x,y,selection=guiStudioSelectionForPiece()){
+  if(!selection)return true;
+  if(selection.keys)return !!selection.keys[`${x},${y}`];
+  const cached=guiStudioSelectionMask(selection);
+  if(cached?.bounds){
+    const b=cached.bounds;
+    if(x<b.x||y<b.y||x>=b.x+b.w||y>=b.y+b.h)return false;
+    return !!cached.mask[(y-b.y)*b.w+(x-b.x)];
+  }
+  return guiStudioSelectionContainsRaw(x,y,selection);
+}
+function drawGuiStudioSelectionOutline(ctx,selection){
+  if(!selection)return;
+  const drawPath=()=>{
+    if(selection.type==='ellipse'&&selection.bounds){
+      const b=selection.bounds;
+      ctx.beginPath();
+      ctx.ellipse(b.x+b.w/2,b.y+b.h/2,Math.max(1,b.w/2),Math.max(1,b.h/2),0,0,Math.PI*2);
+      ctx.stroke();
+    }else if(selection.points?.length){
+      ctx.beginPath();
+      selection.points.forEach((p,i)=>i?ctx.lineTo(p.x+.5,p.y+.5):ctx.moveTo(p.x+.5,p.y+.5));
+      if(selection.points.length>2)ctx.closePath();
+      ctx.stroke();
+    }else if(selection.bounds){
+      const b=selection.bounds;
+      ctx.strokeRect(b.x+.5,b.y+.5,Math.max(1,b.w-1),Math.max(1,b.h-1));
+    }
+  };
+  ctx.save();
+  ctx.lineWidth=1.35;
+  ctx.strokeStyle=guiStudioSelectionStrokeColor();
+  ctx.setLineDash([6,5]);
+  drawPath();
+  if(selection.points?.length&&selection.showAnchors){
+    ctx.setLineDash([]);
+    ctx.fillStyle=guiStudioSelectionStrokeColor();
+    ctx.strokeStyle=guiStudioSelectionStrokeColor();
+    selection.points.forEach(p=>{
+      ctx.fillRect(p.x-2,p.y-2,5,5);
+    });
+  }
+  ctx.restore();
+}
+function guiStudioPointerSelectionPreview(){
+  if(!guiStudioPointer)return null;
+  const tool=guiStudioCurrentCanvasTool();
+  const start=guiStudioClampPointToActiveZone(guiStudioPointer.start);
+  const end=guiStudioClampPointToActiveZone(guiStudioPointer.shapeEnd||guiStudioPointer.start);
+  if(GUI_STUDIO_SHAPE_TOOLS.has(tool)||['Free Pen','Curvature Pen','Anchor Point Pen','Add Anchor Point','Delete Anchor Point','Convert Pen'].includes(tool)){
+    if(!start||!end)return null;
+    if(tool==='Ellipse')return {piece:selectedGuiStudioPiece(),type:'ellipse',bounds:guiStudioNormalizeBounds(start,end)};
+    if(tool==='Line')return {piece:selectedGuiStudioPiece(),type:'lasso',points:[start,end],bounds:guiStudioPointsBounds([start,end])};
+    if(tool==='Parametric Shape'){
+      const b=guiStudioNormalizeBounds(start,end);
+      const midX=Math.round(b.x+b.w/2),midY=Math.round(b.y+b.h/2);
+      const points=[{x:midX,y:b.y},{x:b.x+b.w-1,y:midY},{x:midX,y:b.y+b.h-1},{x:b.x,y:midY}];
+      return {piece:selectedGuiStudioPiece(),type:'lasso',points,bounds:b};
+    }
+    return {piece:selectedGuiStudioPiece(),type:'rect',bounds:guiStudioNormalizeBounds(start,end)};
+  }
+  if(!GUI_STUDIO_SELECTION_TOOLS.has(tool)||tool==='Magic Wand'||tool==='Color Wand')return null;
+  if(!start||!end)return null;
+  if(tool==='Ellipse Select')return {piece:selectedGuiStudioPiece(),type:'ellipse',bounds:guiStudioNormalizeBounds(start,end)};
+  if(['Lasso Select','Polygonal Lasso'].includes(tool)){
+    const points=(guiStudioPointer.points||[start]).map(p=>guiStudioClampPointToActiveZone(p)).filter(Boolean).concat(end?[end]:[]);
+    return {piece:selectedGuiStudioPiece(),type:'lasso',points,bounds:guiStudioPointsBounds(points),showAnchors:tool!=='Lasso Select'};
+  }
+  return {piece:selectedGuiStudioPiece(),type:'rect',bounds:guiStudioNormalizeBounds(start,end)};
+}
+function guiStudioRenderedPixelRgba(x,y){
+  const canvas=$('#guiStudioPixelCanvas');
+  if(!canvas)return null;
+  try{
+    const data=canvas.getContext('2d').getImageData(x,y,1,1).data;
+    return {r:data[0],g:data[1],b:data[2],a:data[3]};
+  }catch(err){
+    const fallback=guiStudioMergedPixels()[`${x},${y}`];
+    return fallback?{...guiStudioHexToRgb(fallback),a:255}:null;
+  }
+}
+function guiStudioRenderedPixel(x,y){
+  const rgba=guiStudioRenderedPixelRgba(x,y);
+  if(!rgba||rgba.a<8)return null;
+  return guiStudioRgbToHex(rgba.r,rgba.g,rgba.b);
+}
+function guiStudioFloodKeys(start,tolerance=0){
+  const canvas=$('#guiStudioPixelCanvas');
+  if(!canvas||!start)return {};
+  const zone=guiStudioActiveZone();
+  if(!guiStudioPointInActiveZone(start,zone))return {};
+  let image;
+  try{image=canvas.getContext('2d').getImageData(zone.x,zone.y,zone.w,zone.h).data;}catch(err){return {[`${start.x},${start.y}`]:true};}
+  const idx=(x,y)=>((y-zone.y)*zone.w+(x-zone.x))*4;
+  const si=idx(start.x,start.y);
+  const target=[image[si],image[si+1],image[si+2],image[si+3]];
+  const near=(x,y)=>{
+    const i=idx(x,y);
+    if(target[3]<8)return image[i+3]<8;
+    return image[i+3]>=8&&Math.abs(image[i]-target[0])<=tolerance&&Math.abs(image[i+1]-target[1])<=tolerance&&Math.abs(image[i+2]-target[2])<=tolerance&&Math.abs(image[i+3]-target[3])<=tolerance;
+  };
+  const keys={},stack=[start];
+  const minX=zone.x,minY=zone.y,maxX=zone.x+zone.w-1,maxY=zone.y+zone.h-1;
+  const visited=(x,y)=>!!keys[`${x},${y}`];
+  while(stack.length){
+    const p=stack.pop();
+    if(!p||p.x<minX||p.y<minY||p.x>maxX||p.y>maxY||visited(p.x,p.y)||!near(p.x,p.y))continue;
+    let left=p.x;
+    while(left>=minX&&!visited(left,p.y)&&near(left,p.y))left--;
+    left++;
+    let right=p.x;
+    while(right<=maxX&&!visited(right,p.y)&&near(right,p.y))right++;
+    right--;
+    let aboveQueued=false,belowQueued=false;
+    for(let x=left;x<=right;x++){
+      keys[`${x},${p.y}`]=true;
+      if(p.y>minY&&!visited(x,p.y-1)&&near(x,p.y-1)){
+        if(!aboveQueued)stack.push({x,y:p.y-1});
+        aboveQueued=true;
+      }else aboveQueued=false;
+      if(p.y<maxY&&!visited(x,p.y+1)&&near(x,p.y+1)){
+        if(!belowQueued)stack.push({x,y:p.y+1});
+        belowQueued=true;
+      }else belowQueued=false;
+    }
+  }
+  return keys;
+}
+function guiStudioColorWandSelection(start,filterStrength=0){
+  const canvas=$('#guiStudioPixelCanvas');
+  if(!canvas||!start)return null;
+  const zone=guiStudioActiveZone();
+  if(!guiStudioPointInActiveZone(start,zone))return null;
+  const threshold=Math.round(clampGuiNumber(filterStrength,0,255,0));
+  let image;
+  try{image=canvas.getContext('2d').getImageData(zone.x,zone.y,zone.w,zone.h).data;}catch(_err){return null;}
+  const idx=(x,y)=>((y-zone.y)*zone.w+(x-zone.x))*4;
+  const si=idx(start.x,start.y);
+  const target=[image[si],image[si+1],image[si+2],image[si+3]];
+  const spans=[];
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  const matches=(x,y)=>{
+    const i=idx(x,y);
+    if(target[3]<8)return image[i+3]<8;
+    return image[i+3]>=8&&Math.abs(image[i]-target[0])<=threshold&&Math.abs(image[i+1]-target[1])<=threshold&&Math.abs(image[i+2]-target[2])<=threshold&&Math.abs(image[i+3]-target[3])<=threshold;
+  };
+  for(let y=zone.y;y<zone.y+zone.h;y++){
+    let runStart=null;
+    for(let x=zone.x;x<zone.x+zone.w;x++){
+      if(matches(x,y)){
+        if(runStart===null)runStart=x;
+        minX=Math.min(minX,x);
+        minY=Math.min(minY,y);
+        maxX=Math.max(maxX,x);
+        maxY=Math.max(maxY,y);
+      }else if(runStart!==null){
+        spans.push({x:runStart,y,w:x-runStart});
+        runStart=null;
+      }
+    }
+    if(runStart!==null)spans.push({x:runStart,y,w:zone.x+zone.w-runStart});
+  }
+  if(!spans.length||!Number.isFinite(minX))return null;
+  return {
+    piece:selectedGuiStudioPiece(),
+    type:'color',
+    color:target[3]<8?'transparent':guiStudioRgbToHex(target[0],target[1],target[2]),
+    filterStrength:threshold,
+    spans,
+    bounds:{x:minX,y:minY,w:maxX-minX+1,h:maxY-minY+1}
+  };
+}
+function guiStudioTargetPixels(){
+  const selection=guiStudioSelectionForPiece();
+  if(selection?.keys)return Object.keys(selection.keys).map(key=>{const [x,y]=key.split(',').map(Number);return {x,y};});
+  if(selection?.spans)return selection.spans.flatMap(span=>Array.from({length:span.w},(_,i)=>({x:span.x+i,y:span.y})));
+  const b=selection?.bounds||guiStudioActiveZone();
+  const pixels=[];
+  const zone=guiStudioActiveZone();
+  for(let y=b.y;y<b.y+b.h;y++)for(let x=b.x;x<b.x+b.w;x++)if(x>=0&&y>=0&&x<GUI_STUDIO_CANVAS_W&&y<GUI_STUDIO_CANVAS_H&&guiStudioPointInActiveZone({x,y},zone)&&guiStudioSelectionContains(x,y,selection))pixels.push({x,y});
+  return pixels;
+}
+const guiStudioTextureCache={};
+function getGuiStudioTextureImage(key){
+  const src=GUI_STUDIO_TEXTURES[key];
+  if(!src||typeof Image==='undefined')return null;
+  if(guiStudioTextureCache[key])return guiStudioTextureCache[key];
+  const img=new Image();
+  img.onload=()=>{invalidateGuiStudioAllPreviews();if(guiStudioModalOpen())renderGuiStudioDraft();};
+  img.src=src;
+  guiStudioTextureCache[key]=img;
+  return img;
+}
+function drawGuiStudioNineSlice(ctx,img,src,bounds){
+  const cw=Math.min(src.cw||0,Math.floor(src.w/2),Math.floor(bounds.w/2));
+  const ch=Math.min(src.ch||0,Math.floor(src.h/2),Math.floor(bounds.h/2));
+  const midSrcW=src.w-cw*2,midSrcH=src.h-ch*2;
+  const midDstW=bounds.w-cw*2,midDstH=bounds.h-ch*2;
+  const draw=(sx,sy,sw,sh,dx,dy,dw,dh)=>{
+    if(sw<=0||sh<=0||dw<=0||dh<=0)return;
+    ctx.drawImage(img,sx,sy,sw,sh,dx,dy,dw,dh);
+  };
+  draw(src.x,src.y,cw,ch,bounds.x,bounds.y,cw,ch);
+  draw(src.x+cw,src.y,midSrcW,ch,bounds.x+cw,bounds.y,midDstW,ch);
+  draw(src.x+src.w-cw,src.y,cw,ch,bounds.x+bounds.w-cw,bounds.y,cw,ch);
+  draw(src.x,src.y+ch,cw,midSrcH,bounds.x,bounds.y+ch,cw,midDstH);
+  draw(src.x+cw,src.y+ch,midSrcW,midSrcH,bounds.x+cw,bounds.y+ch,midDstW,midDstH);
+  draw(src.x+src.w-cw,src.y+ch,cw,midSrcH,bounds.x+bounds.w-cw,bounds.y+ch,cw,midDstH);
+  draw(src.x,src.y+src.h-ch,cw,ch,bounds.x,bounds.y+bounds.h-ch,cw,ch);
+  draw(src.x+cw,src.y+src.h-ch,midSrcW,ch,bounds.x+cw,bounds.y+bounds.h-ch,midDstW,ch);
+  draw(src.x+src.w-cw,src.y+src.h-ch,cw,ch,bounds.x+bounds.w-cw,bounds.y+bounds.h-ch,cw,ch);
+}
+function drawGuiStudioFallbackBase(ctx,meta){
+  const b=meta.bounds;
+  ctx.fillStyle='rgba(0,0,0,0)';
+  ctx.fillRect(0,0,GUI_STUDIO_CANVAS_W,GUI_STUDIO_CANVAS_H);
+  ctx.strokeStyle='#a8874a';
+  ctx.lineWidth=1;
+  ctx.strokeRect(b.x+.5,b.y+.5,Math.max(1,b.w-1),Math.max(1,b.h-1));
+}
+function drawGuiStudioBase(ctx,meta,{clear=true}={}){
+  const b=meta.bounds;
+  const source=meta.source;
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+  if(clear)ctx.clearRect(0,0,GUI_STUDIO_CANVAS_W,GUI_STUDIO_CANVAS_H);
+  const img=getGuiStudioTextureImage(source?.image);
+  if(img?.complete&&img.naturalWidth){
+    if(source.type==='nineSlice')drawGuiStudioNineSlice(ctx,img,source,b);
+    else ctx.drawImage(img,source.x,source.y,source.w,source.h,b.x,b.y,b.w,b.h);
+  }else{
+    drawGuiStudioFallbackBase(ctx,meta);
+  }
+  ctx.restore();
+}
+function guiStudioExpandDirtyBounds(bounds,pad=2){
+  if(!bounds)return;
+  const next={
+    x:Math.max(0,Math.floor(bounds.x-pad)),
+    y:Math.max(0,Math.floor(bounds.y-pad)),
+    w:Math.ceil(bounds.w+pad*2),
+    h:Math.ceil(bounds.h+pad*2)
+  };
+  next.w=Math.min(GUI_STUDIO_CANVAS_W-next.x,next.w);
+  next.h=Math.min(GUI_STUDIO_CANVAS_H-next.y,next.h);
+  if(next.w<=0||next.h<=0)return;
+  if(!guiStudioCanvasDirtyBounds){
+    guiStudioCanvasDirtyBounds=next;
+    return;
+  }
+  const x=Math.min(guiStudioCanvasDirtyBounds.x,next.x);
+  const y=Math.min(guiStudioCanvasDirtyBounds.y,next.y);
+  const x2=Math.max(guiStudioCanvasDirtyBounds.x+guiStudioCanvasDirtyBounds.w,next.x+next.w);
+  const y2=Math.max(guiStudioCanvasDirtyBounds.y+guiStudioCanvasDirtyBounds.h,next.y+next.h);
+  guiStudioCanvasDirtyBounds={x,y,w:Math.min(GUI_STUDIO_CANVAS_W,x2)-x,h:Math.min(GUI_STUDIO_CANVAS_H,y2)-y};
+}
+function markGuiStudioCanvasPointDirty(x,y,pad=2){
+  guiStudioExpandDirtyBounds({x,y,w:1,h:1},pad);
+}
+function scheduleGuiStudioCanvasFrame(){
+  if(guiStudioCanvasFramePending)return;
+  guiStudioCanvasFramePending=true;
+  requestAnimationFrame(()=>{
+    guiStudioCanvasFramePending=false;
+    const dirty=guiStudioCanvasDirtyBounds;
+    guiStudioCanvasDirtyBounds=null;
+    renderGuiStudioPixelCanvas({refreshChrome:false,dirtyBounds:dirty});
+  });
+}
+function renderGuiStudioPixelCanvas({refreshChrome=true,dirtyBounds=null,refreshUi=refreshChrome}={}){
+  const canvas=$('#guiStudioPixelCanvas');
+  if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  const piece=selectedGuiStudioPiece();
+  const meta=GUI_STUDIO_PIECES[piece]||GUI_STUDIO_PIECES['Quest Main'];
+  const data=guiStudioPieceData(piece);
+  const zone=guiStudioActiveZone();
+  const repaintBounds=dirtyBounds&&dirtyBounds.w>0&&dirtyBounds.h>0?dirtyBounds:null;
+  if(!repaintBounds)clearGuiStudioLayerCanvasCache(piece);
+  if(repaintBounds)ctx.clearRect(repaintBounds.x,repaintBounds.y,repaintBounds.w,repaintBounds.h);
+  else ctx.clearRect(0,0,GUI_STUDIO_CANVAS_W,GUI_STUDIO_CANVAS_H);
+  ctx.save();
+  const clipBounds=repaintBounds?{
+    x:Math.max(zone.x,repaintBounds.x),
+    y:Math.max(zone.y,repaintBounds.y),
+    w:Math.max(0,Math.min(zone.x+zone.w,repaintBounds.x+repaintBounds.w)-Math.max(zone.x,repaintBounds.x)),
+    h:Math.max(0,Math.min(zone.y+zone.h,repaintBounds.y+repaintBounds.h)-Math.max(zone.y,repaintBounds.y))
+  }:zone;
+  if(clipBounds.w<=0||clipBounds.h<=0){
+    ctx.restore();
+    return;
+  }
+  ctx.beginPath();
+  ctx.rect(clipBounds.x,clipBounds.y,clipBounds.w,clipBounds.h);
+  ctx.clip();
+  const activeLayer=guiStudioActiveLayer(piece);
+  const movePreview=guiStudioMovePreviewForPiece(piece);
+  if(repaintBounds&&guiStudioCanUseStaticComposite(data,activeLayer)){
+    const stack=guiStudioBuildStaticComposite(piece,data,meta,activeLayer);
+    ctx.drawImage(stack.under,clipBounds.x,clipBounds.y,clipBounds.w,clipBounds.h,clipBounds.x,clipBounds.y,clipBounds.w,clipBounds.h);
+    if(activeLayer?.visible!==false){
+      ctx.save();
+      ctx.globalAlpha=clampGuiNumber(activeLayer.opacity,0,1,1);
+      ctx.globalCompositeOperation=guiStudioCanvasBlendMode(activeLayer.blend);
+      if(movePreview?.layerId===activeLayer.id)drawGuiStudioLayerCachedOffset(ctx,piece,activeLayer,clipBounds,movePreview.dx,movePreview.dy);
+      else drawGuiStudioLayerCached(ctx,piece,activeLayer,clipBounds);
+      ctx.restore();
+    }
+    ctx.drawImage(stack.over,clipBounds.x,clipBounds.y,clipBounds.w,clipBounds.h,clipBounds.x,clipBounds.y,clipBounds.w,clipBounds.h);
+  }else{
+    const baseLayer=guiStudioBaseLayer(piece);
+    if(baseLayer?.visible!==false){
+      drawGuiStudioBase(ctx,meta,{clear:!repaintBounds});
+      ctx.save();
+      ctx.globalAlpha=clampGuiNumber(baseLayer.opacity,0,1,1);
+      ctx.globalCompositeOperation=guiStudioCanvasBlendMode(baseLayer.blend);
+      if(movePreview?.layerId===baseLayer.id)drawGuiStudioLayerCachedOffset(ctx,piece,baseLayer,clipBounds,movePreview.dx,movePreview.dy);
+      else drawGuiStudioLayerCached(ctx,piece,baseLayer,clipBounds);
+      ctx.restore();
+    }
+    guiStudioApplyBaseEraseMaskCached(ctx,piece,data,clipBounds);
+    data.layers.forEach(layer=>{
+      if(!layer.visible||layer.id==='base')return;
+      ctx.save();
+      ctx.globalAlpha=clampGuiNumber(layer.opacity,0,1,1);
+      ctx.globalCompositeOperation=guiStudioCanvasBlendMode(layer.blend);
+      if(movePreview?.layerId===layer.id)drawGuiStudioLayerCachedOffset(ctx,piece,layer,clipBounds,movePreview.dx,movePreview.dy);
+      else drawGuiStudioLayerCached(ctx,piece,layer,clipBounds);
+      ctx.restore();
+    });
+  }
+  ctx.restore();
+  if(refreshChrome){
+    const selection=guiStudioSelectionForPiece();
+    drawGuiStudioSelectionOutline(ctx,selection);
+    drawGuiStudioSelectionOutline(ctx,guiStudioPointerSelectionPreview());
+    renderGuiStudioCanvasPan();
+    renderGuiStudioActiveZone();
+    renderGuiStudioAffectedZone();
+    const name=$('#guiStudioPixelPieceName');
+    if(name)name.textContent=meta.short;
+    const readout=$('#guiStudioPixelBounds');
+    if(readout)readout.textContent=`${data.bounds.w} x ${data.bounds.h} px active`;
+    if(refreshUi){
+      renderGuiStudioPieceThumbs();
+      renderGuiStudioLayerPanel();
+    }
+  }
+  if(!repaintBounds)scheduleGuiStudioWorkerCacheWarm(piece);
+}
+function renderGuiStudioCanvasPan(){
+  const modal=$('#guiStudioModal');
+  if(!modal)return;
+  const pan=guiStudioDraft.canvasPan||{x:0,y:0};
+  modal.style.setProperty('--gui-studio-pan-x',`${Number(pan.x)||0}px`);
+  modal.style.setProperty('--gui-studio-pan-y',`${Number(pan.y)||0}px`);
+  renderGuiStudioActiveZone();
+}
+function renderGuiStudioActiveZone(){
+  const zoneEl=$('#guiStudioActiveZone');
+  const workspace=$('#guiStudioPixelWorkspace');
+  const canvas=$('#guiStudioPixelCanvas');
+  const modal=$('#guiStudioModal');
+  if(!zoneEl||!workspace||!canvas)return;
+  const zoneOptions=guiStudioZoneOptions();
+  const zone=guiStudioActiveZone();
+  const checker=zoneOptions.checker;
+  const workspaceRect=workspace.getBoundingClientRect();
+  const canvasRect=canvas.getBoundingClientRect();
+  const scaleX=canvasRect.width/GUI_STUDIO_CANVAS_W;
+  const scaleY=canvasRect.height/GUI_STUDIO_CANVAS_H;
+  zoneEl.style.left=`${(canvasRect.left-workspaceRect.left)+(zone.x*scaleX)}px`;
+  zoneEl.style.top=`${(canvasRect.top-workspaceRect.top)+(zone.y*scaleY)}px`;
+  zoneEl.style.width=`${zone.w*scaleX}px`;
+  zoneEl.style.height=`${zone.h*scaleY}px`;
+  modal?.style.setProperty('--gui-studio-checker-size',`${Math.max(2,Math.round(checker*guiStudioFrameZoom))}px`);
+  const light=LIGHT_THEME_IDS.has(cTheme);
+  modal?.style.setProperty('--gui-studio-checker-a',light?'#3f3f3f':'#d4d4d4');
+  modal?.style.setProperty('--gui-studio-checker-b',light?'#262626':'#fafafa');
+  modal?.style.setProperty('--gui-studio-grid-line',light?'rgba(255,255,255,.56)':'rgba(0,0,0,.45)');
+  modal?.classList.toggle('gui-studio-show-grid',zoneOptions.showGrid);
+  renderGuiStudioBrushCursor();
+}
+function renderGuiStudioAffectedZone(){
+  const zone=$('#guiStudioAffectedZone');
+  const workspace=$('#guiStudioPixelWorkspace');
+  if(!zone||!workspace)return;
+  const modal=$('#guiStudioModal');
+  modal?.classList.toggle('gui-studio-show-affected-zone',!!guiStudioDraft.showAffectedZone);
+  const data=guiStudioPieceData();
+  const workspaceRect=workspace.getBoundingClientRect();
+  const canvasRect=$('#guiStudioPixelCanvas')?.getBoundingClientRect();
+  if(!canvasRect)return;
+  const scaleX=canvasRect.width/GUI_STUDIO_CANVAS_W;
+  const scaleY=canvasRect.height/GUI_STUDIO_CANVAS_H;
+  const left=(canvasRect.left-workspaceRect.left)+(data.bounds.x*scaleX);
+  const top=(canvasRect.top-workspaceRect.top)+(data.bounds.y*scaleY);
+  zone.style.left=`${left}px`;
+  zone.style.top=`${top}px`;
+  zone.style.width=`${data.bounds.w*scaleX}px`;
+  zone.style.height=`${data.bounds.h*scaleY}px`;
+}
+function hideGuiStudioBrushCursor(){
+  guiStudioBrushCursorPoint=null;
+  const cursor=$('#guiStudioBrushCursor');
+  if(cursor)cursor.style.display='none';
+}
+function guiStudioClientInWorkspace(e){
+  const workspace=$('#guiStudioPixelWorkspace');
+  if(!workspace||!e)return false;
+  const rect=workspace.getBoundingClientRect();
+  return e.clientX>=rect.left&&e.clientX<=rect.right&&e.clientY>=rect.top&&e.clientY<=rect.bottom;
+}
+function renderGuiStudioBrushCursor(){
+  const cursor=$('#guiStudioBrushCursor');
+  const workspace=$('#guiStudioPixelWorkspace');
+  const canvas=$('#guiStudioPixelCanvas');
+  const tool=guiStudioCurrentCanvasTool();
+  const paints=GUI_STUDIO_DRAW_TOOLS.has(tool)||GUI_STUDIO_ERASE_TOOLS.has(tool);
+  if(!cursor||!workspace||!canvas||!guiStudioBrushCursorPoint||!paints){
+    if(cursor)cursor.style.display='none';
+    return;
+  }
+  const point=guiStudioBrushCursorPoint;
+  const canvasRect=canvas.getBoundingClientRect();
+  const workspaceRect=workspace.getBoundingClientRect();
+  const scaleX=canvasRect.width/GUI_STUDIO_CANVAS_W;
+  const scaleY=canvasRect.height/GUI_STUDIO_CANVAS_H;
+  const opts=ensureGuiStudioToolOptions();
+  const rawSize=GUI_STUDIO_ERASE_TOOLS.has(tool)
+    ? (tool==='Background Eraser'?clampGuiNumber(opts.eraserSize,1,64,3):clampGuiNumber(opts.eraserSize,1,64,2))
+    : (GUI_STUDIO_DRAW_TOOLS.has(tool)?clampGuiNumber(opts.brushSize,1,64,2):1);
+  const radius=Math.max(0,Math.floor(rawSize/2));
+  const logicalSize=radius*2+1;
+  const pxW=Math.max(3,Math.round(logicalSize*scaleX));
+  const pxH=Math.max(3,Math.round(logicalSize*scaleY));
+  const left=(canvasRect.left-workspaceRect.left)+((point.x-radius)*scaleX);
+  const top=(canvasRect.top-workspaceRect.top)+((point.y-radius)*scaleY);
+  cursor.style.display='block';
+  cursor.classList.toggle('is-eraser',GUI_STUDIO_ERASE_TOOLS.has(tool));
+  cursor.classList.toggle('is-brush',GUI_STUDIO_DRAW_TOOLS.has(tool));
+  cursor.style.left=`${left}px`;
+  cursor.style.top=`${top}px`;
+  cursor.style.width=`${pxW}px`;
+  cursor.style.height=`${pxH}px`;
+}
+function updateGuiStudioBrushCursor(e,point=guiStudioCanvasPoint(e)){
+  const tool=guiStudioCurrentCanvasTool();
+  if((!GUI_STUDIO_DRAW_TOOLS.has(tool)&&!GUI_STUDIO_ERASE_TOOLS.has(tool))||!point||!guiStudioPointInActiveZone(point)||!guiStudioClientInWorkspace(e)){
+    hideGuiStudioBrushCursor();
+    return;
+  }
+  guiStudioBrushCursorPoint=point;
+  renderGuiStudioBrushCursor();
+}
+function createGuiStudioPiecePreview(piece,{allowDirtyRefresh=true}={}){
+  const meta=GUI_STUDIO_PIECES[piece]||GUI_STUDIO_PIECES['Quest Main'];
+  const data=guiStudioPieceData(piece);
+  const cached=guiStudioPiecePreviewCache.get(piece);
+  if(cached&&!guiStudioDirtyPreviewPieces.has(piece))return cached;
+  if(cached&&!allowDirtyRefresh)return cached;
+  const crop=document.createElement('canvas');
+  crop.width=Math.max(1,data.bounds.w);
+  crop.height=Math.max(1,data.bounds.h);
+  const ctx=crop.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  ctx.save();
+  ctx.translate(-data.bounds.x,-data.bounds.y);
+  const baseLayer=guiStudioBaseLayer(piece);
+  if(baseLayer?.visible!==false){
+    drawGuiStudioBase(ctx,meta);
+    ctx.save();
+    ctx.globalAlpha=clampGuiNumber(baseLayer.opacity,0,1,1);
+    ctx.globalCompositeOperation=guiStudioCanvasBlendMode(baseLayer.blend);
+    drawGuiStudioLayerContent(ctx,baseLayer);
+    ctx.restore();
+  }
+  guiStudioApplyBaseEraseMask(ctx,data);
+  data.layers.forEach(layer=>{
+    if(!layer.visible||layer.id==='base')return;
+    ctx.save();
+    ctx.globalAlpha=clampGuiNumber(layer.opacity,0,1,1);
+    ctx.globalCompositeOperation=guiStudioCanvasBlendMode(layer.blend);
+    drawGuiStudioLayerContent(ctx,layer);
+    ctx.restore();
+  });
+  ctx.restore();
+  const dataUrl=crop.toDataURL('image/png');
+  guiStudioPiecePreviewCache.set(piece,dataUrl);
+  guiStudioDirtyPreviewPieces.delete(piece);
+  return dataUrl;
+}
+function guiStudioPiecePreviewOrGenerated(piece,generatedPath){
+  return guiStudioPieceHasEdits(piece)?createGuiStudioPiecePreview(piece):generatedPath;
+}
+function guiStudioPreviewCssUrl(piece,generatedPath=null){
+  const url=generatedPath?guiStudioPiecePreviewOrGenerated(piece,generatedPath):createGuiStudioPiecePreview(piece);
+  return `url("${url}")`;
+}
+function guiStudioRenderPieceThumbsNow({forceRefresh=false,buttons=null}={}){
+  const allowDirtyRefresh=forceRefresh||!guiStudioPointer&&($('#guiStudioModal')?.dataset.mode||'create')!=='create';
+  (buttons||$$('.gui-studio-sketch-pieces [data-gui-piece]')).forEach(btn=>{
+    if(btn.closest('#guiStudioOthersMenu')?.hidden)return;
+    const piece=btn.dataset.guiPiece;
+    const span=btn.querySelector('span');
+    const data=guiStudioPieceData(piece);
+    const count=guiStudioPieceEditCount(piece);
+    if(span){
+      span.style.setProperty('--gui-piece-preview',`url("${createGuiStudioPiecePreview(piece,{allowDirtyRefresh})}")`);
+      span.style.setProperty('--gui-piece-aspect',`${Math.max(1,data.bounds.w)} / ${Math.max(1,data.bounds.h)}`);
+    }
+    btn.classList.toggle('has-paint',count>0);
+  });
+  scheduleGuiStudioPreviewWarm(guiStudioCurrentWarmPieces(),{forceRefresh:false});
+}
+function guiStudioQueuePieceThumbRender({forceRefresh=false}={}){
+  const buttons=$$('.gui-studio-sketch-pieces [data-gui-piece]');
+  guiStudioThumbRenderPending={
+    forceRefresh:!!forceRefresh||!!guiStudioThumbRenderPending?.forceRefresh,
+    buttons
+  };
+  if(guiStudioThumbRenderFrame)return true;
+  guiStudioThumbRenderFrame=requestAnimationFrame(()=>{
+    guiStudioThumbRenderFrame=0;
+    const pending=guiStudioThumbRenderPending||{forceRefresh:false,buttons:[]};
+    guiStudioThumbRenderPending=null;
+    guiStudioRenderPieceThumbsNow(pending);
+  });
+  return true;
+}
+function renderGuiStudioPieceThumbs(options={}){
+  return guiStudioQueuePieceThumbRender(options);
+}
+function renderGuiStudioTargetTextureButtons(target=guiStudioModalTarget()){
+  const pieces=guiStudioTargetPriorityPieces(target);
+  const buttons=$$('.gui-studio-create-screen > .gui-studio-sketch-pieces > button[data-gui-piece]');
+  buttons.forEach((btn,index)=>{
+    const piece=pieces[index];
+    if(!piece){
+      btn.hidden=true;
+      return;
+    }
+    const meta=GUI_STUDIO_PIECES[piece]||{};
+    btn.hidden=false;
+    btn.dataset.guiPiece=piece;
+    const name=btn.querySelector('strong');
+    const detail=btn.querySelector('small');
+    if(name)name.innerHTML=esc(piece).replace(/\s+\(/g,'<br>(');
+    if(detail){
+      const bounds=meta.bounds||meta.source||{};
+      detail.textContent=`${meta.short||meta.kind||'Texture'} ${bounds.w||meta.bounds?.w||0}x${bounds.h||meta.bounds?.h||0}`;
+    }
+  });
+  const others=$('#guiStudioOthersBtn');
+  if(others){
+    const name=others.querySelector('strong');
+    const detail=others.querySelector('small');
+    if(name)name.textContent=target==='quest-list'?'List Pieces':'Others';
+    if(detail)detail.textContent=target==='quest-list'?'More list textures':'More pieces';
+  }
+  syncGuiStudioSelectedPieceForTarget(target);
+}
+function renderGuiStudioOtherPieceMenu(){
+  const list=$('#guiStudioOthersList');
+  if(!list)return;
+  const selected=selectedGuiStudioPiece();
+  const filter=String($('#guiStudioOthersSearch')?.value||'').trim().toLowerCase();
+  const otherPieces=guiStudioTargetOtherPieces();
+  const visiblePieces=otherPieces.filter(piece=>{
+    const meta=GUI_STUDIO_PIECES[piece];
+    return !filter||`${piece} ${meta.short} ${meta.texture} ${meta.kind}`.toLowerCase().includes(filter);
+  });
+  list.innerHTML=visiblePieces.length?visiblePieces.map(piece=>{
+    const meta=GUI_STUDIO_PIECES[piece];
+    return `<button type="button" data-gui-piece="${esc(piece)}" class="${piece===selected?'active':''}">
+      <span></span>
+      <strong>${esc(piece)}</strong>
+      <small>${esc(meta.kind)} &middot; ${esc(meta.texture)} &middot; ${meta.source.w}x${meta.source.h}</small>
+    </button>`;
+  }).join(''):'<div class="gui-studio-others-empty">No texture pieces match that filter.</div>';
+  const count=$('#guiStudioOthersCount');
+  if(count)count.textContent=`${visiblePieces.length} of ${otherPieces.length} source-backed pieces`;
+  list.querySelectorAll('[data-gui-piece]').forEach(btn=>{
+    btn.addEventListener('click',()=>withGuiStudioHistory(()=>{
+      setGuiStudioPiece(btn.dataset.guiPiece);
+      closeGuiStudioOthersMenu();
+    }));
+  });
+  renderGuiStudioPieceThumbs();
+}
+function openGuiStudioOthersMenu(){
+  const overlay=$('#guiStudioOthersMenu');
+  if(!overlay)return;
+  overlay.hidden=false;
+  overlay.setAttribute('aria-hidden','false');
+  renderGuiStudioOtherPieceMenu();
+  overlay.querySelector('[data-gui-others-close]')?.focus();
+}
+function closeGuiStudioOthersMenu(){
+  const overlay=$('#guiStudioOthersMenu');
+  if(!overlay)return;
+  overlay.hidden=true;
+  overlay.setAttribute('aria-hidden','true');
+}
+function renderGuiStudioPalette(){
+  ensureGuiStudioToolOptions();
+  ensureGuiStudioPaletteLibrary();
+  const modal=$('#guiStudioModal');
+  if(modal){
+    modal.style.setProperty('--gui-primary-color',guiStudioDraft.primary);
+    modal.style.setProperty('--gui-secondary-color',guiStudioDraft.secondary);
+  }
+  $$('.gui-studio-active-colors .primary,.gui-studio-tool-colors .primary').forEach(el=>el.style.background=guiStudioDraft.primary);
+  $$('.gui-studio-active-colors .secondary,.gui-studio-tool-colors .secondary').forEach(el=>el.style.background=guiStudioDraft.secondary);
+  const primaryInput=$('#guiStudioPrimaryColor');
+  const secondaryInput=$('#guiStudioSecondaryColor');
+  if(primaryInput)primaryInput.value=guiStudioDraft.primary;
+  if(secondaryInput)secondaryInput.value=guiStudioDraft.secondary;
+  $$('.gui-studio-tool-colors label').forEach(label=>{
+    const input=label.querySelector('input[type="color"]');
+    const which=input?.id==='guiStudioSecondaryColor'?'secondary':'primary';
+    label.classList.toggle('is-active-color',!guiStudioDraft.palettePick&&((which==='secondary')===!!guiStudioDraft.secondaryPriority));
+  });
+  renderGuiStudioPaletteLibrary();
+  $$('.gui-studio-palette-swatches [data-palette-slot]').forEach((swatch,i)=>{
+    const color=guiStudioDraft.palette[i]||guiStudioDraft.primary;
+    swatch.style.setProperty('--swatch',color);
+    swatch.title=color;
+    swatch.classList.toggle('active',i===guiStudioDraft.selectedPaletteIndex);
+  });
+  $$('.gui-studio-color-priority').forEach(btn=>{
+    btn.classList.toggle('secondary-active',!!guiStudioDraft.secondaryPriority);
+    btn.title=guiStudioDraft.secondaryPriority?'Secondary color has brush priority':'Primary color has brush priority';
+  });
+}
+function renderGuiStudioOptionsBar(){
+  const bar=$('#guiStudioOptionsBar');
+  if(!bar)return;
+  if(guiStudioActiveTool==='Clone Tool')guiStudioActiveTool='Move Tool';
+  const options=ensureGuiStudioToolOptions();
+  const tool=guiStudioActiveTool;
+  const selection=guiStudioSelectionForPiece();
+  const num=(key,label,min,max,step=1,value=options[key],attrs='')=>`<label>${label}<input type="number" data-tool-option="${key}" min="${min}" max="${max}" step="${step}" value="${esc(value)}" ${attrs}></label>`;
+  const color=(key,label)=>`<label>${label}<input type="color" data-tool-option="${key}" value="${esc(normalizeHexColor(options[key],guiStudioDraft.primary))}"></label>`;
+  const check=(key,label)=>`<label class="check"><input type="checkbox" data-tool-option="${key}" ${options[key]?'checked':''}>${label}</label>`;
+  const select=(key,label,items)=>`<label>${label}<select data-tool-option="${key}">${items.map(item=>`<option value="${esc(item)}" ${options[key]===item?'selected':''}>${esc(item)}</option>`).join('')}</select></label>`;
+  const command=(name,label,icon)=>`<button type="button" data-tool-command="${esc(name)}">${guiStudioLucideIcon(icon,'gui-studio-command-icon')}<span>${esc(label)}</span></button>`;
+  let controls=[];
+  if(GUI_STUDIO_MOVE_TOOLS.has(tool)){
+    controls=[check('autoSelect','Auto-select'),check('transformControls','Transform controls'),command('center-pan','Center view','maximize')];
+  }else if(tool==='Magic Wand'){
+    controls=[num('tolerance','Tolerance',0,64),check('contiguous','Contiguous'),command('clear-selection','Clear selection','scan-line')];
+  }else if(tool==='Color Wand'){
+    controls=[num('filterStrength','Filter strength',0,255),command('clear-selection','Clear selection','scan-line')];
+  }else if(GUI_STUDIO_SELECTION_TOOLS.has(tool)){
+    controls=[num('feather','Feather',0,12),command('clear-selection','Clear selection','scan-line')];
+  }else if(tool==='Pen Tool'||tool==='Brush'||tool==='Pencil'||tool==='Color Replacement'){
+    controls=[num('brushSize','Size',1,64),num('opacity','Opacity',1,100),num('flow','Flow',1,100),num('smooth','Smooth',0,100)];
+  }else if(tool==='Spray Paint'){
+    controls=[num('brushSize','Size',1,64),num('sprayDensity','Density',1,96),num('flow','Flow',1,100)];
+  }else if(GUI_STUDIO_ERASE_TOOLS.has(tool)){
+    controls=[num('eraserSize','Size',1,64),select('fillMode','Mode',['brush','block']),num('opacity','Opacity',1,100)];
+  }else if(tool==='Paint Bucket'||tool==='Gradient Tool'){
+    controls=[num('tolerance','Tolerance',0,64),check('contiguous','Contiguous'),select(tool==='Gradient Tool'?'gradientMode':'fillMode',tool==='Gradient Tool'?'Gradient':'Fill',['foreground','secondary','linear'])];
+  }else if(GUI_STUDIO_RETOUCH_TOOLS.has(tool)){
+    controls=[num('retouchSize','Size',1,16),num('opacity','Strength',1,100),select('fillMode','Source',['current layer','all visible'])];
+  }else if(tool==='Text Type Tool'){
+    controls=[select('textFont','Font',GUI_STUDIO_TEXT_FONT_CHOICES),num('textSize','Size',6,96),color('textColor','Color'),select('textDirection','Direction',['horizontal','vertical'])];
+  }else if(GUI_STUDIO_SHAPE_TOOLS.has(tool)){
+    controls=[check('shapeFill','Fill'),color('shapeFillColor','Fill color'),check('shapeStroke','Stroke'),color('shapeStrokeColor','Stroke color'),num('strokeWidth','Stroke px',1,12)];
+  }else if(tool==='Hand Tool'||tool==='Rotate Tool'){
+    controls=[command('center-pan','Center view','maximize'),command('fit-zoom','Fit 100%','rotate-ccw')];
+  }else{
+    controls=[num('brushSize','Size',1,64),num('opacity','Opacity',1,100)];
+  }
+  if(selection&&!controls.some(html=>html.includes('clear-selection')))controls.push(command('clear-selection','Clear selection','scan-line'));
+  const zone=guiStudioZoneOptions();
+  const lockedZoneAttrs='disabled aria-disabled="true" title="Locked to the default texture size"';
+  const zoneControls=[
+    num('zoneWidth','Zone W',1,GUI_STUDIO_CANVAS_W,1,zone.w,lockedZoneAttrs),
+    num('zoneHeight','Zone H',1,GUI_STUDIO_CANVAS_H,1,zone.h,lockedZoneAttrs),
+    num('checkerSize','Checker',2,64)
+  ];
+  bar.innerHTML=`<strong>${esc(tool)}</strong><div class="gui-studio-options-controls">${controls.join('')}</div><div class="gui-studio-zone-controls">${zoneControls.join('')}</div>`;
+}
+function renderGuiStudioLayerPanel(){
+  const list=$('#guiStudioLayerList');
+  if(!list)return;
+  const data=guiStudioPieceData();
+  pruneGuiStudioMultiSelectedLayers();
+  const layers=data.layers.slice().reverse();
+  list.innerHTML=[
+    ...layers.map(layer=>`<div class="gui-studio-layer-row ${layer.id===data.activeLayerId?'active':''} ${guiStudioMultiSelectedLayerIds.has(layer.id)?'multi-selected':''}" role="button" tabindex="0" draggable="${layer.locked?'false':'true'}" data-layer-id="${esc(layer.id)}" ${layer.locked?'data-locked="true"':''}>
+      <button type="button" class="gui-studio-layer-eye ${layer.visible?'':'is-hidden'}" data-layer-eye="${esc(layer.id)}" aria-label="${layer.visible?'Hide':'Show'} ${esc(layer.name)}" title="${layer.visible?'Hide':'Show'} layer">${guiStudioLayerEyeIcon(layer.visible)}</button>
+      <strong data-layer-name="${esc(layer.id)}" title="${esc(layer.name)}">${esc(layer.name)}</strong>
+      <b>${layer.locked?'Locked':Math.round((layer.opacity??1)*100)+'%'}</b>
+    </div>`)
+  ].join('');
+  const tools=$('#guiStudioLayerTools');
+  if(tools){
+    const active=guiStudioActiveLayer();
+    tools.querySelector('[data-layer-action="toggle-visibility"]')?.classList.toggle('muted',!active.visible);
+    tools.querySelector('[data-layer-action="toggle-lock"]')?.classList.toggle('active',!!active.locked);
+    tools.querySelector('[data-layer-action="toggle-grid"]')?.classList.toggle('active',!!ensureGuiStudioToolOptions().showGrid);
+  }
+  const active=guiStudioActiveLayer();
+  const blend=$('#guiStudioLayerBlendMode');
+  const opacity=$('#guiStudioLayerOpacity');
+  const readout=$('#guiStudioLayerOpacityReadout');
+  if(blend)blend.value=active.blend||'normal';
+  if(opacity)opacity.value=String(Math.round(clampGuiNumber(active.opacity,0,1,1)*100));
+  if(readout)readout.textContent=`${Math.round(clampGuiNumber(active.opacity,0,1,1)*100)}%`;
+  applyGuiStudioTooltipMetadata($('#guiStudioModal'));
+}
+function renderGuiStudioPaletteLibrary(){
+  const list=$('#guiStudioPaletteLibraryList');
+  if(!list)return;
+  const palettes=ensureGuiStudioPaletteLibrary();
+  let flatIndex=0;
+  list.innerHTML=palettes.map((palette,paletteIndex)=>{
+    const canAdd=palette.colors.length<GUI_STUDIO_PALETTE_MAX_COLORS;
+    const slots=palette.colors.map((color,colorIndex)=>{
+      const currentIndex=color?flatIndex++:-1;
+      const active=color&&currentIndex===guiStudioDraft.selectedPaletteIndex;
+      return `<button type="button" class="gui-studio-palette-color ${color?'has-color':'is-empty'} ${active?'active':''}" data-palette-color="${paletteIndex}:${colorIndex}" style="${color?`--swatch:${esc(color)}`:''}" aria-label="${esc(palette.name)} color ${colorIndex+1}" title="${color?'Left-click use, right-click edit '+esc(color):'Right-click to choose color'}"></button>`;
+    }).join('');
+    return `<article class="gui-studio-palette-row" data-palette-index="${paletteIndex}">
+      <input type="text" class="gui-studio-palette-name" data-palette-name="${paletteIndex}" value="${esc(palette.name)}" maxlength="40" aria-label="Palette name">
+      <div class="gui-studio-palette-row-body">
+        <div class="gui-studio-palette-slots" aria-label="${esc(palette.name)} colors">
+          ${slots}
+          ${canAdd?`<button type="button" class="gui-studio-palette-add-color" data-palette-add-color="${paletteIndex}" aria-label="Add color to ${esc(palette.name)}">${guiStudioLucideIcon('plus','gui-studio-palette-icon')}</button>`:''}
+        </div>
+        <button type="button" class="gui-studio-palette-delete-row" data-palette-delete="${paletteIndex}" aria-label="Delete ${esc(palette.name)}" title="Delete palette">${guiStudioLucideIcon('trash-2','gui-studio-palette-icon')}</button>
+      </div>
+    </article>`;
+  }).join('');
+  const picker=$('#guiStudioPaletteColorInput');
+  if(picker&&guiStudioPaletteEditTarget){
+    const target=guiStudioPaletteEditTarget;
+    const row=Number(target.paletteIndex);
+    const slot=Number(target.colorIndex);
+    const color=palettes[row]?.colors?.[slot]||guiStudioDraft.primary||'#ffffff';
+    picker.value=normalizeHexColor(color,'#254e56');
+  }
+}
+function renderGuiStudioImports({forceRefresh=false}={}){
+  const grid=$('.gui-studio-sketch-imports');
+  if(!grid)return;
+  const piece=selectedGuiStudioPiece();
+  const meta=GUI_STUDIO_PIECES[piece]||GUI_STUDIO_PIECES['Quest Main'];
+  const allowDirtyRefresh=forceRefresh||!guiStudioPointer&&($('#guiStudioModal')?.dataset.mode||'create')!=='create';
+  const defaultItem={id:`default:${piece}`,name:`${meta.short} source`,dataUrl:createGuiStudioPiecePreview(piece,{allowDirtyRefresh}),system:true,meta:`${meta.texture} · ${meta.source.w}x${meta.source.h}`};
+  const items=[defaultItem,...(guiStudioDraft.imports||[]).slice(0,GUI_STUDIO_MAX_IMPORTS-1)];
+  grid.innerHTML=items.map(item=>`<figure class="${item.dataUrl?'has-image':''} ${item.system?'is-system':''}" ${item.id?`data-import-id="${esc(item.id)}"`:''}>
+    <button type="button" ${item.id?'data-import-place draggable="true"':''} title="${item.dataUrl?'Click to place centered, or drag onto the editor to choose placement':'Import images to place them as layers'}">
+      <span>${item.dataUrl?`<img src="${esc(item.dataUrl)}" alt="">`:''}</span>
+      <figcaption title="${esc(item.name)}">${esc(item.name)}</figcaption>
+      <small>${esc(item.meta||(item.system?'Current texture':'Imported image'))}</small>
+    </button>
+    ${item.id&&!item.system?`<button type="button" class="gui-studio-import-delete" data-import-delete="${esc(item.id)}" aria-label="Remove imported image">${guiStudioLucideIcon('x','gui-studio-import-delete-icon')}</button>`:''}
+  </figure>`).join('');
+}
+function guiStudioCurrentQuestData(){
+  return mode==='quest'&&currentFile&&quests[currentFile]?quests[currentFile]:null;
+}
+function guiStudioReadableLabel(value,fallback){
+  const raw=rawPreviewText(value).trim();
+  if(!raw)return fallback;
+  return {
+    'gui.back':'Back',
+    'questlog.reward.collect':'Collect Rewards',
+    'questlog.reward.uncollected':'Uncollected',
+    'questlog.reward.collected':'Collected'
+  }[raw]||raw;
+}
+function guiStudioQuestStateInfo(state){
+  if(state==='failed')return {kind:'objectives',rightTitle:'Objectives',stateLabel:'Failed',complete:false};
+  if(state==='rewards')return {kind:'rewards',rightTitle:'Rewards',stateLabel:'Rewards',complete:false};
+  if(state==='complete')return {kind:'rewards',rightTitle:'Rewards',stateLabel:'Completed',complete:true};
+  return {kind:'objectives',rightTitle:'Objectives',stateLabel:state==='objectives'?'Objectives':'Quest',complete:false};
+}
+function guiStudioQuestEntryStatus(item,kind,state,q){
+  if(kind==='rewards'){
+    return state==='complete'
+      ? guiStudioReadableLabel(q?.collected_text,'Collected')
+      : guiStudioReadableLabel(q?.uncollected_text,'Uncollected');
+  }
+  if(kind==='failures')return 'Failed';
+  const amount=Number(item?.required_amount ?? item?.count ?? 1);
+  return amount>1?`0 / ${amount}`:'Uncompleted';
+}
+function guiStudioQuestEntriesForLayout(q,kind,state){
+  const raw=Array.isArray(q?.[kind])?q[kind]:[];
+  return raw.slice(0,5).map((item,index)=>({
+    icon:item?.icon||null,
+    mark:previewEntryMark(item||{}),
+    title:previewEntryTitleRaw(item||{},`${kind.replace(/s$/,'')} ${index+1}`),
+    status:guiStudioQuestEntryStatus(item,kind,state,q)
+  }));
+}
+function guiStudioEntryRowsHtml(entries,emptyText){
+  if(!entries.length)return `<p class="gui-studio-entry-empty">${esc(emptyText)}</p>`;
+  return entries.map(entry=>{
+    const hasIcon=hasPreviewIcon(entry.icon);
+    return `<p class="gui-studio-entry-row ${hasIcon?'has-icon':'no-icon'}">${hasIcon?previewIconTile(entry.icon,'gui-studio-entry-icon'):''}<b>${renderMinecraftPreviewText(entry.title)}</b><em>${renderMinecraftPreviewText(entry.status)}</em></p>`;
+  }).join('');
+}
+function guiStudioRewardIconsHtml(entries){
+  if(!entries.length)return '';
+  return entries.slice(0,4).map(entry=>`<b title="${esc(rawPreviewText(entry.title))}" aria-label="${esc(rawPreviewText(entry.title))}"></b>`).join('');
+}
+const QUESTLOG_DETAIL_RENDER_SPEC={
+  version:4,
+  screen:{w:GUI_STUDIO_LAYOUT_SCREEN_W,h:GUI_STUDIO_LAYOUT_SCREEN_H,guiScale:GUI_STUDIO_PIXEL_SCALE},
+  elements:{
+    detailsButton:{label:'Details button',kind:'screen',texture:'Quest Button',base:{x:404,y:356,w:54,h:18},resizable:false},
+    backButton:{label:'Back button',kind:'screen',texture:'Quest Button',base:{x:464,y:356,w:54,h:18},resizable:false},
+    rewardButton:{label:'Collect Rewards button',kind:'screen',texture:'Quest Button Long',base:{x:429,y:356,w:88,h:18},resizable:false},
+    description:{label:'Description',kind:'screen',texture:'Quest Main',base:{x:272,y:223,w:236,h:84},resizable:true},
+    title:{label:'Title',kind:'screen',texture:'Quest Main',base:{x:392,y:202,w:160,h:16},resizable:false},
+    icon:{label:'Quest icon',kind:'screen',texture:'Quest Main',base:{x:375,y:200,w:14,h:14},resizable:false},
+    main:{label:'Main panel',kind:'screen',texture:'Quest Main',base:{x:255,y:188,w:275,h:166},resizable:true,questlogFields:['left_panel_width','panel_height','left_panel_x_offset','left_panel_y_offset']},
+    right:{label:'Objectives / Rewards panel',kind:'screen',texture:'Quest Objective (Right Panel)',base:{x:536,y:188,w:170,h:166},resizable:true,questlogFields:['right_panel_width','panel_height','right_panel_x_offset','right_panel_y_offset']},
+    entries:{label:'Objective / Reward rows',kind:'screen',texture:'Quest Objective (Right Panel)',base:{x:552,y:224,w:126,h:86},resizable:true},
+    customImage1:{label:'Custom image 1',kind:'screen',texture:'Imported image',base:{x:24,y:24,w:80,h:80},resizable:true,custom:true},
+    customImage2:{label:'Custom image 2',kind:'screen',texture:'Imported image',base:{x:120,y:24,w:80,h:80},resizable:true,custom:true},
+    customImage3:{label:'Custom image 3',kind:'screen',texture:'Imported image',base:{x:216,y:24,w:80,h:80},resizable:true,custom:true}
+  },
+  states:{
+    quest:{right:false,entries:false,backButton:true,rewardButton:false,defaultOffsets:{main:{dx:88},title:{dx:88},icon:{dx:88},description:{dx:88},detailsButton:{dx:88},backButton:{dx:88}}},
+    objectives:{right:true,entries:true,backButton:true,rewardButton:false,defaultOffsets:{}},
+    failed:{alias:'objectives'},
+    rewards:{right:true,entries:true,backButton:false,rewardButton:true,defaultOffsets:{detailsButton:{x:370}}},
+    complete:{alias:'rewards'}
+  }
+};
+function questlogDetailSpecElement(key){
+  return QUESTLOG_DETAIL_RENDER_SPEC.elements[key]||null;
+}
+function questlogDetailNormalizeState(state){
+  const raw=String(state||'quest').toLowerCase();
+  const stateSpec=QUESTLOG_DETAIL_RENDER_SPEC.states[raw];
+  return stateSpec?.alias||raw;
+}
+function questlogDetailStateSpec(state){
+  return QUESTLOG_DETAIL_RENDER_SPEC.states[questlogDetailNormalizeState(state)]||QUESTLOG_DETAIL_RENDER_SPEC.states.quest;
+}
+function questlogDetailStateHidesElement(key,state){
+  const spec=questlogDetailStateSpec(state);
+  if(key==='right')return spec.right===false;
+  if(key==='entries')return spec.entries===false;
+  if(key==='backButton')return spec.backButton===false;
+  if(key==='rewardButton')return spec.rewardButton===false;
+  return false;
+}
+function questlogDetailStateDisplayBox(key,box,state,usesDefaultPlacement){
+  const offset=questlogDetailStateSpec(state).defaultOffsets?.[key];
+  if(!offset)return box;
+  if(!usesDefaultPlacement&&!QUESTLOG_DETAIL_EXPORTABLE_LAYOUT_KEYS.has(key))return box;
+  const anchor=guiStudioLayoutAnchorPoint(box.anchor);
+  const scale=clampGuiNumber(box.scale,25,300,100)/100;
+  const renderedW=clampGuiNumber(box.w,1,GUI_STUDIO_LAYOUT_SCREEN_W,box.w||1)*scale;
+  const renderedH=clampGuiNumber(box.h,1,GUI_STUDIO_LAYOUT_SCREEN_H,box.h||1)*scale;
+  return {
+    ...box,
+    x:Number.isFinite(Number(offset.x))?Number(offset.x)+anchor.x*renderedW:box.x+(Number(offset.dx)||0),
+    y:Number.isFinite(Number(offset.y))?Number(offset.y)+anchor.y*renderedH:box.y+(Number(offset.dy)||0)
+  };
+}
+const QUESTLOG_LIST_RENDER_SPEC={
+  version:1,
+  screen:{w:GUI_STUDIO_LAYOUT_SCREEN_W,h:GUI_STUDIO_LAYOUT_SCREEN_H,guiScale:GUI_STUDIO_PIXEL_SCALE},
+  elements:{
+    listBackground:{label:'QuestList main panel',kind:'screen',texture:'QuestList Main Panel',base:{x:-32,y:14,w:1024,h:512},resizable:false,allowOverflow:true,questlogFields:['mainPanelX','mainPanelY']},
+    listRows:{label:'Quest rows',kind:'screen',texture:'QuestList Main Panel',base:{x:358,y:203,w:245,h:136},resizable:true},
+    searchTab:{label:'Search tab',kind:'screen',texture:'Search Tab Minimized',base:{x:571,y:152,w:58,h:55},resizable:true},
+    searchInput:{label:'Search text',kind:'screen',texture:'Search Tab Expanded',base:{x:505,y:174,w:112,h:16},resizable:true},
+    hideButton:{label:'Hidden / visible button',kind:'screen',texture:'Visible Button',base:{x:380,y:166,w:26,h:26},resizable:false},
+    condenseButton:{label:'Expand / condense button',kind:'screen',texture:'Condense Button',base:{x:398,y:167,w:26,h:26},resizable:false},
+    chapterTabs:{label:'Chapter tabs',kind:'screen',texture:'Main Chapter Tab',base:{x:345,y:348,w:294,h:39},resizable:true},
+    chapterArrows:{label:'Chapter arrows',kind:'screen',texture:'Chapter Arrow Left',base:{x:337,y:352,w:279,h:27},resizable:true},
+    listScrollbar:{label:'QuestList scrollbar',kind:'screen',texture:'Scrollbar Thumb',base:{x:589,y:203,w:28,h:136},resizable:false}
+  },
+  states:{
+    'search-minimized':{searchInput:false,hideButton:false,condenseButton:false,defaultOffsets:{}},
+    'search-expanded':{searchInput:true,hideButton:true,condenseButton:true,defaultOffsets:{searchTab:{x:393,y:152,w:250,h:55}}}
+  }
+};
+function questlogListNormalizeState(state){
+  const raw=String(state||'search-minimized').toLowerCase();
+  if(['quest','list','minimized','search-min','search-minimized'].includes(raw))return'search-minimized';
+  if(['objectives','rewards','complete','completed','failed','search','compact','expanded','search-expanded'].includes(raw))return'search-expanded';
+  return QUESTLOG_LIST_RENDER_SPEC.states[raw]?raw:'search-minimized';
+}
+function questlogListStateSpec(state){
+  return QUESTLOG_LIST_RENDER_SPEC.states[questlogListNormalizeState(state)]||QUESTLOG_LIST_RENDER_SPEC.states['search-minimized'];
+}
+function questlogListStateHidesElement(key,state){
+  const spec=questlogListStateSpec(state);
+  if(key==='searchInput')return spec.searchInput===false;
+  if(key==='hideButton')return spec.hideButton===false;
+  if(key==='condenseButton')return spec.condenseButton===false;
+  return false;
+}
+function questlogListStateDisplayBox(key,box,state,usesDefaultPlacement){
+  if(key==='searchTab'&&questlogListNormalizeState(state)==='search-expanded'){
+    const def=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.searchTab;
+    const expanded=QUESTLOG_LIST_RENDER_SPEC.states['search-expanded']?.defaultOffsets?.searchTab;
+    if(def&&expanded){
+      const anchor=guiStudioLayoutAnchorPoint(box.anchor);
+      const scale=clampGuiNumber(box.scale,25,300,100)/100;
+      const canonicalW=(Number(def.w)||box.w||1)*scale;
+      const canonicalH=(Number(def.h)||box.h||1)*scale;
+      const left=(Number(box.x)||0)-anchor.x*canonicalW;
+      const top=(Number(box.y)||0)-anchor.y*canonicalH;
+      const dx=left-(Number(def.x)||0);
+      const dy=top-(Number(def.y)||0);
+      const displayW=Number(expanded.w)||box.w;
+      const displayH=Number(expanded.h)||box.h;
+      return {
+        ...box,
+        x:(Number(expanded.x)||0)+dx+anchor.x*displayW,
+        y:(Number(expanded.y)||0)+dy+anchor.y*displayH,
+        w:displayW,
+        h:displayH
+      };
+    }
+  }
+  if(!usesDefaultPlacement)return box;
+  const offset=questlogListStateSpec(state).defaultOffsets?.[key];
+  if(!offset)return box;
+  return {...box,...offset};
+}
+function guiStudioLayoutLayerDefaults(){
+  return Object.fromEntries(Object.entries(GUI_STUDIO_LAYOUT_ELEMENT_META).map(([key,meta])=>[
+    key,
+    {...meta.base,anchor:'top-left',visible:true,locked:false,opacity:100,scale:100}
+  ]));
+}
+const GUI_STUDIO_LAYOUT_ELEMENT_META={
+  ...Object.fromEntries(Object.entries(QUESTLOG_DETAIL_RENDER_SPEC.elements).map(([key,meta])=>[key,{...meta,target:meta.custom?'all':'quest-menu',base:{...meta.base}}])),
+  ...Object.fromEntries(Object.entries(QUESTLOG_LIST_RENDER_SPEC.elements).map(([key,meta])=>[key,{...meta,target:'quest-list',base:{...meta.base}}]))
+};
+const GUI_STUDIO_QUEST_MENU_LAYOUT_LAYER_ORDER=['main','right','customImage1','customImage2','customImage3'];
+const GUI_STUDIO_QUEST_LIST_LAYOUT_LAYER_ORDER=['searchTab','listScrollbar','chapterTabs','listBackground','customImage1','customImage2','customImage3'];
+const GUI_STUDIO_LAYOUT_LAYER_ORDER=[...GUI_STUDIO_QUEST_MENU_LAYOUT_LAYER_ORDER,...GUI_STUDIO_QUEST_LIST_LAYOUT_LAYER_ORDER.filter(key=>!GUI_STUDIO_QUEST_MENU_LAYOUT_LAYER_ORDER.includes(key))];
+const GUI_STUDIO_LAYOUT_TEXT_DEFAULT_KEYS=['title','icon','description','entries'];
+const QUESTLOG_DETAIL_EXPORTABLE_LAYOUT_KEYS=new Set(['main','right']);
+const QUESTLOG_DETAIL_RUNTIME_CHILD_KEYS=new Set(['detailsButton','backButton','rewardButton','description','title','icon','entries']);
+const QUESTLOG_LIST_PANEL_CHILD_KEYS=new Set(['listRows','listScrollbar']);
+const QUESTLOG_LIST_SEARCH_CHILD_KEYS=new Set(['searchInput','hideButton','condenseButton']);
+const QUESTLOG_LIST_CHAPTER_CHILD_KEYS=new Set(['chapterArrows']);
+const QUESTLOG_LIST_PASSIVE_RUNTIME_KEYS=new Set([...QUESTLOG_LIST_PANEL_CHILD_KEYS,...QUESTLOG_LIST_SEARCH_CHILD_KEYS,...QUESTLOG_LIST_CHAPTER_CHILD_KEYS]);
+const GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS={
+  selected:'main',
+  version:22,
+  order:GUI_STUDIO_LAYOUT_LAYER_ORDER.slice(),
+  ...guiStudioLayoutLayerDefaults()
+};
+const GUI_STUDIO_LAYOUT_CUSTOM_IMAGE_KEYS=['customImage1','customImage2','customImage3'];
+const GUI_STUDIO_ANCHORS={
+  'top-left':{x:0,y:0},'top-center':{x:.5,y:0},'top-right':{x:1,y:0},
+  'center-left':{x:0,y:.5},center:{x:.5,y:.5},'center-right':{x:1,y:.5},
+  'bottom-left':{x:0,y:1},'bottom-center':{x:.5,y:1},'bottom-right':{x:1,y:1}
+};
+function guiStudioLayoutElementMatchesTarget(key,target=guiStudioModalTarget()){
+  const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key];
+  if(!meta)return false;
+  return meta.target==='all'||!meta.target||meta.target===target;
+}
+function guiStudioLayoutDefaultSelectedForTarget(target=guiStudioModalTarget()){
+  return target==='quest-list'?'listBackground':'main';
+}
+function syncGuiStudioLayoutSelectedForTarget(target=guiStudioModalTarget()){
+  ensureGuiStudioLayoutState();
+  const selected=guiStudioDraft.layout.elements.selected;
+  if(!guiStudioLayoutElementMatchesTarget(selected,target)||guiStudioLayoutElementPassiveRuntime(selected,target)){
+    guiStudioDraft.layout.elements.selected=guiStudioLayoutDefaultSelectedForTarget(target);
+  }
+  if(target==='quest-list'){
+    guiStudioDraft.layoutState=questlogListNormalizeState(guiStudioDraft.layoutState);
+    const currentScene=guiStudioLayoutSceneValue(guiStudioDraft.layoutBackground);
+    if(!currentScene||GUI_STUDIO_QUESTDETAIL_SCENES.has(currentScene)){
+      guiStudioDraft.layoutBackground=GUI_STUDIO_QUESTLIST_DEFAULT_SCENE;
+    }
+  }else{
+    const normalized=questlogDetailNormalizeState(guiStudioDraft.layoutState);
+    guiStudioDraft.layoutState=QUESTLOG_DETAIL_RENDER_SPEC.states[normalized]?normalized:'quest';
+    if(guiStudioDraft.layoutState==='failed')guiStudioDraft.layoutState='objectives';
+    if(guiStudioDraft.layoutState==='complete')guiStudioDraft.layoutState='rewards';
+  }
+}
+function ensureGuiStudioLayoutState(){
+  guiStudioDraft.layout=guiStudioDraft.layout||{};
+  const existing=guiStudioDraft.layout.elements||{};
+  const existingVersion=Number(existing.version||0);
+  guiStudioDraft.layout.images=guiStudioDraft.layout.images||{};
+  const resetPositions=existingVersion<13;
+  const resetTextDefaults=existingVersion<21;
+  guiStudioDraft.layout.elements={...GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS,...existing,version:22};
+  const savedOrder=resetPositions?[]:(Array.isArray(existing.order)?existing.order:[]);
+  guiStudioDraft.layout.elements.order=[...savedOrder.filter(key=>GUI_STUDIO_LAYOUT_ELEMENT_META[key]),...GUI_STUDIO_LAYOUT_LAYER_ORDER.filter(key=>!savedOrder.includes(key))];
+  Object.keys(GUI_STUDIO_LAYOUT_ELEMENT_META).forEach(key=>{
+    guiStudioDraft.layout.elements[key]=resetPositions
+      ? {...GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key]}
+      : resetTextDefaults&&GUI_STUDIO_LAYOUT_TEXT_DEFAULT_KEYS.includes(key)
+        ? {
+            ...GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key],
+            visible:existing[key]?.visible??GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key].visible,
+            locked:existing[key]?.locked??GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key].locked
+          }
+      : {...GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key],...(existing[key]||{})};
+    const repairedDefault=guiStudioLayoutSnapDefaultEquivalent(key,guiStudioDraft.layout.elements[key]);
+    if(repairedDefault)guiStudioDraft.layout.elements[key]={...guiStudioDraft.layout.elements[key],...repairedDefault};
+  });
+  if(!GUI_STUDIO_LAYOUT_ELEMENT_META[guiStudioDraft.layout.elements.selected])guiStudioDraft.layout.elements.selected=guiStudioLayoutDefaultSelectedForTarget();
+}
+function selectedGuiStudioLayoutElement(){
+  ensureGuiStudioLayoutState();
+  const selected=guiStudioDraft.layout.elements.selected;
+  return guiStudioLayoutElementMatchesTarget(selected)&&!guiStudioLayoutElementPassiveRuntime(selected)?selected:guiStudioLayoutDefaultSelectedForTarget();
+}
+function guiStudioLayoutAnchorPoint(anchor){
+  return GUI_STUDIO_ANCHORS[anchor]||GUI_STUDIO_ANCHORS['top-left'];
+}
+function guiStudioLayoutElementParentSize(key){
+  return {w:GUI_STUDIO_LAYOUT_SCREEN_W,h:GUI_STUDIO_LAYOUT_SCREEN_H};
+}
+function guiStudioLayoutElementDefaultBox(key){
+  const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key]||{};
+  const base=meta.base||{};
+  return {...(GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key]||{}),...base};
+}
+function guiStudioLayoutElementBox(key=selectedGuiStudioLayoutElement()){
+  ensureGuiStudioLayoutState();
+  return {...guiStudioLayoutElementDefaultBox(key),...(guiStudioDraft.layout.elements[key]||{})};
+}
+function guiStudioLayoutGuides(){
+  guiStudioDraft.layout=guiStudioDraft.layout||{};
+  guiStudioDraft.layoutGuides={safeZone:true,snap:true,grid:false,snapStep:8,...(guiStudioDraft.layoutGuides||{})};
+  guiStudioDraft.layoutGuides.snapStep=clampGuiNumber(guiStudioDraft.layoutGuides.snapStep,2,32,8);
+  return guiStudioDraft.layoutGuides;
+}
+function guiStudioLayoutSnapNumber(value,step=guiStudioLayoutGuides().snapStep||8){
+  const n=Number(value);
+  if(!Number.isFinite(n))return value;
+  return Math.round(n/step)*step;
+}
+function guiStudioLayoutSnapDefaultEquivalent(key,box){
+  const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key]||{};
+  if(meta.custom||!box)return null;
+  const def=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key];
+  if(!def)return null;
+  if((box.anchor||'top-left')!==(def.anchor||'top-left'))return null;
+  if(Math.round(Number(box.scale??100))!==Math.round(Number(def.scale??100)))return null;
+  const same=(a,b)=>Math.round(Number(a))===Math.round(Number(b));
+  const legacyQuestListDefaults={
+    searchTab:{x:572,y:152,w:58,h:55},
+    searchTabExact:{key:'searchTab',x:571,y:152,w:58,h:55},
+    searchTabAligned:{key:'searchTab',x:589,y:139,w:58,h:55},
+    searchTabFeedback:{key:'searchTab',x:605,y:138,w:58,h:55},
+    searchTabRight:{key:'searchTab',x:632,y:139,w:58,h:55},
+    searchInput:{x:508,y:178,w:157,h:16},
+    searchInputExact:{key:'searchInput',x:505,y:174,w:112,h:16},
+    searchInputAlt:{key:'searchInput',x:508,y:178,w:112,h:16},
+    searchInputAligned:{key:'searchInput',x:540,y:159,w:112,h:16},
+    searchInputRight:{key:'searchInput',x:592,y:159,w:112,h:16},
+    hideButtonSource:{key:'hideButton',x:369,y:160,w:26,h:26},
+    hideButtonExact:{key:'hideButton',x:380,y:166,w:26,h:26},
+    hideButton:{x:380,y:167,w:26,h:26},
+    hideButtonAligned:{key:'hideButton',x:401,y:146,w:26,h:26},
+    hideButtonRight:{key:'hideButton',x:420,y:146,w:26,h:26},
+    condenseButtonSource:{key:'condenseButton',x:342,y:160,w:26,h:26},
+    condenseButton:{x:398,y:167,w:26,h:26},
+    condenseButtonAligned:{key:'condenseButton',x:374,y:146,w:26,h:26},
+    condenseButtonRight:{key:'condenseButton',x:388,y:146,w:26,h:26},
+    chapterTabsExact:{key:'chapterTabs',x:345,y:349,w:294,h:39},
+    listScrollbarFeedback:{key:'listScrollbar',x:589,y:191,w:28,h:148}
+  };
+  const legacy=Object.values(legacyQuestListDefaults).find(item=>(item.key||key)===key&&same(box.x,item.x)&&same(box.y,item.y)&&same(box.w,item.w)&&same(box.h,item.h));
+  if(legacy&&same(box.x,legacy.x)&&same(box.y,legacy.y)&&same(box.w,legacy.w)&&same(box.h,legacy.h)){
+    return {x:def.x,y:def.y,w:def.w,h:def.h,anchor:def.anchor||'top-left',scale:def.scale??100};
+  }
+  const exact=same(box.x,def.x)&&same(box.y,def.y)&&same(box.w,def.w)&&same(box.h,def.h);
+  const snapped=[2,4,8,16,32].some(step=>
+    same(box.x,guiStudioLayoutSnapNumber(def.x,step))
+    && same(box.y,guiStudioLayoutSnapNumber(def.y,step))
+    && same(box.w,guiStudioLayoutSnapNumber(def.w,step))
+    && same(box.h,guiStudioLayoutSnapNumber(def.h,step))
+  );
+  return exact||snapped?{x:def.x,y:def.y,w:def.w,h:def.h,anchor:def.anchor||'top-left',scale:def.scale??100}:null;
+}
+function guiStudioLayoutApplyGuides(box,meta={},options={}){
+  const guides=guiStudioLayoutGuides();
+  if(options.snap===false||!guides.snap)return box;
+  const step=guides.snapStep||8;
+  const next={...box};
+  if('x' in next)next.x=guiStudioLayoutSnapNumber(next.x,step);
+  if('y' in next)next.y=guiStudioLayoutSnapNumber(next.y,step);
+  if(options.snapSize!==false&&meta.resizable!==false){
+    if('w' in next)next.w=Math.max(8,guiStudioLayoutSnapNumber(next.w,step));
+    if('h' in next)next.h=Math.max(8,guiStudioLayoutSnapNumber(next.h,step));
+  }
+  return next;
+}
+const GUI_STUDIO_LINKED_RUNTIME_GROUPS={
+  questListSearch:['searchTab','searchInput','hideButton','condenseButton']
+};
+function guiStudioLayoutLinkedRuntimeGroup(key){
+  if(!key||guiStudioModalTarget()!=='quest-list')return null;
+  return Object.values(GUI_STUDIO_LINKED_RUNTIME_GROUPS).find(group=>group.includes(key))||null;
+}
+function guiStudioLayoutElementPassiveRuntime(key,target=guiStudioModalTarget()){
+  if(target==='quest-menu')return QUESTLOG_DETAIL_RUNTIME_CHILD_KEYS.has(key)&&!QUESTLOG_DETAIL_EXPORTABLE_LAYOUT_KEYS.has(key);
+  if(target==='quest-list')return QUESTLOG_LIST_PASSIVE_RUNTIME_KEYS.has(key);
+  return false;
+}
+function guiStudioLayoutElementRuntimeLocked(key,target=guiStudioModalTarget()){
+  return guiStudioLayoutElementPassiveRuntime(key,target);
+}
+function questlogDetailPanelDisplayBox(key,state=guiStudioDraft.layoutState||'quest'){
+  const box=guiStudioLayoutElementBox(key);
+  return questlogDetailStateDisplayBox(key,box,state,guiStudioLayoutBoxUsesDefaultPlacement(key,box));
+}
+function questlogDetailCanonicalBoxFromDisplay(key,box=guiStudioLayoutElementBox(key),state=guiStudioDraft.layoutState||'quest'){
+  if(!QUESTLOG_DETAIL_EXPORTABLE_LAYOUT_KEYS.has(key))return box;
+  const def=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key];
+  if(!def)return box;
+  const stateDefault=questlogDetailStateDisplayBox(key,def,state,true);
+  return {
+    ...box,
+    x:Math.round((Number(def.x)||0)+((Number(box.x)||0)-(Number(stateDefault.x)||0))),
+    y:Math.round((Number(def.y)||0)+((Number(box.y)||0)-(Number(stateDefault.y)||0)))
+  };
+}
+function questlogDetailRuntimeDisplayBox(key,box=guiStudioLayoutElementBox(key),state=guiStudioDraft.layoutState||'quest'){
+  if(!guiStudioLayoutElementPassiveRuntime(key,'quest-menu')){
+    return questlogDetailStateDisplayBox(key,box,state,guiStudioLayoutBoxUsesDefaultPlacement(key,box));
+  }
+  const main=guiStudioLayoutRenderBox('main',questlogDetailPanelDisplayBox('main',state),{safeZone:false});
+  const right=guiStudioLayoutRenderBox('right',questlogDetailPanelDisplayBox('right',state),{safeZone:false});
+  const text=guiStudioLayoutTextModel(state);
+  const iconW=hasPreviewIcon(text.questIcon)?14:0;
+  const titleAreaW=Math.max(48,Math.round(main.w-36));
+  const titleMaxTextW=Math.max(8,titleAreaW-(iconW?iconW+4:0));
+  const titleTextW=Math.min(Math.max(questlogDetailApproxTextWidth(text.title),8),titleMaxTextW);
+  const titleGroupW=titleTextW+(iconW?iconW+4:0);
+  const titleAreaX=(main.w-titleAreaW)/2;
+  const titleGroupX=main.x+titleAreaX+(titleAreaW-titleGroupW)/2;
+  const buttonY=main.y+main.h+2;
+  const rightBoundary=main.x+main.w-12;
+  const backW=(state==='complete'||state==='rewards')?88:54;
+  const backX=rightBoundary-backW;
+  const detailsX=backX-54-6;
+  const runtime={
+    title:{x:Math.round(titleGroupX+(iconW?iconW+4:0)),y:Math.round(main.y+13),w:Math.round(titleTextW),h:16},
+    icon:{x:Math.round(titleGroupX),y:Math.round(main.y+13),w:iconW||14,h:14},
+    description:{x:Math.round(main.x+18),y:Math.round(main.y+36),w:Math.max(8,Math.round(main.w-38)),h:Math.max(8,Math.round(main.h-68))},
+    detailsButton:{x:Math.round(detailsX),y:Math.round(buttonY),w:54,h:18},
+    backButton:{x:Math.round(backX),y:Math.round(buttonY),w:backW,h:18},
+    rewardButton:{x:Math.round(rightBoundary-88),y:Math.round(buttonY),w:88,h:18},
+    entries:{x:Math.round(right.x+18),y:Math.round(right.y+36),w:Math.max(8,Math.round(right.w-36)),h:Math.max(8,Math.round(right.h-68))}
+  }[key];
+  return runtime?{...box,...runtime,anchor:'top-left'}:box;
+}
+function questlogListChildDisplayBoxFromParent(key,box=guiStudioLayoutElementBox(key),state=guiStudioDraft.layoutState||'search-minimized'){
+  const def=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key];
+  if(!def)return box;
+  if(QUESTLOG_LIST_PANEL_CHILD_KEYS.has(key)){
+    const panel=questlogListStateDisplayBox('listBackground',guiStudioLayoutElementBox('listBackground'),state,guiStudioLayoutBoxUsesDefaultPlacement('listBackground'));
+    const panelBase=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.listBackground||{};
+    return {...box,x:Math.round((Number(panel.x)||0)+(Number(def.x)||0)-(Number(panelBase.x)||0)),y:Math.round((Number(panel.y)||0)+(Number(def.y)||0)-(Number(panelBase.y)||0)),w:def.w,h:def.h,anchor:'top-left'};
+  }
+  if(QUESTLOG_LIST_SEARCH_CHILD_KEYS.has(key)){
+    const search=questlogListStateDisplayBox('searchTab',guiStudioLayoutElementBox('searchTab'),state,guiStudioLayoutBoxUsesDefaultPlacement('searchTab'));
+    const left=Number(search.x)||0;
+    const top=Number(search.y)||0;
+    const runtime={
+      searchInput:{x:left+112,y:top+22,w:112,h:16},
+      hideButton:{x:left-12,y:top+15,w:26,h:26},
+      condenseButton:{x:left+6,y:top+15,w:26,h:26}
+    }[key];
+    return runtime?{...box,...runtime,anchor:'top-left'}:box;
+  }
+  if(QUESTLOG_LIST_CHAPTER_CHILD_KEYS.has(key)){
+    const tabs=questlogListStateDisplayBox('chapterTabs',guiStudioLayoutElementBox('chapterTabs'),state,guiStudioLayoutBoxUsesDefaultPlacement('chapterTabs'));
+    return {...box,x:Math.round((Number(tabs.x)||0)-12),y:Math.round((Number(tabs.y)||0)+5),w:def.w,h:def.h,anchor:'top-left'};
+  }
+  return questlogListStateDisplayBox(key,box,state,guiStudioLayoutBoxUsesDefaultPlacement(key,box));
+}
+function questlogListCanonicalBoxFromDisplay(key,box=guiStudioLayoutElementBox(key),state=guiStudioDraft.layoutState){
+  if(key!=='searchTab')return box;
+  const def=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.searchTab;
+  const expanded=QUESTLOG_LIST_RENDER_SPEC.states['search-expanded']?.defaultOffsets?.searchTab;
+  if(!def||!expanded)return box;
+  const looksExpanded=Math.round(Number(box.w)||0)>100;
+  if(!looksExpanded)return box;
+  const anchor=guiStudioLayoutAnchorPoint(box.anchor);
+  const scale=clampGuiNumber(box.scale,25,300,100)/100;
+  const w=clampGuiNumber(box.w,1,GUI_STUDIO_LAYOUT_SCREEN_W,expanded.w||box.w)*scale;
+  const h=clampGuiNumber(box.h,1,GUI_STUDIO_LAYOUT_SCREEN_H,expanded.h||box.h)*scale;
+  const left=(Number(box.x)||0)-anchor.x*w;
+  const top=(Number(box.y)||0)-anchor.y*h;
+  return {
+    ...box,
+    x:def.x+(left-expanded.x)+anchor.x*(def.w||box.w),
+    y:def.y+(top-expanded.y)+anchor.y*(def.h||box.h),
+    w:def.w,
+    h:def.h
+  };
+}
+function guiStudioLayoutBoxFromDisplayDrag(key,displayBox,startStoredBox){
+  const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key]||{};
+  if(meta.target==='quest-list'){
+    return questlogListCanonicalBoxFromDisplay(key,{...startStoredBox,...displayBox},guiStudioDraft.layoutState);
+  }
+  if(meta.target==='quest-menu'){
+    return questlogDetailCanonicalBoxFromDisplay(key,{...startStoredBox,...displayBox},guiStudioDraft.layoutState||'quest');
+  }
+  return {...startStoredBox,...displayBox};
+}
+function resetGuiStudioLayoutElements(){
+  ensureGuiStudioLayoutState();
+  const selected=guiStudioLayoutDefaultSelectedForTarget();
+  const images=guiStudioDraft.layout.images||{};
+  guiStudioDraft.layout.elements={...GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS,selected,version:22,order:GUI_STUDIO_LAYOUT_LAYER_ORDER.slice()};
+  guiStudioDraft.layout.images=images;
+}
+function openGuiStudioLayoutResetAllConfirm(){
+  const panel=$('#guiStudioLayoutResetAllConfirm');
+  if(!panel){
+    confirmGuiStudioLayoutResetAll();
+    return;
+  }
+  panel.hidden=false;
+  $('#guiStudioLayoutResetAllConfirmBtn')?.focus?.();
+}
+function closeGuiStudioLayoutResetAllConfirm(){
+  const panel=$('#guiStudioLayoutResetAllConfirm');
+  if(panel)panel.hidden=true;
+}
+function confirmGuiStudioLayoutResetAll(){
+  closeGuiStudioLayoutResetAllConfirm();
+  withGuiStudioHistory(()=>{
+    resetGuiStudioLayoutElements();
+    renderGuiStudioLayout();
+    syncGuiStudioControlsFromDraft();
+    showMsg('All Layout layers reset to their default positions.',true);
+  });
+}
+function guiStudioLayoutRenderBox(key,box=guiStudioLayoutElementBox(key),options={}){
+  const parent=guiStudioLayoutElementParentSize(key);
+  const anchor=guiStudioLayoutAnchorPoint(box.anchor);
+  const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key]||{};
+  const fallback=guiStudioLayoutElementDefaultBox(key);
+  const allowOverflow=meta.allowOverflow===true;
+  const safeZone=allowOverflow?false:(options.safeZone ?? guiStudioLayoutGuides().safeZone);
+  const scale=clampGuiNumber(box.scale,25,300,100)/100;
+  const baseW=meta.resizable!==false?clampGuiNumber(box.w,8,parent.w,fallback.w||20):fallback.w;
+  const baseH=meta.resizable!==false?clampGuiNumber(box.h,6,parent.h,fallback.h||16):fallback.h;
+  const w=allowOverflow?baseW*scale:Math.min(parent.w,baseW*scale);
+  const h=allowOverflow?baseH*scale:Math.min(parent.h,baseH*scale);
+  const maxTop=parent.h-h;
+  const rawLeft=Number(box.x)-anchor.x*w;
+  const rawTop=Number(box.y)-anchor.y*h;
+  const left=safeZone?clampGuiNumber(rawLeft,0,Math.max(0,parent.w-w),0):(Number.isFinite(rawLeft)?rawLeft:0);
+  const top=safeZone?clampGuiNumber(rawTop,0,Math.max(0,maxTop),0):(Number.isFinite(rawTop)?rawTop:0);
+  return {x:left,y:top,w,h,anchor:box.anchor||'top-left',anchorX:left+anchor.x*w,anchorY:top+anchor.y*h};
+}
+function setGuiStudioLayoutElementBox(key,box,options={}){
+  ensureGuiStudioLayoutState();
+  if(guiStudioLayoutElementRuntimeLocked(key)&&!options.allowRuntimeLocked)return;
+  const current=guiStudioLayoutElementBox(key);
+  const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key]||{};
+  const next=guiStudioLayoutApplyGuides({...current,...box},meta,options);
+  const rendered=guiStudioLayoutRenderBox(key,next,{safeZone:options.safeZone ?? guiStudioLayoutGuides().safeZone});
+  const currentScale=clampGuiNumber(next.scale,25,300,current.scale||100);
+  const unscaledW=currentScale?rendered.w/(currentScale/100):rendered.w;
+  const unscaledH=currentScale?rendered.h/(currentScale/100):rendered.h;
+  guiStudioDraft.layout.elements[key]={
+    ...(guiStudioDraft.layout.elements[key]||{}),
+    x:Math.round(rendered.anchorX),
+    y:Math.round(rendered.anchorY),
+    w:Math.round(meta.resizable!==false?unscaledW:(guiStudioLayoutElementDefaultBox(key).w||unscaledW)),
+    h:Math.round(meta.resizable!==false?unscaledH:(guiStudioLayoutElementDefaultBox(key).h||unscaledH)),
+    anchor:rendered.anchor,
+    visible:next.visible!==false,
+    locked:!!next.locked,
+    opacity:clampGuiNumber(next.opacity,0,100,current.opacity??100),
+    scale:currentScale
+  };
+  const linked=options.linkGroup===false?null:guiStudioLayoutLinkedRuntimeGroup(key);
+  if(linked&&('x' in box||'y' in box)){
+    const updated=guiStudioLayoutElementBox(key);
+    const dx=Math.round(Number(updated.x)||0)-Math.round(Number(current.x)||0);
+    const dy=Math.round(Number(updated.y)||0)-Math.round(Number(current.y)||0);
+    if(dx||dy){
+      linked.filter(peer=>peer!==key).forEach(peer=>{
+        const peerBox=guiStudioLayoutElementBox(peer);
+        setGuiStudioLayoutElementBox(peer,{
+          ...peerBox,
+          x:Math.round(Number(peerBox.x)||0)+dx,
+          y:Math.round(Number(peerBox.y)||0)+dy
+        },{...options,linkGroup:false});
+      });
+    }
+  }
+}
+function setGuiStudioLayoutElementAnchor(key,anchor){
+  const current=guiStudioLayoutElementBox(key);
+  const sourceBox=guiStudioLayoutBoxUsesDefaultPlacement(key,current)?current:guiStudioLayoutDisplayBox(key);
+  const rendered=guiStudioLayoutRenderBox(key,sourceBox,{safeZone:false});
+  const nextAnchor=guiStudioLayoutAnchorPoint(anchor);
+  setGuiStudioLayoutElementBox(key,{
+    ...current,
+    x:Math.round(rendered.x+nextAnchor.x*rendered.w),
+    y:Math.round(rendered.y+nextAnchor.y*rendered.h),
+    anchor
+  },{snap:false,snapSize:false,safeZone:false});
+}
+function guiStudioLayoutImageData(key){
+  ensureGuiStudioLayoutState();
+  return guiStudioDraft.layout.images?.[key]||null;
+}
+function guiStudioLayoutLayerAvailable(key){
+  const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key];
+  if(!meta)return false;
+  if(!guiStudioLayoutElementMatchesTarget(key))return false;
+  if(guiStudioLayoutElementPassiveRuntime(key))return false;
+  if(key==='icon'&&!hasPreviewIcon(guiStudioCurrentQuestData()?.icon))return false;
+  return !meta.custom||!!guiStudioLayoutImageData(key);
+}
+function syncGuiStudioLayoutLayerSearchVisibility(){
+  ensureGuiStudioLayoutState();
+  const target=guiStudioModalTarget();
+  if(!guiStudioLayoutElementMatchesTarget(guiStudioDraft.layout?.elements?.selected,target)||!guiStudioLayoutLayerAvailable(guiStudioDraft.layout?.elements?.selected)){
+    guiStudioDraft.layout.elements.selected=guiStudioLayoutDefaultSelectedForTarget(target);
+  }
+  const term=String($('#guiStudioLayoutLayerSearch')?.value||'').trim().toLowerCase();
+  $$('.gui-studio-layout-layer-row').forEach(row=>{
+    const key=row.dataset.layoutSelect;
+    const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key];
+    const name=(row.textContent||'').toLowerCase();
+    const available=guiStudioLayoutElementMatchesTarget(key,target)&&guiStudioLayoutLayerAvailable(key);
+    row.hidden=!available||(!!term&&!name.includes(term));
+    row.classList.toggle('is-target-hidden',!guiStudioLayoutElementMatchesTarget(key,target));
+    if(meta?.custom){
+      const image=guiStudioLayoutImageData(key);
+      const label=row.querySelector('strong');
+      if(label)label.textContent=image?.name||meta.label;
+    }
+  });
+}
+function selectNextGuiStudioLayoutImageSlot(){
+  ensureGuiStudioLayoutState();
+  return GUI_STUDIO_LAYOUT_CUSTOM_IMAGE_KEYS.find(key=>!guiStudioDraft.layout.images?.[key])||GUI_STUDIO_LAYOUT_CUSTOM_IMAGE_KEYS[0];
+}
+function updateGuiStudioLayoutInspector(){
+  ensureGuiStudioLayoutState();
+  const key=selectedGuiStudioLayoutElement();
+  const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key]||GUI_STUDIO_LAYOUT_ELEMENT_META.main;
+  const box=guiStudioLayoutElementBox(key);
+  const displayBox=guiStudioLayoutDisplayBox(key);
+  const runtimeLocked=false;
+  const setVal=(id,val)=>{
+    const el=$(id);
+    if(!el)return;
+    if(el.dataset.layoutTransformEditing==='true'&&document.activeElement===el)return;
+    el.value=String(val);
+  };
+  const setText=(id,val)=>{const el=$(id);if(el)el.textContent=val;};
+  setText('#guiStudioLayoutInspectorTitle','Layers');
+  $$('.gui-studio-layout-select,.gui-studio-layout-layer-row').forEach(btn=>btn.classList.toggle('active',btn.dataset.layoutSelect===key));
+  $$('.gui-studio-layout-layer-row').forEach(btn=>{
+    const rowKey=btn.dataset.layoutSelect;
+    const rowBox=guiStudioLayoutElementBox(rowKey);
+    const rowRuntimeLocked=guiStudioLayoutElementPassiveRuntime(rowKey);
+    btn.classList.toggle('hidden',!rowRuntimeLocked&&rowBox.visible===false);
+    btn.classList.toggle('locked',!!rowBox.locked||rowRuntimeLocked);
+    btn.classList.toggle('runtime-locked',rowRuntimeLocked);
+    btn.title=rowRuntimeLocked?'Questlog runtime locks this element to its panel. Move the panel instead.':'';
+    btn.style.order=String((guiStudioDraft.layout.elements.order||GUI_STUDIO_LAYOUT_LAYER_ORDER).indexOf(rowKey));
+    btn.draggable=!rowBox.locked&&!rowRuntimeLocked;
+    btn.setAttribute('draggable',(rowBox.locked||rowRuntimeLocked)?'false':'true');
+    const eye=btn.querySelector('.eye');
+    const lock=btn.querySelector('.lock');
+    if(eye){
+      const isVisible=rowBox.visible!==false;
+      eye.innerHTML=guiStudioLayerEyeIcon(isVisible);
+      eye.classList.toggle('is-closed',!isVisible&&!rowRuntimeLocked);
+      eye.classList.toggle('is-disabled',rowRuntimeLocked);
+      eye.title=rowRuntimeLocked?'Runtime-locked layer':(isVisible?'Hide layer':'Show layer');
+      eye.setAttribute('aria-label',rowRuntimeLocked?'Runtime-locked layer':(isVisible?'Hide layer':'Show layer'));
+    }
+    if(lock){
+      lock.innerHTML=guiStudioLayoutLockIcon(rowBox.locked||rowRuntimeLocked);
+      lock.classList.toggle('is-disabled',rowRuntimeLocked);
+      lock.title=rowRuntimeLocked?'Runtime-locked layer':(rowBox.locked?'Unlock layer':'Lock layer');
+      lock.setAttribute('aria-label',rowRuntimeLocked?'Runtime-locked layer':(rowBox.locked?'Unlock layer':'Lock layer'));
+    }
+  });
+  syncGuiStudioLayoutLayerSearchVisibility();
+  $$('.gui-studio-anchor-grid button').forEach(btn=>btn.classList.toggle('active',btn.dataset.layoutAnchor===(box.anchor||'top-left')));
+  setVal('#guiStudioLayoutMainX',displayBox.x);
+  setVal('#guiStudioLayoutMainY',displayBox.y);
+  setVal('#guiStudioLayoutMainW',displayBox.w);
+  setVal('#guiStudioLayoutMainH',displayBox.h);
+  setVal('#guiStudioLayoutScaleField',box.scale??100);
+  setText('#guiStudioLayoutScaleValue',`${Math.round(box.scale??100)}%`);
+  ['#guiStudioLayoutMainX','#guiStudioLayoutMainY','#guiStudioLayoutMainW','#guiStudioLayoutMainH','#guiStudioLayoutScaleField'].forEach(sel=>{
+    const el=$(sel);
+    if(el)el.disabled=runtimeLocked;
+  });
+}
+function guiStudioLayoutBoxUsesDefaultPlacement(key,box=guiStudioLayoutElementBox(key)){
+  const def=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key];
+  if(!def)return false;
+  const rendered=guiStudioLayoutRenderBox(key,box,{safeZone:false});
+  const defaultRendered=guiStudioLayoutRenderBox(key,def,{safeZone:false});
+  return ['x','y','w','h'].every(prop=>Math.round(Number(rendered[prop]))===Math.round(Number(defaultRendered[prop])))
+    && Math.round(Number(box.scale??100))===Math.round(Number(def.scale??100));
+}
+function guiStudioLayoutDisplayBox(key){
+  const box=guiStudioLayoutElementBox(key);
+  const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key]||{};
+  const usesDefault=guiStudioLayoutBoxUsesDefaultPlacement(key,box);
+  if(meta.target==='quest-list')return guiStudioLayoutElementPassiveRuntime(key,'quest-list')
+    ? questlogListChildDisplayBoxFromParent(key,box,guiStudioDraft.layoutState||'search-minimized')
+    : questlogListStateDisplayBox(key,box,guiStudioDraft.layoutState||'search-minimized',usesDefault);
+  return questlogDetailRuntimeDisplayBox(key,box,guiStudioDraft.layoutState||'quest');
+}
+function questlogDetailPlainText(text){
+  return String(text||'').replace(/§[0-9a-fklmnor]/gi,'');
+}
+function questlogDetailApproxTextWidth(text){
+  return Array.from(questlogDetailPlainText(text)).reduce((sum,ch)=>{
+    if(ch===' ')return sum+4;
+    if(/[il.,:;!|]/.test(ch))return sum+3;
+    if(/[mw@#%&]/i.test(ch))return sum+7;
+    return sum+6;
+  },0);
+}
+function questlogDetailCenteredTitleBoxes(main,title,icon,titleText){
+  const textW=Math.min(Math.max(questlogDetailApproxTextWidth(titleText),8),Math.max(8,title.w));
+  const gap=3;
+  const groupW=icon.w+gap+textW;
+  const groupX=(main.x+main.w/2)-(groupW/2);
+  return {
+    iconX:Math.round(groupX),
+    titleX:Math.round(groupX+icon.w+gap),
+    titleW:Math.round(textW)
+  };
+}
+function applyGuiStudioLayoutCssVars(modal){
+  ensureGuiStudioLayoutState();
+  const main=guiStudioLayoutRenderBox('main',guiStudioLayoutDisplayBox('main'));
+  const right=guiStudioLayoutRenderBox('right',guiStudioLayoutDisplayBox('right'));
+  const title=guiStudioLayoutRenderBox('title',guiStudioLayoutDisplayBox('title'));
+  const icon=guiStudioLayoutRenderBox('icon',guiStudioLayoutDisplayBox('icon'));
+  const titleCanCenter=guiStudioLayoutBoxUsesDefaultPlacement('title')&&guiStudioLayoutBoxUsesDefaultPlacement('icon');
+  const centeredTitle=titleCanCenter?questlogDetailCenteredTitleBoxes(main,title,icon,guiStudioLayoutTextModel().title):{titleX:title.x,titleW:title.w,iconX:icon.x};
+  modal.style.setProperty('--gui-main-x',main.x);
+  modal.style.setProperty('--gui-main-y',main.y);
+  modal.style.setProperty('--gui-main-w',main.w);
+  modal.style.setProperty('--gui-main-h',main.h);
+  modal.style.setProperty('--gui-right-x',right.x);
+  modal.style.setProperty('--gui-right-y',right.y);
+  modal.style.setProperty('--gui-right-w',right.w);
+  modal.style.setProperty('--gui-right-h',right.h);
+  modal.style.setProperty('--gui-screen-title-render-x',centeredTitle.titleX);
+  modal.style.setProperty('--gui-screen-title-render-w',centeredTitle.titleW);
+  modal.style.setProperty('--gui-screen-icon-render-x',centeredTitle.iconX);
+  Object.keys(GUI_STUDIO_LAYOUT_ELEMENT_META).forEach(key=>{
+    const box=guiStudioLayoutRenderBox(key,guiStudioLayoutDisplayBox(key));
+    modal.style.setProperty(`--gui-screen-${key}-x`,box.x);
+    modal.style.setProperty(`--gui-screen-${key}-y`,box.y);
+    modal.style.setProperty(`--gui-screen-${key}-w`,box.w);
+    modal.style.setProperty(`--gui-screen-${key}-h`,box.h);
+    modal.style.setProperty(`--gui-${key}-opacity`,1);
+    if(['title','icon','description','detailsButton','backButton','rewardButton'].includes(key)){
+      modal.style.setProperty(`--gui-el-${key}-x`,((box.x-main.x)/Math.max(1,main.w))*275);
+      modal.style.setProperty(`--gui-el-${key}-y`,((box.y-main.y)/Math.max(1,main.h))*166);
+      modal.style.setProperty(`--gui-el-${key}-w`,(box.w/Math.max(1,main.w))*275);
+      modal.style.setProperty(`--gui-el-${key}-h`,(box.h/Math.max(1,main.h))*166);
+    }else if(key==='entries'){
+      modal.style.setProperty(`--gui-el-${key}-x`,((box.x-right.x)/Math.max(1,right.w))*170);
+      modal.style.setProperty(`--gui-el-${key}-y`,((box.y-right.y)/Math.max(1,right.h))*166);
+      modal.style.setProperty(`--gui-el-${key}-w`,(box.w/Math.max(1,right.w))*170);
+      modal.style.setProperty(`--gui-el-${key}-h`,(box.h/Math.max(1,right.h))*166);
+    }
+  });
+}
+function syncGuiStudioLayoutVisibilityClasses(){
+  ensureGuiStudioLayoutState();
+  const target=guiStudioModalTarget();
+  $$('.gui-studio-layout-screen [data-layout-element],.gui-studio-final-canvas [data-final-element]').forEach(el=>{
+    const key=el.dataset.layoutElement||el.dataset.finalElement;
+    const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key]||{};
+    const image=meta.custom?guiStudioLayoutImageData(key):null;
+    const passiveRuntime=guiStudioLayoutElementPassiveRuntime(key,target);
+    const hidden=!!((!passiveRuntime&&guiStudioLayoutElementBox(key).visible===false)||(meta.custom&&!image));
+    el.classList.toggle('is-passive-runtime',passiveRuntime);
+    el.classList.toggle('is-hidden',hidden);
+    el.classList.toggle('is-target-hidden',!guiStudioLayoutElementMatchesTarget(key,target));
+    const row=document.querySelector(`.gui-studio-layout-layer-row[data-layout-select="${key}"]`);
+    if(row&&!row.hidden&&!passiveRuntime){
+      el.classList.toggle('is-hidden',row.classList.contains('hidden'));
+    }
+  });
+}
+function selectGuiStudioLayoutElement(key){
+  ensureGuiStudioLayoutState();
+  if(!GUI_STUDIO_LAYOUT_ELEMENT_META[key])return;
+  if(!guiStudioLayoutElementMatchesTarget(key))return;
+  if(guiStudioLayoutElementPassiveRuntime(key))return;
+  guiStudioDraft.layout.elements.selected=key;
+  renderGuiStudioLayout();
+  syncGuiStudioControlsFromDraft();
+}
+function updateGuiStudioSelectedLayoutElementFromControls(){
+  const key=selectedGuiStudioLayoutElement();
+  if(guiStudioLayoutElementPassiveRuntime(key)){
+    syncGuiStudioControlsFromDraft();
+    return;
+  }
+  const current=guiStudioLayoutElementBox(key);
+  const read=(selector,prop)=>{
+    const el=$(selector);
+    if(!el)return current[prop];
+    const raw=String(el.value??'').trim();
+    if(raw===''||raw==='-'||raw==='+'||raw==='.'||raw==='-.'||raw==='+.')return current[prop];
+    const n=Number(raw);
+    return Number.isFinite(n)?n:current[prop];
+  };
+  const displayBox={
+    x:read('#guiStudioLayoutMainX','x'),
+    y:read('#guiStudioLayoutMainY','y'),
+    w:read('#guiStudioLayoutMainW','w'),
+    h:read('#guiStudioLayoutMainH','h'),
+    anchor:current.anchor
+  };
+  const next=GUI_STUDIO_LAYOUT_ELEMENT_META[key]?.target==='quest-menu'
+    ? questlogDetailCanonicalBoxFromDisplay(key,{...current,...displayBox},guiStudioDraft.layoutState||'quest')
+    : GUI_STUDIO_LAYOUT_ELEMENT_META[key]?.target==='quest-list'
+      ? questlogListCanonicalBoxFromDisplay(key,{...current,...displayBox},guiStudioDraft.layoutState)
+      : displayBox;
+  setGuiStudioLayoutElementBox(key,next,{snap:false});
+  renderGuiStudioLayout();
+}
+function guiStudioLayoutTextModel(stateOverride){
+  const q=guiStudioCurrentQuestData();
+  const state=stateOverride||guiStudioDraft.layoutState||'quest';
+  const info=guiStudioQuestStateInfo(state);
+  if(!q){
+    const entries=guiStudioQuestEntriesForLayout(null,info.kind,state);
+    return {
+      title:guiStudioDraft.labels.title,
+      questIcon:null,
+      description:'No quest selected.',
+      rightTitle:info.rightTitle,
+      stateLabel:info.stateLabel,
+      entries,
+      entryRows:guiStudioEntryRowsHtml(entries,`No ${info.kind} yet.`),
+      rewardEntries:[],
+      rewardIcons:'',
+      progress:'0 / 1',
+      progressPercent:0,
+      details:guiStudioDraft.labels.details,
+      back:guiStudioDraft.labels.back,
+    reward:state==='complete'?'Collected':guiStudioDraft.labels.reward
+    };
+  }
+  const title=rawPreviewText(q.title)||currentFile?.replace(/\.json$/i,'')||'Untitled quest';
+  const descKey=state==='failed'?'description_failed':(state==='complete'||state==='rewards')?'description_completed':'description';
+  const description=rawPreviewText(q[descKey])||rawPreviewText(q.description)||'No description yet.';
+  const entries=guiStudioQuestEntriesForLayout(q,info.kind,state);
+  const rewardEntries=guiStudioQuestEntriesForLayout(q,'rewards',state);
+  const progressTotal=Math.max(1,(Array.isArray(q.objectives)?q.objectives:[]).length);
+  const progressDone=state==='complete'?progressTotal:0;
+  return {
+    title,
+    questIcon:q?.icon||null,
+    description,
+    rightTitle:info.rightTitle,
+    stateLabel:info.stateLabel,
+    entries,
+    entryRows:guiStudioEntryRowsHtml(entries,`No ${info.kind} yet.`),
+    rewardEntries,
+    rewardIcons:guiStudioRewardIconsHtml(rewardEntries),
+    progress:`${progressDone} / ${progressTotal}`,
+    progressPercent:Math.round((progressDone/progressTotal)*100),
+    details:guiStudioDraft.labels.details,
+    back:guiStudioReadableLabel(q.back_text,guiStudioDraft.labels.back||'Back'),
+    reward:state==='complete'?guiStudioReadableLabel(q.collected_text,'Collected'):guiStudioReadableLabel(q.collect_button_text,'Collect Rewards')
+  };
+}
+function guiStudioQuestListLayoutModel(){
+  const fallbackChapter=currentFile&&mode==='chapter'?chapterIdFromFile(currentFile):questlogListActiveChapter||'questlog:main';
+  const chapterId=fallbackChapter||'questlog:main';
+  const chapter=questlogPreviewChapterEntry(chapterId)||questlogPreviewChapters()[0]||null;
+  const active=chapter?.id||chapterId;
+  const rows=questlogListPreviewQuests(active,{strictChapter:false}).slice(0,6);
+  const rowData=rows.length?rows.map(({file,q})=>({
+    file,
+    title:rawPreviewText(q?.title)||file.replace(/\.json$/i,''),
+    icon:q?.icon,
+    state:questPreviewIsCompleted(file,q)?'Completed':questPreviewIsFailed(file,q)?'Failed':''
+  })):[
+    {file:'new_quest_1.json',title:'New Quest',icon:null,state:'Completed'},
+    {file:'new_quest_2.json',title:'New Quest',icon:null,state:''},
+    {file:'new_quest_3.json',title:'New Quest',icon:null,state:''},
+    {file:'new_quest_4.json',title:'New Quest',icon:null,state:''},
+    {file:'new_quest_5.json',title:'New Quest',icon:null,state:''}
+  ];
+  const chaptersVisible=questlogPreviewChapters().slice(0,8);
+  return {
+    searchText:questlogListSearchQuery||'Search Quests',
+    rows:rowData,
+    chapters:chaptersVisible
+  };
+}
+function guiStudioQuestListRowsHtml(rows=[]){
+  const hasAnyState=rows.some(row=>row?.state);
+  return rows.map((row,i)=>{
+    const hasIcon=hasPreviewIcon(row.icon);
+    const previewState=row.state||(!hasAnyState&&i===0?'Completed':'');
+    const hoverPreview=i===0?' is-preview-hover':'';
+    return `<p class="gui-studio-questlist-row ${hasIcon?'has-icon':'no-icon'} ${previewState?'has-state':''}${hoverPreview}">${hasIcon?previewIconTile(row.icon,'gui-studio-questlist-row-icon'):''}<span>${renderMinecraftPreviewText(row.title)}</span>${previewState?`<b>${esc(previewState)}</b>`:''}${i<rows.length-1?'<em></em>':''}</p>`;
+  }).join('');
+}
+function guiStudioQuestListTabsHtml(chaptersVisible=[]){
+  const chapters=chaptersVisible.length?chaptersVisible:[{id:'questlog:main',icon:null,primary:true},{id:'questlog:chapter_2',icon:null},{id:'questlog:chapter_3',icon:null}];
+  return chapters.slice(0,8).map((chapter,i)=>`<b class="${i===0?'active':''} ${chapter.primary?'primary':'secondary'}" style="--tab-index:${i}">${previewIconTile(chapter.icon,'gui-studio-questlist-tab-icon')}</b>`).join('');
+}
+function guiStudioLayoutSceneInfo(value){
+  const normalized=guiStudioNormalizeSceneValue(value);
+  return GUI_STUDIO_LAYOUT_SCENES.find(scene=>scene.value===normalized||scene.label===value)||GUI_STUDIO_LAYOUT_SCENES[0];
+}
+function guiStudioLayoutSceneValue(value){
+  const normalized=guiStudioNormalizeSceneValue(value);
+  return GUI_STUDIO_LAYOUT_SCENES.find(scene=>scene.value===normalized||scene.label===value)?.value||'';
+}
+function guiStudioNormalizeSceneValue(value){
+  const raw=String(value||'');
+  return raw.startsWith('screenshot:')?raw.replace(/\.png$/i,'.webp'):raw;
+}
+function setGuiStudioLayoutPreviewState(state,options={}){
+  let next=String(state||'quest').toLowerCase();
+  if(next==='completed')next='complete';
+  if(next==='notification')next='quest';
+  const target=guiStudioModalTarget();
+  if(target==='quest-list'){
+    guiStudioDraft.layoutState=questlogListNormalizeState(next);
+    return;
+  }
+  if(next==='list')next='quest';
+  if(next==='search')next='objectives';
+  if(next==='compact')next='rewards';
+  const mode=options.mode||$('#guiStudioModal')?.dataset.mode||'layout';
+  if(mode==='layout'&&next==='failed')next='objectives';
+  if(mode==='layout'&&next==='complete')next='rewards';
+  guiStudioDraft.layoutState=next;
+}
+const GUI_STUDIO_LAYOUT_STATE_ICONS={
+  quest:'<svg class="lucide lucide-book-open-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V7"></path><path d="m16 12 2 2 4-4"></path><path d="M22 6V4a1 1 0 0 0-1-1h-5a4 4 0 0 0-4 4 4 4 0 0 0-4-4H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h6a3 3 0 0 1 3 3 3 3 0 0 1 3-3h7"></path></svg>',
+  objectives:'<svg class="lucide lucide-list-checks" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17 2 2 4-4"></path><path d="m3 7 2 2 4-4"></path><path d="M13 6h8"></path><path d="M13 12h8"></path><path d="M13 18h8"></path></svg>',
+  rewards:'<svg class="lucide lucide-gift" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="4" rx="1"></rect><path d="M12 8v13"></path><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"></path><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"></path></svg>',
+  searchMinimized:'<svg class="lucide lucide-search" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>',
+  searchExpanded:'<svg class="lucide lucide-search-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m8 11 2 2 4-4"></path><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>'
+};
+const GUI_STUDIO_LAYOUT_STATE_MODELS={
+  'quest-menu':[
+    {state:'quest',label:'Quest',className:'quest',icon:GUI_STUDIO_LAYOUT_STATE_ICONS.quest},
+    {state:'objectives',label:'Objectives',className:'objectives',icon:GUI_STUDIO_LAYOUT_STATE_ICONS.objectives},
+    {state:'rewards',label:'Rewards',className:'rewards',icon:GUI_STUDIO_LAYOUT_STATE_ICONS.rewards}
+  ],
+  'quest-list':[
+    {state:'search-minimized',label:'Search Minimized',className:'search-minimized',icon:GUI_STUDIO_LAYOUT_STATE_ICONS.searchMinimized},
+    {state:'search-expanded',label:'Search Expanded',className:'search-expanded',icon:GUI_STUDIO_LAYOUT_STATE_ICONS.searchExpanded}
+  ]
+};
+function renderGuiStudioLayoutStateButtons(target=guiStudioModalTarget()){
+  const states=GUI_STUDIO_LAYOUT_STATE_MODELS[target]||GUI_STUDIO_LAYOUT_STATE_MODELS['quest-menu'];
+  $$('.gui-studio-state-buttons .gui-studio-layout-choice').forEach((btn,index)=>{
+    const state=states[index];
+    btn.hidden=!state;
+    if(!state)return;
+    btn.dataset.layoutState=state.state;
+    const label=btn.querySelector('strong');
+    if(label)label.textContent=state.label;
+    const emblem=btn.querySelector('.gui-studio-state-emblem');
+    if(emblem){
+      emblem.className=`gui-studio-state-emblem ${state.className}`;
+      if(state.icon)emblem.innerHTML=state.icon;
+    }
+  });
+  $$('.gui-studio-final-state').forEach((btn,index)=>{
+    const state=states[index];
+    btn.hidden=!state;
+    if(!state)return;
+    btn.dataset.finalState=state.state;
+    const icon=btn.querySelector('span');
+    if(icon&&state.icon)icon.innerHTML=state.icon;
+    const label=[...btn.childNodes].find(node=>node.nodeType===Node.TEXT_NODE);
+    if(label)label.textContent=` ${state.label}`;
+  });
+}
+function syncGuiStudioLayoutSceneOptions(){
+  const current=guiStudioLayoutSceneInfo(guiStudioDraft.layoutBackground)?.value||GUI_STUDIO_LAYOUT_SCENES[0].value;
+  $$('.gui-studio-layout-bg').forEach(sel=>{
+    const existing=[...sel.options].map(option=>option.value).join('|');
+    const expected=GUI_STUDIO_LAYOUT_SCENES.map(scene=>scene.value).join('|');
+    if(existing!==expected){
+      sel.innerHTML=GUI_STUDIO_LAYOUT_SCENES.map(scene=>`<option value="${esc(scene.value)}">${esc(scene.label)}</option>`).join('');
+    }
+    sel.value=current;
+  });
+}
+function renderGuiStudioLayout(){
+  const modal=$('#guiStudioModal');
+  if(!modal)return;
+  ensureGuiStudioLayoutState();
+  const target=guiStudioModalTarget();
+  syncGuiStudioLayoutSelectedForTarget(target);
+  renderGuiStudioLayoutStateButtons(target);
+  const main=guiStudioLayoutRenderBox('main');
+  const right=guiStudioLayoutRenderBox('right');
+  guiStudioDraft.layoutState=target==='quest-list'?questlogListNormalizeState(guiStudioDraft.layoutState):guiStudioDraft.layoutState||'quest';
+  if(target!=='quest-list'){
+    if(guiStudioDraft.layoutState==='notification')guiStudioDraft.layoutState='quest';
+    if(modal.dataset.mode==='layout'&&guiStudioDraft.layoutState==='failed')guiStudioDraft.layoutState='objectives';
+    if(modal.dataset.mode==='layout'&&guiStudioDraft.layoutState==='complete')guiStudioDraft.layoutState='rewards';
+  }
+  guiStudioDraft.layoutScale=String(guiStudioDraft.layoutScale||'2');
+  guiStudioDraft.layoutBackground=guiStudioLayoutSceneValue(guiStudioDraft.layoutBackground)||GUI_STUDIO_LAYOUT_SCENES[0].value;
+  const scene=guiStudioLayoutSceneInfo(guiStudioDraft.layoutBackground);
+  guiStudioLayoutGuides();
+  modal.style.setProperty('--gui-main-x',main.x);
+  modal.style.setProperty('--gui-main-y',main.y);
+  modal.style.setProperty('--gui-main-w',main.w);
+  modal.style.setProperty('--gui-main-h',main.h);
+  modal.style.setProperty('--gui-right-x',right.x);
+  modal.style.setProperty('--gui-right-y',right.y);
+  modal.style.setProperty('--gui-right-w',right.w);
+  modal.style.setProperty('--gui-right-h',right.h);
+  applyGuiStudioLayoutCssVars(modal);
+  modal.style.setProperty('--gui-main-preview',guiStudioPreviewCssUrl('Quest Main'));
+  const normalizedState=questlogDetailNormalizeState(guiStudioDraft.layoutState);
+  const rightPiece=normalizedState==='rewards'?'Quest Reward (Right Panel)':'Quest Objective (Right Panel)';
+  modal.style.setProperty('--gui-right-preview',guiStudioPreviewCssUrl(rightPiece));
+  modal.style.setProperty('--gui-button-preview',guiStudioPreviewCssUrl('Quest Button Long'));
+  modal.style.setProperty('--gui-button-hover-preview',guiStudioPreviewCssUrl('Quest Button Long Hovered'));
+  modal.style.setProperty('--gui-button-short-preview',guiStudioPreviewCssUrl('Quest Button'));
+  modal.style.setProperty('--gui-button-short-hover-preview',guiStudioPreviewCssUrl('Quest Button Hovered'));
+  modal.style.setProperty('--gui-badge-preview',guiStudioPreviewCssUrl('Quest Important Marker'));
+  modal.style.setProperty('--gui-list-main-preview',guiStudioPreviewCssUrl('QuestList Main Panel'));
+  modal.style.setProperty('--gui-list-search-min-preview',guiStudioPreviewCssUrl('Search Tab Minimized'));
+  modal.style.setProperty('--gui-list-search-expanded-preview',guiStudioPreviewCssUrl('Search Tab Expanded'));
+  modal.style.setProperty('--gui-list-expand-preview',guiStudioPreviewCssUrl('Expand Button',GUI_STUDIO_GENERATED_ASSETS.expand));
+  modal.style.setProperty('--gui-list-condense-preview',guiStudioPreviewCssUrl('Condense Button',GUI_STUDIO_GENERATED_ASSETS.condense));
+  modal.style.setProperty('--gui-list-visible-preview',guiStudioPreviewCssUrl('Visible Button',GUI_STUDIO_GENERATED_ASSETS.visible));
+  modal.style.setProperty('--gui-list-hidden-preview',guiStudioPreviewCssUrl('Hidden Button',GUI_STUDIO_GENERATED_ASSETS.hidden));
+  modal.style.setProperty('--gui-list-main-tab-preview',guiStudioPreviewCssUrl('Main Chapter Tab Active',GUI_STUDIO_GENERATED_ASSETS.mainTabActive));
+  modal.style.setProperty('--gui-list-secondary-tab-preview',guiStudioPreviewCssUrl('Secondary Chapter Tab',GUI_STUDIO_GENERATED_ASSETS.secondaryTab));
+  modal.style.setProperty('--gui-list-arrow-left-preview',guiStudioPreviewCssUrl('Chapter Arrow Left'));
+  modal.style.setProperty('--gui-list-arrow-right-preview',guiStudioPreviewCssUrl('Chapter Arrow Right'));
+  modal.style.setProperty('--gui-list-divider-preview',guiStudioPreviewCssUrl('Big Divider'));
+  modal.style.setProperty('--gui-list-scrollbar-thumb-preview',guiStudioPreviewCssUrl('Scrollbar Thumb'));
+  modal.style.setProperty('--gui-list-scrollbar-track-preview',guiStudioPreviewCssUrl('Scrollbar Track'));
+  modal.style.setProperty('--gui-list-scrollbar-track-top-preview',guiStudioPreviewCssUrl('Scrollbar Track Top'));
+  modal.style.setProperty('--gui-list-scrollbar-track-bottom-preview',guiStudioPreviewCssUrl('Scrollbar Track Bottom'));
+  modal.style.setProperty('--gui-list-progress-color',normalizeHexColor(guiStudioDraft.colors.progress,GUI_STUDIO_COLOR_DEFAULTS.progress));
+  modal.style.setProperty('--gui-list-hover-color',normalizeHexColor(guiStudioDraft.colors.hover,GUI_STUDIO_COLOR_DEFAULTS.hover));
+  modal.classList.toggle('gui-studio-badge-on',!!guiStudioDraft.badge.visible);
+  modal.dataset.layoutState=guiStudioDraft.layoutState;
+  modal.classList.toggle('gui-studio-target-quest-list',target==='quest-list');
+  modal.classList.toggle('gui-studio-target-quest-menu',target!=='quest-list');
+  const finalHeader=$('.gui-studio-final-header p',modal);
+  if(finalHeader)finalHeader.textContent=target==='quest-list'
+    ? 'Review the current QuestList preview with source textures plus any edited Studio pieces.'
+    : 'Review the current QuestDetails preview with default source textures plus any edited Studio pieces.';
+  modal.dataset.layoutBackground=guiStudioDraft.layoutBackground;
+  modal.classList.toggle('gui-studio-layout-screenshot-scene',!!scene?.image);
+  modal.style.setProperty('--gui-layout-scene-image',scene?.image?`url("${scene.image}")`:'none');
+  $$('.gui-studio-layout-choice').forEach(btn=>btn.classList.toggle('active',(btn.dataset.layoutState||'quest')===guiStudioDraft.layoutState));
+  $$('.gui-studio-final-state').forEach(btn=>btn.classList.toggle('active',(btn.dataset.finalState||'quest')===guiStudioDraft.layoutState));
+  $$('.gui-studio-layout-scale button').forEach(btn=>btn.classList.toggle('active',String(btn.dataset.layoutScale||btn.textContent).replace(/x$/,'')===guiStudioDraft.layoutScale));
+  syncGuiStudioLayoutSceneOptions();
+  $$('.gui-studio-guide-safe').forEach(el=>{el.checked=!!guiStudioDraft.layoutGuides.safeZone;});
+  $$('.gui-studio-guide-snap').forEach(el=>{el.checked=!!guiStudioDraft.layoutGuides.snap;});
+  $$('.gui-studio-guide-grid').forEach(el=>{el.checked=!!guiStudioDraft.layoutGuides.grid;});
+  $$('#guiStudioLayoutSnapStep').forEach(el=>{el.value=String(guiStudioDraft.layoutGuides.snapStep||8);});
+  modal.style.setProperty('--gui-layout-grid-step',guiStudioDraft.layoutGuides.snapStep||8);
+  modal.classList.toggle('gui-studio-layout-safe-on',!!guiStudioDraft.layoutGuides.safeZone);
+  modal.classList.toggle('gui-studio-layout-snap-on',!!guiStudioDraft.layoutGuides.snap);
+  $$('.gui-studio-layout-canvas').forEach(el=>el.classList.toggle('show-grid',!!guiStudioDraft.layoutGuides.grid));
+  $$('.gui-studio-layout-right-panel,.gui-studio-final-side').forEach(el=>{el.style.display='';});
+  $$('.gui-studio-layout-canvas,.gui-studio-export-mini-preview').forEach(el=>{el.style.setProperty('--gui-layout-scale',guiStudioDraft.layoutScale);});
+  const selected=selectedGuiStudioLayoutElement();
+  const order=guiStudioDraft.layout.elements.order||GUI_STUDIO_LAYOUT_LAYER_ORDER;
+  $$('.gui-studio-layout-screen [data-layout-element],.gui-studio-final-canvas [data-final-element]').forEach(el=>{
+    const key=el.dataset.layoutElement||el.dataset.finalElement;
+    const box=guiStudioLayoutElementBox(key);
+    const meta=GUI_STUDIO_LAYOUT_ELEMENT_META[key]||{};
+    const passiveRuntime=guiStudioLayoutElementPassiveRuntime(key,target);
+    const image=meta.custom?guiStudioLayoutImageData(key):null;
+    const hidden=!!((!passiveRuntime&&box.visible===false)||(meta.custom&&!image));
+    if(image&&el.tagName==='IMG')el.src=image.dataUrl;
+    el.classList.toggle('selected',!!el.dataset.layoutElement&&!passiveRuntime&&key===selected);
+    const targetHidden=!guiStudioLayoutElementMatchesTarget(key,target);
+    const stateHidden=meta.target==='quest-list'
+      ? questlogListStateHidesElement(key,guiStudioDraft.layoutState)
+      : questlogDetailStateHidesElement(key,guiStudioDraft.layoutState);
+    el.classList.toggle('is-passive-runtime',passiveRuntime);
+    el.classList.toggle('is-hidden',hidden);
+    el.classList.toggle('is-state-hidden',stateHidden);
+    el.classList.toggle('is-target-hidden',targetHidden);
+    el.classList.toggle('is-locked',!!box.locked||passiveRuntime);
+    const layerIndex=Math.max(0,order.indexOf(key));
+    const semanticLayerIndex=key==='entries'&&order.includes('right')?order.indexOf('right')-1:layerIndex;
+    el.style.zIndex=String(4+Math.max(0,order.length-semanticLayerIndex));
+    el.style.opacity='1';
+  });
+  ['detailsButton','backButton','rewardButton'].forEach(key=>{
+    $$(`.gui-studio-layout-screen [data-layout-element="${key}"],.gui-studio-final-canvas [data-final-element="${key}"]`).forEach(el=>{
+      el.classList.toggle('is-hidden',!!(!guiStudioLayoutElementPassiveRuntime(key,target)&&guiStudioLayoutElementBox(key).visible===false));
+    });
+  });
+  const titleColor=normalizeHexColor(guiStudioDraft.colors.title,GUI_STUDIO_COLOR_DEFAULTS.title);
+  const textColor=normalizeHexColor(guiStudioDraft.colors.text,GUI_STUDIO_COLOR_DEFAULTS.text);
+  const progressColor=normalizeHexColor(guiStudioDraft.colors.progress,GUI_STUDIO_COLOR_DEFAULTS.progress);
+  modal.style.setProperty('--questlog-render-title',titleColor);
+  modal.style.setProperty('--questlog-render-text',textColor);
+  modal.style.setProperty('--questlog-render-status',progressColor);
+  const text=guiStudioLayoutTextModel();
+  const listText=guiStudioQuestListLayoutModel();
+  $$('.gui-studio-live-title').forEach(el=>{el.innerHTML=renderMinecraftPreviewText(text.title);el.style.color='';});
+  $$('.gui-studio-quest-icon').forEach(el=>{
+    const hasIcon=hasPreviewIcon(text.questIcon);
+    el.innerHTML=hasIcon?previewIconTile(text.questIcon,'gui-studio-quest-icon-inner'):'';
+    el.classList.toggle('is-icon-empty',!hasIcon);
+  });
+  $$('.gui-studio-live-description').forEach(el=>{el.innerHTML=renderMinecraftPreviewText(text.description);el.style.color='';});
+  $$('.gui-studio-live-details').forEach(el=>el.textContent=text.details);
+  $$('.gui-studio-live-back').forEach(el=>el.textContent=text.back);
+  $$('.gui-studio-live-reward').forEach(el=>el.textContent=text.reward);
+  $$('.gui-studio-final-side strong,.gui-studio-layout-right-panel strong,.gui-studio-final-quest small').forEach(el=>el.textContent=text.rightTitle);
+  $$('.gui-studio-final-side .gui-studio-entry-list,.gui-studio-final-canvas > .gui-studio-entry-list,.gui-studio-layout-right-panel .gui-studio-entry-list,.gui-studio-layout-canvas > .gui-studio-entry-list').forEach(el=>{el.innerHTML=text.entryRows;});
+  $$('.gui-studio-reward-icons').forEach(el=>{el.innerHTML=text.rewardIcons;el.hidden=!text.rewardIcons;});
+  $$('.gui-studio-progress-line em').forEach(el=>el.textContent=text.progress);
+  $$('.gui-studio-progress-line span').forEach(el=>{el.style.background=progressColor;el.style.width=`${text.progressPercent}%`;});
+  $$('.gui-studio-questlist-rows').forEach(el=>{el.innerHTML=guiStudioQuestListRowsHtml(listText.rows);});
+  $$('.gui-studio-questlist-search-input').forEach(el=>{el.textContent=listText.searchText;});
+  $$('.gui-studio-questlist-tabs').forEach(el=>{el.innerHTML=guiStudioQuestListTabsHtml(listText.chapters);});
+  $$('.gui-studio-questlist-scrollbar').forEach(el=>{el.classList.toggle('is-content-hidden',listText.rows.length<=4);});
+  updateGuiStudioLayoutInspector();
+  syncGuiStudioLayoutVisibilityClasses();
+  requestAnimationFrame(()=>syncGuiStudioLayoutVisibilityClasses());
+  applyGuiStudioTooltipMetadata($('#guiStudioModal'));
+}
+function syncGuiStudioControlsFromDraft(){
+  const setVal=(id,val)=>{const el=$(id);if(el)el.value=String(val);};
+  setVal('#guiStudioLabelTitle',guiStudioDraft.labels.title);
+  setVal('#guiStudioLabelDetails',guiStudioDraft.labels.details);
+  setVal('#guiStudioLabelBack',guiStudioDraft.labels.back);
+  setVal('#guiStudioLabelReward',guiStudioDraft.labels.reward);
+  syncGuiStudioColorControlsFromDraft();
+  updateGuiStudioLayoutInspector();
+  setVal('#guiStudioBadgeX',guiStudioDraft.badge.x);
+  setVal('#guiStudioBadgeY',guiStudioDraft.badge.y);
+  setVal('#guiStudioBadgeScale',guiStudioDraft.badge.scale);
+  setVal('#guiStudioBadgeU',guiStudioDraft.badge.u);
+  setVal('#guiStudioBadgeV',guiStudioDraft.badge.v);
+  setVal('#guiStudioBadgeW',guiStudioDraft.badge.w);
+  setVal('#guiStudioBadgeH',guiStudioDraft.badge.h);
+  const badge=$('#guiStudioBadgeVisible');if(badge)badge.checked=!!guiStudioDraft.badge.visible;
+}
+function renderGuiStudioDraft(){
+  const mode=$('#guiStudioModal')?.dataset.mode||'create';
+  syncGuiStudioPieceUi();
+  renderGuiStudioPalette();
+  renderGuiStudioOptionsBar();
+  renderGuiStudioPixelCanvas();
+  if(mode!=='create')renderGuiStudioLayout();
+  renderGuiStudioImports();
+  if(!$('#guiStudioOthersMenu')?.hidden)renderGuiStudioOtherPieceMenu();
+  syncGuiStudioControlsFromDraft();
+  updateGuiStudioApplySummary();
+  renderGuiStudioResourcePackShell();
+  applyGuiStudioTooltipMetadata();
+}
+function guiStudioLayerHasPaint(layer){
+  return !!(layer&&(Object.keys(layer.pixels||{}).length||guiStudioLayerFillEditCount(layer)));
+}
+function guiStudioPieceHasEdits(piece){
+  const data=guiStudioDraft.pieces[piece];
+  if(!data)return false;
+  if(data.baseErase&&Object.keys(data.baseErase).length)return true;
+  if((data.baseEraseFills||[]).length)return true;
+  return (data.layers||[]).some(layer=>guiStudioLayerHasPaint(layer));
+}
+function guiStudioEditedPieceNames(){
+  return Object.keys(GUI_STUDIO_PIECES).filter(piece=>guiStudioPieceHasEdits(piece));
+}
+function guiStudioEditedPieceNamesForTarget(target=guiStudioModalTarget()){
+  const allowed=new Set(guiStudioTargetPieces(target));
+  return guiStudioEditedPieceNames().filter(piece=>allowed.has(piece));
+}
+function guiStudioEditedTextureFiles(){
+  const files=new Map();
+  guiStudioEditedPieceNames().forEach(piece=>{
+    const meta=GUI_STUDIO_PIECES[piece]||{};
+    const file=meta.texture||`${piece.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')}.png`;
+    if(!files.has(file))files.set(file,{file,pieces:[]});
+    files.get(file).pieces.push(piece);
+  });
+  return Array.from(files.values()).sort((a,b)=>a.file.localeCompare(b.file));
+}
+function guiStudioEditedTextureFilesForTarget(target=guiStudioModalTarget()){
+  const files=new Map();
+  guiStudioEditedPieceNamesForTarget(target).forEach(piece=>{
+    const meta=GUI_STUDIO_PIECES[piece]||{};
+    const file=meta.texture||`${piece.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')}.png`;
+    if(!files.has(file))files.set(file,{file,pieces:[]});
+    files.get(file).pieces.push(piece);
+  });
+  return Array.from(files.values()).sort((a,b)=>a.file.localeCompare(b.file));
+}
+function guiStudioQuestResourceSlug(file){
+  return String(file||'quest')
+    .replace(/\.json$/i,'')
+    .toLowerCase()
+    .replace(/[^a-z0-9_./-]+/g,'_')
+    .replace(/[\\/]+/g,'/')
+    .replace(/^\/+|\/+$/g,'')||'quest';
+}
+function guiStudioQuestTexturePath(file,atlas,meta=loadExportMetadata()){
+  const ns=String(meta.namespace||getNs()||'questlog').replace(/[^a-z0-9_.-]/gi,'_').toLowerCase()||'questlog';
+  const safeAtlas=String(atlas||'quest_page.png').split(/[\\/]/).pop()||'quest_page.png';
+  const path=`textures/gui/questlog_builder/${guiStudioQuestResourceSlug(file)}/${safeAtlas}`;
+  return {namespace:ns,path,resource:`${ns}:${path}`,assetPath:`assets/${ns}/${path}`};
+}
+function guiStudioQuestTexturePatchForFile(file,meta=loadExportMetadata()){
+  const draft=guiStudioQuestDraftForFile(file);
+  if(!draft)return {};
+  return withGuiStudioScopedDraft(draft,()=>{
+    const files=guiStudioEditedTextureFilesForTarget('quest-menu');
+    const patch={};
+    if(files.some(item=>item.file==='quest_page.png')){
+      const loc=guiStudioQuestTexturePath(file,'quest_page.png',meta).resource;
+      patch.background_texture=loc;
+      patch.right_panel_texture=loc;
+    }
+    if(files.some(item=>item.file==='quest_peripherals.png')){
+      patch.peripheral_texture=guiStudioQuestTexturePath(file,'quest_peripherals.png',meta).resource;
+    }
+    return patch;
+  });
+}
+function guiStudioQuestExportLayoutInfoForFile(file){
+  const draft=guiStudioQuestDraftForFile(file);
+  if(!draft)return {patch:{},targets:[],source:'none'};
+  return withGuiStudioScopedDraft(draft,()=>{
+    const result=guiStudioQuestlogLayoutPatch();
+    const patch=result?.patch||{};
+    return Object.keys(patch).length?{patch,targets:[file],source:'scoped-quest-draft'}:{patch:{},targets:[],source:'default'};
+  });
+}
+function guiStudioQuestListConfigPatchFromActiveDraft(){
+  ensureGuiStudioLayoutState();
+  const offset=(key,field,options={})=>{
+    const rawBox=guiStudioLayoutElementBox(key);
+    const box=options.runtimeCanonical?questlogListCanonicalBoxFromDisplay(key,rawBox,options.state):rawBox;
+    const base=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key]||{};
+    return Math.round(Number(box?.[field])||0)-Math.round(Number(base?.[field])||0);
+  };
+  const groupOffset=(keys,field)=>{
+    const values=keys
+      .filter(key=>GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[key])
+      .map(key=>offset(key,field))
+      .filter(value=>value!==0);
+    if(!values.length)return 0;
+    const counts=new Map();
+    values.forEach(value=>counts.set(value,(counts.get(value)||0)+1));
+    const ranked=[...counts.entries()].sort((a,b)=>b[1]-a[1]||Math.abs(a[0])-Math.abs(b[0]));
+    if(ranked.length&&ranked[0][1]>1)return ranked[0][0];
+    return Math.round(values.reduce((sum,value)=>sum+value,0)/values.length);
+  };
+  const mainPanelX=offset('listBackground','x');
+  const mainPanelY=offset('listBackground','y');
+  const searchGroupX=offset('searchTab','x',{runtimeCanonical:true,state:guiStudioDraft.layoutState});
+  const searchGroupY=offset('searchTab','y',{runtimeCanonical:true,state:guiStudioDraft.layoutState});
+  const chapterGroupX=offset('chapterTabs','x');
+  const chapterGroupY=offset('chapterTabs','y');
+  const gui={
+    mainPanelX,
+    mainPanelY,
+    searchBarX:searchGroupX-mainPanelX,
+    searchBarY:searchGroupY-mainPanelY,
+    chapterButtonsX:chapterGroupX-mainPanelX,
+    chapterButtonsY:chapterGroupY-mainPanelY
+  };
+  const changed=Object.keys(gui).filter(key=>gui[key]!==0);
+  return {
+    gui,
+    changed,
+    sourceOffsets:{
+      mainPanel:{x:mainPanelX,y:mainPanelY,keys:['listBackground'],linkedKeys:['listRows','listScrollbar']},
+      search:{x:searchGroupX,y:searchGroupY,keys:['searchTab'],linkedKeys:['searchInput','hideButton','condenseButton']},
+      chapterButtons:{x:chapterGroupX,y:chapterGroupY,keys:['chapterTabs'],linkedKeys:['chapterArrows']}
+    }
+  };
+}
+function guiStudioQuestListConfigPatchForDraft(draft){
+  if(!draft)return {gui:{mainPanelX:0,mainPanelY:0,searchBarX:0,searchBarY:0,chapterButtonsX:0,chapterButtonsY:0},changed:[]};
+  return withGuiStudioScopedDraft(draft,()=>guiStudioQuestListConfigPatchFromActiveDraft());
+}
+function guiStudioQuestListConfigPatch(){
+  guiStudioSaveActiveDraftToScope();
+  return guiStudioQuestListConfigPatchForDraft(guiStudioDraftScopes.questList);
+}
+function guiStudioQuestListBackgroundTransform(){
+  ensureGuiStudioLayoutState();
+  const box=guiStudioLayoutElementBox('listBackground');
+  const base=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.listBackground||{};
+  const bw=Math.max(1,Number(base.w)||1);
+  const bh=Math.max(1,Number(base.h)||1);
+  const dx=Math.round(Number(box?.x)||0)-Math.round(Number(base.x)||0);
+  const dy=Math.round(Number(box?.y)||0)-Math.round(Number(base.y)||0);
+  const scaleX=Math.max(.05,(Number(box?.w)||bw)/bw);
+  const scaleY=Math.max(.05,(Number(box?.h)||bh)/bh);
+  const changed=dx!==0||dy!==0||Math.abs(scaleX-1)>.001||Math.abs(scaleY-1)>.001;
+  return {
+    changed,
+    dx,
+    dy,
+    scaleX:Number(scaleX.toFixed(4)),
+    scaleY:Number(scaleY.toFixed(4))
+  };
+}
+function questlogClientConfigToml(guiPatch=guiStudioQuestListConfigPatch().gui){
+  const gui={mainPanelX:0,mainPanelY:0,searchBarX:0,searchBarY:0,chapterButtonsX:0,chapterButtonsY:0,...(guiPatch||{})};
+  return [
+    '[button]',
+    'enabled = true',
+    'showBadge = true',
+    'relativeToInventory = true',
+    'x = 2',
+    'y = -26',
+    'badgeX = 24',
+    'badgeY = 0',
+    'bobbingBadge = true',
+    '',
+    '[gui]',
+    `mainPanelX = ${Math.round(gui.mainPanelX)||0}`,
+    `mainPanelY = ${Math.round(gui.mainPanelY)||0}`,
+    `searchBarX = ${Math.round(gui.searchBarX)||0}`,
+    `searchBarY = ${Math.round(gui.searchBarY)||0}`,
+    `chapterButtonsX = ${Math.round(gui.chapterButtonsX)||0}`,
+    `chapterButtonsY = ${Math.round(gui.chapterButtonsY)||0}`,
+    '',
+    '[colors]',
+    'textColor = 4995099',
+    'titleColor = 4995099',
+    'completedTextColor = 5414482',
+    'failedTextColor = 11141120',
+    'uncollectedTextColor = 10380850',
+    'progressTextColor = 10385490',
+    'hoveredTextColor = 16777215',
+    'searchTextColor = 4995099',
+    'noQuestsColor = 4995099',
+    'hoverFillColor = -2130706433',
+    'toastTitleColor = -1635934158',
+    'toastDescriptionColor = 4995099',
+    '',
+    '[editor]',
+    'enableEditorButton = false',
+    ''
+  ].join('\n');
+}
+function questlogClientConfigInstallReadme(guiPatch=guiStudioQuestListConfigPatch().gui){
+  const fields=Object.entries(guiPatch||{})
+    .filter(([,value])=>Math.round(Number(value)||0)!==0)
+    .map(([key,value])=>`${key} = ${Math.round(Number(value)||0)}`);
+  return [
+    'QuestList layout install note',
+    '',
+    'Questlog reads QuestList parent offsets from the client config file: main panel, search tab anchor, and chapter tab group.',
+    '',
+    'For a direct Minecraft instance, install:',
+    '  config/questlog-client.toml',
+    '',
+    'For a CurseForge/Modrinth-style modpack override, use:',
+    '  overrides/config/questlog-client.toml',
+    '',
+    'If only the QuestList background panel moves in-game, the resource pack is active but this client config is not in the active instance config folder.',
+    '',
+    'Exported non-default fields:',
+    ...(fields.length?fields.map(field=>`  ${field}`):['  none'])
+  ].join('\n');
+}
+function guiStudioExportTextureJobs(meta=loadExportMetadata()){
+  guiStudioSaveActiveDraftToScope();
+  guiStudioPruneScopedDrafts();
+  const jobs=[];
+  const addJobs=(draft,target,scope,fileName=null)=>{
+    if(!draft)return;
+    withGuiStudioScopedDraft(draft,()=>{
+      guiStudioEditedTextureFilesForTarget(target).forEach(file=>{
+        const safeFile=String(file.file||'questlog.png').split(/[\\/]/).pop()||'questlog.png';
+        if(target==='quest-list'){
+          jobs.push({scope,target,file:safeFile,pieces:file.pieces.slice(),assetPath:`assets/questlog/textures/gui/${safeFile}`,displayFile:safeFile,draft:cloneGuiStudioDraft(draft)});
+        }else if(fileName){
+          const loc=guiStudioQuestTexturePath(fileName,safeFile,meta);
+          jobs.push({scope,target,file:safeFile,pieces:file.pieces.slice(),assetPath:loc.assetPath,displayFile:`${guiStudioQuestResourceSlug(fileName)}/${safeFile}`,resource:loc.resource,questFile:fileName,draft:cloneGuiStudioDraft(draft)});
+        }
+      });
+    });
+  };
+  addJobs(guiStudioDraftScopes.questList,'quest-list','global-questlist');
+  if(guiStudioDraftScopes.questList){
+    withGuiStudioScopedDraft(guiStudioDraftScopes.questList,()=>{
+      const layoutTransform=guiStudioQuestListBackgroundTransform();
+      if(layoutTransform.changed){
+        const existing=jobs.find(job=>job.target==='quest-list'&&job.file==='questlog.png');
+        if(existing){
+          if(!existing.pieces.includes('QuestList Main Panel'))existing.pieces.push('QuestList Main Panel');
+          existing.layoutTransform=layoutTransform;
+        }else{
+          jobs.push({
+            scope:'global-questlist',
+            target:'quest-list',
+            file:'questlog.png',
+            pieces:['QuestList Main Panel'],
+            assetPath:'assets/questlog/textures/gui/questlog.png',
+            displayFile:'questlog.png',
+            layoutTransform,
+            draft:cloneGuiStudioDraft(guiStudioDraftScopes.questList)
+          });
+        }
+      }
+    });
+  }
+  Object.entries(guiStudioDraftScopes.questMenu||{}).forEach(([file,draft])=>{
+    if(file==='__unsaved__'||!quests?.[file])return;
+    addJobs(draft,'quest-menu',`quest:${file}`,file);
+  });
+  return jobs.sort((a,b)=>a.assetPath.localeCompare(b.assetPath));
+}
+function guiStudioPackTextureDetail(pieces=[]){
+  const names=pieces.map(piece=>(GUI_STUDIO_PIECES[piece]?.short||piece));
+  return `${names.length} edited GUI piece${names.length===1?'':'s'}`;
+}
+function guiStudioPackTreeIsOpen(key,defaultOpen=true){
+  return Object.prototype.hasOwnProperty.call(guiStudioPackTreeOpen,key)?guiStudioPackTreeOpen[key]!==false:!!defaultOpen;
+}
+function guiStudioPackFileIcon(type='image'){
+  return guiStudioLucideIcon(type==='code'?'file-code-2':'image','gui-studio-pack-file-icon');
+}
+function guiStudioPackFolderRow(key,label,level=0){
+  const open=guiStudioPackTreeIsOpen(key,true);
+  const indent=level?` style="--pack-indent:${level}"`:'';
+  return `<div class="gui-studio-pack-row folder-row"${indent}>
+    <button type="button" class="gui-studio-pack-folder-toggle" data-pack-toggle="${esc(key)}" aria-expanded="${open?'true':'false'}" aria-label="${open?'Close':'Open'} ${esc(label)} folder">${guiStudioLucideIcon(open?'folder-open':'folder','gui-studio-pack-folder-icon')}</button>
+    <span>${esc(label)}</span>
+  </div>`;
+}
+function guiStudioPackFileRow(label,type='image',level=0,detail='',options={}){
+  const indent=level?` style="--pack-indent:${level}"`:'';
+  const toggleKey=options.toggleKey||'';
+  const isOpen=toggleKey?guiStudioPackTreeIsOpen(toggleKey,options.defaultOpen!==false):false;
+  const icon=guiStudioPackFileIcon(type==='meta'||type==='json'?'code':'image');
+  const iconMarkup=toggleKey
+    ? `<button type="button" class="gui-studio-pack-file-toggle" data-pack-toggle="${esc(toggleKey)}" aria-expanded="${isOpen?'true':'false'}" aria-label="${isOpen?'Collapse':'Expand'} ${esc(label)} edited pieces">${icon}</button>`
+    : `<span class="gui-studio-pack-file-mark">${icon}</span>`;
+  return `<div class="gui-studio-pack-row file-row ${type}"${indent}>
+    ${iconMarkup}
+    <span>${esc(label)}</span>
+    ${detail?`<small>${esc(detail)}</small>`:''}
+  </div>`;
+}
+function guiStudioPackPieceRow(piece,level=0){
+  const meta=GUI_STUDIO_PIECES[piece]||{};
+  const indent=level?` style="--pack-indent:${level}"`:'';
+  const name=meta.short||piece;
+  return `<div class="gui-studio-pack-row piece-row"${indent}>
+    <span class="gui-studio-pack-file-mark">${guiStudioLucideIcon('image','gui-studio-pack-file-icon')}</span>
+    <span>${esc(name)}</span>
+  </div>`;
+}
+function renderGuiStudioResourcePackShell(){
+  const tree=$('#guiStudioPackTree');
+  if(!tree)return;
+  updateGuiStudioTargetChrome();
+  const edited=guiStudioEditedTextureFiles();
+  const editedPieceCount=guiStudioEditedPieceNames().length;
+  const open=key=>guiStudioPackTreeIsOpen(key,true);
+  const rows=[];
+  rows.push(guiStudioPackFolderRow('resourcepacks','resourcepacks',0));
+  if(open('resourcepacks')){
+    rows.push(guiStudioPackFolderRow('pack','Global QuestLog Builder GUI',1));
+    if(open('pack')){
+      rows.push(guiStudioPackFileRow('pack.mcmeta','meta',2));
+      rows.push(guiStudioPackFileRow('pack.png','image',2,'Questlog asset'));
+      rows.push(guiStudioPackFolderRow('assets','assets',2));
+      if(open('assets')){
+        rows.push(guiStudioPackFolderRow('questlog','questlog',3));
+        if(open('questlog')){
+          rows.push(guiStudioPackFolderRow('textures','textures',4));
+          if(open('textures')){
+            rows.push(guiStudioPackFolderRow('gui','gui',5));
+            if(open('gui')){
+              edited.forEach(file=>{
+                const textureKey=`texture:${file.file}`;
+                const textureOpen=guiStudioPackTreeIsOpen(textureKey,false);
+                rows.push(guiStudioPackFileRow(file.file,'image',6,guiStudioPackTextureDetail(file.pieces),{toggleKey:textureKey,defaultOpen:false}));
+                if(textureOpen){
+                  file.pieces
+                    .slice()
+                    .sort((a,b)=>(GUI_STUDIO_PIECES[a]?.short||a).localeCompare(GUI_STUDIO_PIECES[b]?.short||b))
+                    .forEach(piece=>rows.push(guiStudioPackPieceRow(piece,7)));
+                }
+              });
+            }
+          }
+          rows.push(guiStudioPackFolderRow('lang','lang',4));
+          if(open('lang'))rows.push(guiStudioPackFileRow('en_us.json','json',5));
+        }
+      }
+    }
+  }
+  tree.innerHTML=rows.join('');
+  const textureMeta=$('#guiStudioPackTextureMeta');
+  if(textureMeta)textureMeta.textContent=edited.length?`${edited.length} PNG ${edited.length===1?'file':'files'} / ${editedPieceCount} edited piece${editedPieceCount===1?'':'s'}`:'No edited PNG files';
+  const header=$('#guiStudioPackEditedMeta');
+  if(header)header.textContent=edited.length?`${edited.length} texture ${edited.length===1?'file':'files'} / ${editedPieceCount} edited piece${editedPieceCount===1?'':'s'}`:'No edited texture files';
+}
+function guiStudioApplyScopeValue(){
+  if(guiStudioModalTarget()==='quest-list')return'global-questlist';
+  const value=$('#guiStudioApplyScope')?.value;
+  return value==='multiple'||value==='selected'?'multiple':'current';
+}
+function guiStudioQuestFileNames(){
+  return Object.keys(quests||{}).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base'}));
+}
+function guiStudioAppliedTargetFallback(){
+  const previous=Array.isArray(guiStudioDraft.appliedPreview?.targetFiles)?guiStudioDraft.appliedPreview.targetFiles:[];
+  const clean=previous.filter(file=>quests[file]);
+  if(clean.length)return clean;
+  return currentFile&&quests[currentFile]?[currentFile]:[];
+}
+function renderGuiStudioApplyQuestList(){
+  const list=$('#guiStudioApplyQuestList');
+  if(!list)return;
+  if(guiStudioModalTarget()==='quest-list'){
+    list.hidden=true;
+    list.innerHTML='';
+    return;
+  }
+  const multiple=guiStudioApplyScopeValue()==='multiple';
+  list.hidden=!multiple;
+  if(!multiple){
+    list.innerHTML='';
+    return;
+  }
+  const selected=new Set(guiStudioAppliedTargetFallback());
+  if(currentFile&&quests[currentFile])selected.add(currentFile);
+  const files=guiStudioQuestFileNames();
+  list.innerHTML=files.length?files.map(file=>{
+    const isCurrent=file===currentFile;
+    return `<label title="${esc(file)}"><input type="checkbox" value="${esc(file)}" ${selected.has(file)?'checked':''} ${isCurrent?'disabled':''}> <span>${esc(file.replace(/\.json$/i,''))}${isCurrent?' (current)':''}</span></label>`;
+  }).join(''):'<small>No quest files available.</small>';
+}
+function guiStudioSelectedApplyQuestFiles(){
+  if(guiStudioModalTarget()==='quest-list')return [];
+  if(guiStudioApplyScopeValue()!=='multiple')return currentFile&&quests[currentFile]?[currentFile]:[];
+  const checked=$$('#guiStudioApplyQuestList input[type="checkbox"]:checked').map(input=>input.value).filter(file=>quests[file]);
+  if(currentFile&&quests[currentFile]&&!checked.includes(currentFile))checked.unshift(currentFile);
+  return [...new Set(checked)];
+}
+function updateGuiStudioApplySummary(){
+  const summary=$('#guiStudioApplySummary');
+  const status=$('#guiStudioApplyStatus');
+  const edited=guiStudioEditedPieceNames();
+  const count=edited.length;
+  const layoutPatch=guiStudioQuestlogLayoutPatch();
+  const layoutCount=Object.keys(layoutPatch.patch).length;
+  const scope=guiStudioApplyScopeValue();
+  const targetFiles=guiStudioSelectedApplyQuestFiles();
+  if(summary){
+    const textureCopy=count
+      ? `${count} edited GUI texture${count===1?'':'s'} will stay in the global resource-pack preview.`
+      : 'No edited GUI textures yet.';
+    const layoutCopy=layoutCount
+      ? `${layoutCount} supported panel layout field${layoutCount===1?'':'s'} will update.`
+      : 'Default panel positioning stays clean.';
+    const targetCopy=scope==='global-questlist'
+      ? 'Global QuestList textures affect the shared list preview, not one quest JSON.'
+      : scope==='multiple'
+      ? `${targetFiles.length} quest${targetFiles.length===1?'':'s'} selected for this draft preview.`
+      : 'Current quest only.';
+    summary.innerHTML=`<span>${esc(textureCopy)}</span><small>${esc(targetCopy)}</small>${scope==='global-questlist'?'':`<small>${esc(layoutCopy)}</small>`}`;
+  }
+  if(status){
+    const applied=guiStudioDraft.appliedPreview;
+    status.textContent=applied
+      ? `Last draft confirmation: ${applied.scope==='global-questlist'?'global QuestList':(applied.scope==='multiple'||applied.scope==='selected')?'multiple quests':'current quest'} with ${applied.pieces.length} edited texture${applied.pieces.length===1?'':'s'}.`
+      : 'Draft not applied yet.';
+  }
+}
+function openGuiStudioApplyConfirm(){
+  const panel=$('#guiStudioApplyConfirm');
+  if(!panel)return;
+  const wasHidden=panel.hidden;
+  updateGuiStudioTargetChrome();
+  renderGuiStudioApplyQuestList();
+  updateGuiStudioApplySummary();
+  panel.hidden=false;
+  if(wasHidden)playUiSound('panel');
+  (guiStudioModalTarget()==='quest-list'?$('#guiStudioApplyConfirmBtn'):$('#guiStudioApplyScope'))?.focus?.();
+}
+function closeGuiStudioApplyConfirm(){
+  const panel=$('#guiStudioApplyConfirm');
+  if(panel){
+    const wasOpen=!panel.hidden;
+    panel.hidden=true;
+    if(wasOpen)playUiSound('panel');
+  }
+}
+const GUI_STUDIO_QUESTLOG_LAYOUT_FIELDS=[
+  'left_panel_width','right_panel_width','panel_height',
+  'left_panel_x_offset','left_panel_y_offset',
+  'right_panel_x_offset','right_panel_y_offset'
+];
+function guiStudioQuestlogLayoutPatch(){
+  ensureGuiStudioLayoutState();
+  const main=questlogDetailCanonicalBoxFromDisplay('main',guiStudioLayoutDisplayBox('main'),guiStudioDraft.layoutState||'quest');
+  const right=questlogDetailCanonicalBoxFromDisplay('right',guiStudioLayoutDisplayBox('right'),guiStudioDraft.layoutState||'quest');
+  const mainDefault=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.main;
+  const rightDefault=GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS.right;
+  const patch={};
+  const round=value=>Math.round(Number(value)||0);
+  const mainChanged=!guiStudioLayoutBoxUsesDefaultPlacement('main',main);
+  const rightChanged=!guiStudioLayoutBoxUsesDefaultPlacement('right',right);
+  if(mainChanged){
+    const rendered=guiStudioLayoutRenderBox('main',main,{safeZone:false});
+    const defaultRendered=guiStudioLayoutRenderBox('main',mainDefault,{safeZone:false});
+    if(round(rendered.w)!==round(defaultRendered.w))patch.left_panel_width=round(rendered.w);
+    if(round(rendered.h)!==round(defaultRendered.h))patch.panel_height=round(rendered.h);
+    const dx=round(rendered.x)-round(defaultRendered.x);
+    const dy=round(rendered.y)-round(defaultRendered.y);
+    if(dx)patch.left_panel_x_offset=dx;
+    if(dy)patch.left_panel_y_offset=dy;
+  }
+  if(rightChanged){
+    const rendered=guiStudioLayoutRenderBox('right',right,{safeZone:false});
+    const defaultRendered=guiStudioLayoutRenderBox('right',rightDefault,{safeZone:false});
+    if(round(rendered.w)!==round(defaultRendered.w))patch.right_panel_width=round(rendered.w);
+    if(!Object.prototype.hasOwnProperty.call(patch,'panel_height')&&round(rendered.h)!==round(defaultRendered.h))patch.panel_height=round(rendered.h);
+    const dx=round(rendered.x)-round(defaultRendered.x);
+    const dy=round(rendered.y)-round(defaultRendered.y);
+    if(dx)patch.right_panel_x_offset=dx;
+    if(dy)patch.right_panel_y_offset=dy;
+  }
+  return {patch,mainChanged,rightChanged};
+}
+function applyGuiStudioQuestlogLayoutToQuest(q){
+  if(!q||typeof q!=='object')return {written:[],cleared:[],patch:{}};
+  const {patch}=guiStudioQuestlogLayoutPatch();
+  const cleared=GUI_STUDIO_QUESTLOG_LAYOUT_FIELDS.filter(key=>Object.prototype.hasOwnProperty.call(q,key));
+  GUI_STUDIO_QUESTLOG_LAYOUT_FIELDS.forEach(key=>delete q[key]);
+  Object.assign(q,patch);
+  return {written:Object.keys(patch),cleared,patch};
+}
+function createGuiStudioQuestPreviewSnapshot(scope,pieces,targetFiles=[]){
+  return {
+    scope,
+    currentFile:currentFile||null,
+    targetFiles:targetFiles.slice(),
+    updatedAt:new Date().toISOString(),
+    editedPieces:pieces.slice(),
+    pieces:{
+      main:createGuiStudioPiecePreview('Quest Main'),
+      right:createGuiStudioPiecePreview('Quest Objective (Right Panel)'),
+      button:createGuiStudioPiecePreview('Quest Button Long'),
+      buttonHover:createGuiStudioPiecePreview('Quest Button Long Hovered'),
+      badge:createGuiStudioPiecePreview('Quest Important Marker')
+    },
+    layout:cloneGuiStudioDraft({layout:guiStudioDraft.layout,labels:guiStudioDraft.labels,colors:guiStudioDraft.colors,badge:guiStudioDraft.badge})
+  };
+}
+function createGuiStudioQuestListPreviewSnapshot(scope,pieces){
+  return {
+    scope,
+    currentFile:null,
+    targetFiles:[],
+    updatedAt:new Date().toISOString(),
+    editedPieces:pieces.slice(),
+    pieces:{
+      main:createGuiStudioPiecePreview('QuestList Main Panel'),
+      searchMin:createGuiStudioPiecePreview('Search Tab Minimized'),
+      searchExpanded:createGuiStudioPiecePreview('Search Tab Expanded'),
+      visible:guiStudioPiecePreviewOrGenerated('Visible Button',GUI_STUDIO_GENERATED_ASSETS.visible),
+      hidden:guiStudioPiecePreviewOrGenerated('Hidden Button',GUI_STUDIO_GENERATED_ASSETS.hidden),
+      condense:guiStudioPiecePreviewOrGenerated('Condense Button',GUI_STUDIO_GENERATED_ASSETS.condense),
+      expand:guiStudioPiecePreviewOrGenerated('Expand Button',GUI_STUDIO_GENERATED_ASSETS.expand),
+      mainTab:guiStudioPiecePreviewOrGenerated('Main Chapter Tab',GUI_STUDIO_GENERATED_ASSETS.mainTab),
+      mainTabActive:guiStudioPiecePreviewOrGenerated('Main Chapter Tab Active',GUI_STUDIO_GENERATED_ASSETS.mainTabActive),
+      secondaryTab:guiStudioPiecePreviewOrGenerated('Secondary Chapter Tab',GUI_STUDIO_GENERATED_ASSETS.secondaryTab),
+      secondaryTabActive:guiStudioPiecePreviewOrGenerated('Secondary Chapter Tab Active',GUI_STUDIO_GENERATED_ASSETS.secondaryTabActive)
+    },
+    layout:cloneGuiStudioDraft({layout:guiStudioDraft.layout,labels:guiStudioDraft.labels,colors:guiStudioDraft.colors,badge:guiStudioDraft.badge})
+  };
+}
+function confirmGuiStudioDraftApply(){
+  const before=getGuiStudioState();
+  const scope=guiStudioApplyScopeValue();
+  const isGlobalQuestList=scope==='global-questlist';
+  const targetFiles=guiStudioSelectedApplyQuestFiles();
+  const pieces=guiStudioEditedPieceNames();
+  let layoutApplies=[];
+  if(!isGlobalQuestList&&targetFiles.length&&mode==='quest'){
+    syncQ();
+    pushHistorySnapshot();
+    targetFiles.forEach(file=>{
+      const quest=quests[file];
+      if(!quest||typeof quest!=='object')return;
+      const apply=applyGuiStudioQuestlogLayoutToQuest(quest);
+      trimQ(quest);
+      touchFile('quest',file);
+      layoutApplies.push({file,...apply});
+    });
+    refreshJson();
+    renderValidation();
+    scheduleAutosave();
+  }
+  const writtenFields=[...new Set(layoutApplies.flatMap(apply=>apply.written||[]))];
+  guiStudioDraft.appliedPreview={
+    scope,
+    pieces,
+    targetFiles,
+    currentFile:currentFile||null,
+    updatedAt:new Date().toISOString(),
+    questlogLayoutFields:writtenFields
+  };
+  if(isGlobalQuestList){
+    guiStudioAppliedQuestListPreview=createGuiStudioQuestListPreviewSnapshot(scope,pieces);
+  }else{
+    guiStudioAppliedQuestPreview=createGuiStudioQuestPreviewSnapshot(scope,pieces,targetFiles);
+  }
+  guiStudioSaveActiveDraftToScope();
+  closeGuiStudioApplyConfirm();
+  updateGuiStudioApplySummary();
+  renderInlineQuestPreview();
+  renderInlineChapterListPreview();
+  renderOpenQuestPreviewModal();
+  renderOpenQuestlogListPreviewModal(questlogListActiveChapter);
+  recordGuiStudioChange(before);
+  const layoutMessage=writtenFields.length
+    ? ` Updated Questlog layout config: ${writtenFields.join(', ')}.`
+    : isGlobalQuestList?' No quest JSON was changed.':' Kept Questlog default panel positioning.';
+  const targetMessage=isGlobalQuestList
+    ? 'the global QuestList preview'
+    : scope==='multiple'
+    ? `${targetFiles.length} quest${targetFiles.length===1?'':'s'}`
+    : 'the current quest';
+  showMsg(`Draft apply preview saved for ${targetMessage} with ${pieces.length} edited texture${pieces.length===1?'':'s'}.${layoutMessage}`,
+    true);
+}
+function guiStudioCanvasPoint(e){
+  const canvas=$('#guiStudioPixelCanvas');
+  if(!canvas)return null;
+  const rect=canvas.getBoundingClientRect();
+  const x=Math.floor((e.clientX-rect.left)/rect.width*GUI_STUDIO_CANVAS_W);
+  const y=Math.floor((e.clientY-rect.top)/rect.height*GUI_STUDIO_CANVAS_H);
+  if(x<0||y<0||x>=GUI_STUDIO_CANVAS_W||y>=GUI_STUDIO_CANVAS_H)return null;
+  return {x,y};
+}
+function expandGuiStudioBounds(data,x,y){
+  const minX=Math.min(data.bounds.x,x);
+  const minY=Math.min(data.bounds.y,y);
+  const maxX=Math.max(data.bounds.x+data.bounds.w-1,x);
+  const maxY=Math.max(data.bounds.y+data.bounds.h-1,y);
+  data.bounds={x:minX,y:minY,w:maxX-minX+1,h:maxY-minY+1};
+}
+function expandGuiStudioBoundsToBounds(data,bounds){
+  if(!bounds)return;
+  expandGuiStudioBounds(data,bounds.x,bounds.y);
+  expandGuiStudioBounds(data,bounds.x+bounds.w-1,bounds.y+bounds.h-1);
+}
+function guiStudioRemovePointFromLayerFills(layer,x,y){
+  if(!Array.isArray(layer?.fills)||!layer.fills.length)return false;
+  const result=guiStudioRemovePointFromFillList(layer.fills,x,y);
+  if(result.changed)layer.fills=result.fills;
+  return result.changed;
+}
+function guiStudioRemovePointFromFillList(fillList,x,y){
+  if(!Array.isArray(fillList)||!fillList.length)return {changed:false,fills:fillList||[]};
+  let changed=false;
+  const next=[];
+  fillList.forEach(fill=>{
+    if(fill.type==='spans'){
+      const spans=[];
+      (fill.spans||[]).forEach(span=>{
+        if(y!==span.y||x<span.x||x>=span.x+span.w){
+          spans.push(span);
+          return;
+        }
+        changed=true;
+        if(x>span.x)spans.push({x:span.x,y:span.y,w:x-span.x});
+        const right=span.x+span.w;
+        if(x<right-1)spans.push({x:x+1,y:span.y,w:right-x-1});
+      });
+      if(spans.length)next.push({...fill,spans,bounds:guiStudioBoundsFromSpans(spans)});
+    }else if(fill.type==='rect'&&x>=fill.x&&y>=fill.y&&x<fill.x+fill.w&&y<fill.y+fill.h){
+      changed=true;
+      for(let yy=fill.y;yy<fill.y+fill.h;yy++){
+        if(yy!==y)next.push({type:'spans',color:fill.color,spans:[{x:fill.x,y:yy,w:fill.w}],bounds:{x:fill.x,y:yy,w:fill.w,h:1}});
+        else{
+          if(x>fill.x)next.push({type:'spans',color:fill.color,spans:[{x:fill.x,y:yy,w:x-fill.x}],bounds:{x:fill.x,y:yy,w:x-fill.x,h:1}});
+          const right=fill.x+fill.w;
+          if(x<right-1)next.push({type:'spans',color:fill.color,spans:[{x:x+1,y:yy,w:right-x-1}],bounds:{x:x+1,y:yy,w:right-x-1,h:1}});
+        }
+      }
+    }else{
+      next.push(fill);
+    }
+  });
+  return {changed,fills:next};
+}
+function guiStudioSubtractRectFromFillList(fillList,bounds){
+  if(!Array.isArray(fillList)||!fillList.length||!bounds)return {changed:false,fills:fillList||[]};
+  let changed=false;
+  const next=[];
+  fillList.forEach(fill=>{
+    if(fill.type==='spans'){
+      const spans=[];
+      (fill.spans||[]).forEach(span=>{
+        if(span.y<bounds.y||span.y>=bounds.y+bounds.h||span.x+span.w<=bounds.x||span.x>=bounds.x+bounds.w){
+          spans.push(span);
+          return;
+        }
+        changed=true;
+        if(bounds.x>span.x)spans.push({x:span.x,y:span.y,w:bounds.x-span.x});
+        const right=span.x+span.w;
+        const clipRight=bounds.x+bounds.w;
+        if(clipRight<right)spans.push({x:clipRight,y:span.y,w:right-clipRight});
+      });
+      if(spans.length)next.push({...fill,spans,bounds:guiStudioBoundsFromSpans(spans)});
+    }else if(fill.type==='rect'){
+      const x1=fill.x,y1=fill.y,x2=fill.x+fill.w,y2=fill.y+fill.h;
+      const cx1=Math.max(x1,bounds.x),cy1=Math.max(y1,bounds.y),cx2=Math.min(x2,bounds.x+bounds.w),cy2=Math.min(y2,bounds.y+bounds.h);
+      if(cx2<=cx1||cy2<=cy1){
+        next.push(fill);
+        return;
+      }
+      changed=true;
+      const color=fill.color;
+      if(cy1>y1)next.push({type:'rect',color,x:x1,y:y1,w:fill.w,h:cy1-y1,bounds:{x:x1,y:y1,w:fill.w,h:cy1-y1}});
+      if(cy2<y2)next.push({type:'rect',color,x:x1,y:cy2,w:fill.w,h:y2-cy2,bounds:{x:x1,y:cy2,w:fill.w,h:y2-cy2}});
+      if(cx1>x1)next.push({type:'rect',color,x:x1,y:cy1,w:cx1-x1,h:cy2-cy1,bounds:{x:x1,y:cy1,w:cx1-x1,h:cy2-cy1}});
+      if(cx2<x2)next.push({type:'rect',color,x:cx2,y:cy1,w:x2-cx2,h:cy2-cy1,bounds:{x:cx2,y:cy1,w:x2-cx2,h:cy2-cy1}});
+    }else{
+      next.push(fill);
+    }
+  });
+  return {changed,fills:next};
+}
+function paintGuiStudioPoint(x,y,color){
+  if(!guiStudioPointInActiveZone({x,y}))return;
+  if(!guiStudioSelectionContains(x,y))return;
+  const piece=selectedGuiStudioPiece();
+  const data=guiStudioPieceData();
+  const layer=guiStudioActiveLayer();
+  if(layer.locked)return;
+  const key=`${x},${y}`;
+  if(color){
+    if(layer.id==='base'){
+      delete data.baseErase[key];
+      const baseClip=guiStudioRemovePointFromFillList(data.baseEraseFills,x,y);
+      if(baseClip.changed)data.baseEraseFills=baseClip.fills;
+    }
+    if(layer.eraseMask)delete layer.eraseMask[key];
+    if(layer.eraseFills){
+      const eraseClip=guiStudioRemovePointFromFillList(layer.eraseFills,x,y);
+      if(eraseClip.changed)layer.eraseFills=eraseClip.fills;
+    }
+    layer.pixels[key]=normalizeHexColor(color,guiStudioDraft.primary);
+    expandGuiStudioBounds(data,x,y);
+    updateGuiStudioLayerCanvasPoint(piece,layer,x,y,layer.pixels[key]);
+    if(layer.id==='base')updateGuiStudioBaseEraseCanvasPoint(piece,x,y,false);
+    markGuiStudioCanvasPointDirty(x,y,3);
+    invalidateGuiStudioPiecePreview(piece);
+  }else if(layer.id==='base'){
+    delete layer.pixels[key];
+    data.baseErase[key]=true;
+    updateGuiStudioLayerCanvasPoint(piece,layer,x,y,null);
+    updateGuiStudioBaseEraseCanvasPoint(piece,x,y,true);
+    markGuiStudioCanvasPointDirty(x,y,3);
+    invalidateGuiStudioPiecePreview(piece);
+  }else{
+    delete layer.pixels[key];
+    layer.eraseMask=layer.eraseMask||{};
+    layer.eraseMask[key]=true;
+    updateGuiStudioLayerCanvasPoint(piece,layer,x,y,null,{erase:true});
+    markGuiStudioCanvasPointDirty(x,y,3);
+    invalidateGuiStudioPiecePreview(piece);
+  }
+}
+function guiStudioBrushStampBounds(point,size=1){
+  const zone=guiStudioActiveZone();
+  const radius=Math.max(0,Math.floor(size/2));
+  const x=Math.max(zone.x,point.x-radius);
+  const y=Math.max(zone.y,point.y-radius);
+  const right=Math.min(zone.x+zone.w,point.x+radius+1);
+  const bottom=Math.min(zone.y+zone.h,point.y+radius+1);
+  return right>x&&bottom>y?{x,y,w:right-x,h:bottom-y}:null;
+}
+function guiStudioSelectionBoundsRelation(bounds,selection=guiStudioSelectionForPiece()){
+  if(!bounds)return 'outside';
+  if(!selection)return 'inside';
+  const selectionBounds=selection.bounds;
+  if(selectionBounds&&!guiStudioBoundsIntersection(bounds,selectionBounds))return 'outside';
+  if(selection.type==='rect'&&selectionBounds){
+    return guiStudioBoundsContains(selectionBounds,bounds)?'inside':'partial';
+  }
+  if(selection.type==='ellipse'&&selectionBounds&&guiStudioBoundsContains(selectionBounds,bounds)){
+    const right=bounds.x+bounds.w-1;
+    const bottom=bounds.y+bounds.h-1;
+    const corners=[
+      {x:bounds.x,y:bounds.y},
+      {x:right,y:bounds.y},
+      {x:bounds.x,y:bottom},
+      {x:right,y:bottom}
+    ];
+    if(corners.every(p=>guiStudioSelectionContains(p.x,p.y,selection)))return 'inside';
+  }
+  if(selection.keys&&selectionBounds&&bounds.w*bounds.h<=128){
+    let any=false;
+    let all=true;
+    for(let y=bounds.y;y<bounds.y+bounds.h;y++){
+      for(let x=bounds.x;x<bounds.x+bounds.w;x++){
+        const hit=!!selection.keys[`${x},${y}`];
+        if(hit)any=true;
+        else all=false;
+      }
+    }
+    return all?'inside':any?'partial':'outside';
+  }
+  return 'partial';
+}
+function guiStudioSelectionClipBounds(bounds,selection=guiStudioSelectionForPiece()){
+  if(!bounds)return null;
+  if(!selection?.bounds)return bounds;
+  return guiStudioBoundsIntersection(bounds,selection.bounds);
+}
+function forEachGuiStudioRectPixel(bounds,fn){
+  for(let y=bounds.y;y<bounds.y+bounds.h;y++){
+    for(let x=bounds.x;x<bounds.x+bounds.w;x++)fn(x,y,`${x},${y}`);
+  }
+}
+function paintGuiStudioBrushStamp(point,color,size=1){
+  const bounds=guiStudioBrushStampBounds(point,size);
+  if(!bounds)return;
+  const selection=guiStudioSelectionForPiece();
+  const selectionRelation=guiStudioSelectionBoundsRelation(bounds,selection);
+  if(selectionRelation==='outside')return;
+  if(size<=6||selectionRelation==='partial'){
+    const clipBounds=selectionRelation==='partial'?(guiStudioSelectionClipBounds(bounds,selection)||bounds):bounds;
+    forEachGuiStudioRectPixel(clipBounds,(x,y)=>paintGuiStudioPoint(x,y,color));
+    return;
+  }
+  const piece=selectedGuiStudioPiece();
+  const data=guiStudioPieceData(piece);
+  const layer=guiStudioActiveLayer();
+  if(layer.locked)return;
+  if(color){
+    const fill=normalizeHexColor(color,guiStudioDraft.primary);
+    layer.fills=Array.isArray(layer.fills)?layer.fills:[];
+    layer.fills.push({type:'rect',color:fill,x:bounds.x,y:bounds.y,w:bounds.w,h:bounds.h,bounds:{...bounds}});
+    if(layer.eraseFills){
+      const eraseClip=guiStudioSubtractRectFromFillList(layer.eraseFills,bounds);
+      if(eraseClip.changed)layer.eraseFills=eraseClip.fills;
+    }
+    if(layer.id==='base'){
+      const baseClip=guiStudioSubtractRectFromFillList(data.baseEraseFills,bounds);
+      if(baseClip.changed)data.baseEraseFills=baseClip.fills;
+    }
+    if(Object.keys(layer.pixels||{}).length||Object.keys(layer.eraseMask||{}).length||(layer.id==='base'&&Object.keys(data.baseErase||{}).length)){
+      forEachGuiStudioRectPixel(bounds,(_x,_y,key)=>{
+        delete layer.pixels[key];
+        if(layer.eraseMask)delete layer.eraseMask[key];
+        if(layer.id==='base')delete data.baseErase[key];
+      });
+    }
+    updateGuiStudioLayerCanvasRect(piece,layer,bounds,fill);
+    if(layer.id==='base')updateGuiStudioBaseEraseCanvasRect(piece,bounds,false);
+    expandGuiStudioBoundsToBounds(data,bounds);
+  }else if(layer.id==='base'){
+    data.baseEraseFills=Array.isArray(data.baseEraseFills)?data.baseEraseFills:[];
+    data.baseEraseFills.push({type:'rect',color:'#000000',x:bounds.x,y:bounds.y,w:bounds.w,h:bounds.h,bounds:{...bounds}});
+    if(Object.keys(layer.pixels||{}).length||Object.keys(data.baseErase||{}).length){
+      forEachGuiStudioRectPixel(bounds,(_x,_y,key)=>{
+        delete layer.pixels[key];
+        delete data.baseErase[key];
+      });
+    }
+    updateGuiStudioLayerCanvasRect(piece,layer,bounds,null);
+    updateGuiStudioBaseEraseCanvasRect(piece,bounds,true);
+  }else{
+    layer.eraseMask=layer.eraseMask||{};
+    layer.eraseFills=Array.isArray(layer.eraseFills)?layer.eraseFills:[];
+    layer.eraseFills.push({type:'rect',color:'#000000',x:bounds.x,y:bounds.y,w:bounds.w,h:bounds.h,bounds:{...bounds}});
+    if(Object.keys(layer.pixels||{}).length||Object.keys(layer.eraseMask||{}).length){
+      forEachGuiStudioRectPixel(bounds,(_x,_y,key)=>{
+        delete layer.pixels[key];
+        delete layer.eraseMask[key];
+      });
+    }
+    updateGuiStudioLayerCanvasRect(piece,layer,bounds,null,{erase:true});
+  }
+  guiStudioExpandDirtyBounds(bounds,3);
+  invalidateGuiStudioPiecePreview(piece);
+}
+function paintGuiStudioBrush(point,color,size=1){
+  paintGuiStudioBrushStamp(point,color,size);
+}
+function drawGuiStudioLine(start,end,color,size=1){
+  if(!start||!end)return;
+  const dx=end.x-start.x;
+  const dy=end.y-start.y;
+  const dist=Math.max(Math.abs(dx),Math.abs(dy),1);
+  const spacing=Math.max(1,Math.floor(Math.max(1,size)/4));
+  let lastX=null,lastY=null;
+  for(let d=0;d<=dist;d+=spacing){
+    const t=d/dist;
+    const x=Math.round(start.x+dx*t);
+    const y=Math.round(start.y+dy*t);
+    if(x!==lastX||y!==lastY){
+      paintGuiStudioBrush({x,y},color,size);
+      lastX=x;
+      lastY=y;
+    }
+  }
+  if(lastX!==end.x||lastY!==end.y){
+    paintGuiStudioBrush(end,color,size);
+  }
+}
+function paintGuiStudioRoundBrushStamp(point,color,size=1){
+  const bounds=guiStudioBrushStampBounds(point,size);
+  if(!bounds)return;
+  const radius=Math.max(.5,size/2);
+  const cx=point.x+.5;
+  const cy=point.y+.5;
+  const r2=radius*radius;
+  for(let y=bounds.y;y<bounds.y+bounds.h;y++){
+    for(let x=bounds.x;x<bounds.x+bounds.w;x++){
+      const dx=x+.5-cx;
+      const dy=y+.5-cy;
+      if((dx*dx+dy*dy)<=r2)paintGuiStudioPoint(x,y,color);
+    }
+  }
+}
+function paintGuiStudioRoundBrush(point,color,size=1){
+  paintGuiStudioRoundBrushStamp(point,color,size);
+}
+function drawGuiStudioRoundBrushLine(start,end,color,size=1){
+  if(!start||!end)return;
+  const dx=end.x-start.x;
+  const dy=end.y-start.y;
+  const dist=Math.max(Math.abs(dx),Math.abs(dy),1);
+  const spacing=Math.max(1,Math.floor(Math.max(1,size)/5));
+  let lastX=null,lastY=null;
+  for(let d=0;d<=dist;d+=spacing){
+    const t=d/dist;
+    const x=Math.round(start.x+dx*t);
+    const y=Math.round(start.y+dy*t);
+    if(x!==lastX||y!==lastY){
+      paintGuiStudioRoundBrush({x,y},color,size);
+      lastX=x;
+      lastY=y;
+    }
+  }
+  if(lastX!==end.x||lastY!==end.y)paintGuiStudioRoundBrush(end,color,size);
+}
+function paintGuiStudioSpray(point,color,size=1,density=28){
+  const zone=guiStudioActiveZone();
+  const radius=Math.max(1,size/2);
+  const count=Math.max(1,Math.round(clampGuiNumber(density,1,96,28)*(Math.max(1,size)/16)));
+  for(let i=0;i<count;i++){
+    const angle=Math.random()*Math.PI*2;
+    const dist=Math.sqrt(Math.random())*radius;
+    const x=Math.round(point.x+Math.cos(angle)*dist);
+    const y=Math.round(point.y+Math.sin(angle)*dist);
+    if(x>=zone.x&&y>=zone.y&&x<zone.x+zone.w&&y<zone.y+zone.h)paintGuiStudioPoint(x,y,color);
+  }
+}
+function drawGuiStudioSprayLine(start,end,color,size=1,density=28){
+  if(!start||!end)return;
+  const dx=end.x-start.x;
+  const dy=end.y-start.y;
+  const dist=Math.max(Math.abs(dx),Math.abs(dy),1);
+  const spacing=Math.max(1,Math.floor(Math.max(1,size)/3));
+  let lastX=null,lastY=null;
+  for(let d=0;d<=dist;d+=spacing){
+    const t=d/dist;
+    const x=Math.round(start.x+dx*t);
+    const y=Math.round(start.y+dy*t);
+    if(x!==lastX||y!==lastY){
+      paintGuiStudioSpray({x,y},color,size,density);
+      lastX=x;
+      lastY=y;
+    }
+  }
+  if(lastX!==end.x||lastY!==end.y)paintGuiStudioSpray(end,color,size,density);
+}
+function fillGuiStudioAffected(color,gradient=false,explicitPixels=null){
+  const fill=normalizeHexColor(color,guiStudioDraft.primary);
+  const pixels=explicitPixels||guiStudioTargetPixels();
+  const bounds=guiStudioPointsBounds(pixels)||guiStudioPieceData().bounds;
+  const a=guiStudioHexToRgb(fill),b=guiStudioHexToRgb(guiStudioDraft.secondary);
+  const data=guiStudioPieceData();
+  const layer=guiStudioActiveLayer();
+  if(!gradient&&pixels.length>=GUI_STUDIO_COMPACT_FILL_MIN_PIXELS&&!layer.locked){
+    const compact=guiStudioAddSpanFill(layer,pixels,fill);
+    if(compact){
+      pixels.forEach(p=>{
+        const key=`${p.x},${p.y}`;
+        delete layer.pixels[key];
+        if(layer.eraseMask)delete layer.eraseMask[key];
+        if(layer.id==='base')delete data.baseErase[key];
+      });
+      expandGuiStudioBoundsToBounds(data,compact.bounds);
+      invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+      return;
+    }
+  }
+  pixels.forEach(p=>{
+    const t=gradient&&bounds.w>1?(p.x-bounds.x)/(bounds.w-1):0;
+    paintGuiStudioPoint(p.x,p.y,gradient?guiStudioRgbToHex(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t):fill);
+  });
+}
+function eraseGuiStudioMagic(point){
+  const keys=guiStudioFloodKeys(point,clampGuiNumber(ensureGuiStudioToolOptions().tolerance,0,64,16));
+  Object.keys(keys).forEach(key=>{const [x,y]=key.split(',').map(Number);paintGuiStudioPoint(x,y,null);});
+}
+function applyGuiStudioRetouch(point){
+  if(!point||!guiStudioSelectionContains(point.x,point.y))return;
+  const current=guiStudioRenderedPixel(point.x,point.y);
+  if(!current)return;
+  if(guiStudioActiveTool==='Blur Tool'){
+    const colors=[];
+    for(let y=point.y-1;y<=point.y+1;y++)for(let x=point.x-1;x<=point.x+1;x++)if(x>=0&&y>=0&&x<GUI_STUDIO_CANVAS_W&&y<GUI_STUDIO_CANVAS_H){
+      const color=guiStudioRenderedPixel(x,y);
+      if(color)colors.push(guiStudioHexToRgb(color));
+    }
+    if(!colors.length)return;
+    const total=colors.reduce((sum,c)=>({r:sum.r+c.r,g:sum.g+c.g,b:sum.b+c.b}),{r:0,g:0,b:0});
+    paintGuiStudioPoint(point.x,point.y,guiStudioRgbToHex(total.r/colors.length,total.g/colors.length,total.b/colors.length));
+  }else if(guiStudioActiveTool==='Sharpen Tool'){
+    const c=guiStudioHexToRgb(current);
+    paintGuiStudioPoint(point.x,point.y,guiStudioRgbToHex((c.r-128)*1.18+128,(c.g-128)*1.18+128,(c.b-128)*1.18+128));
+  }else if(guiStudioActiveTool==='Smudge Tool'){
+    const color=guiStudioPointer?.smudgeColor||current;
+    paintGuiStudioPoint(point.x,point.y,color);
+    if(guiStudioPointer)guiStudioPointer.smudgeColor=current;
+  }
+}
+function guiStudioNormalizeTextFontName(name){
+  const raw=String(name||'').trim();
+  const lower=raw.toLowerCase();
+  if(!raw||lower==='minecraft'||lower==='minecraft normal'||lower==='minecraft regular')return 'Minecraft Regular';
+  if(lower==='minecraft bold')return 'Minecraft Bold';
+  if(lower==='minecraft italic')return 'Minecraft Italic';
+  if(lower==='minecraft bold italic'||lower==='minecraft italic bold')return 'Minecraft Bold Italic';
+  if(lower==='minecraft legacy')return 'Minecraft Legacy';
+  if(lower==='minecraft legacy bold')return 'Minecraft Legacy Bold';
+  if(lower==='minecraft classic')return 'Minecraft Classic';
+  if(lower==='monospace')return 'Monospace';
+  if(lower==='serif')return 'Serif';
+  if(lower==='sans-serif'||lower==='sans serif')return 'Sans Serif';
+  return GUI_STUDIO_TEXT_FONT_CHOICES.includes(raw)?raw:'Minecraft Regular';
+}
+function guiStudioCanvasFontSpec(name,size){
+  const normalized=guiStudioNormalizeTextFontName(name);
+  const mk=(family,weight=400,style='normal',threshold=104)=>({
+    normalized,
+    font:`${style} ${weight} ${size}px ${family}`,
+    threshold
+  });
+  if(normalized==='Minecraft Bold')return mk("'Minecraft Normal','Minecraft',monospace",700,'normal',116);
+  if(normalized==='Minecraft Italic')return mk("'Minecraft Normal','Minecraft',monospace",400,'italic',112);
+  if(normalized==='Minecraft Bold Italic')return mk("'Minecraft Normal','Minecraft',monospace",700,'italic',122);
+  if(normalized==='Minecraft Legacy')return mk("'Minecraft Legacy','Minecraft Normal','Minecraft',monospace",400,'normal',120);
+  if(normalized==='Minecraft Legacy Bold')return mk("'Minecraft Legacy','Minecraft Normal','Minecraft',monospace",700,'normal',126);
+  if(normalized==='Minecraft Classic')return mk("'Minecraft Classic','Minecraft Normal','Minecraft',monospace",400,'normal',116);
+  if(normalized==='Serif')return mk("Georgia,'Times New Roman',serif",400,'normal',68);
+  if(normalized==='Sans Serif')return mk("'DM Sans',Arial,sans-serif",400,'normal',68);
+  if(normalized==='Monospace')return mk("'JetBrains Mono','Consolas',monospace",400,'normal',78);
+  return mk("'Minecraft Normal','Minecraft',monospace",400,'normal',108);
+}
+function stampGuiStudioTextString(point,text,vertical=false){
+  const value=String(text||'Text').slice(0,96);
+  const opts=ensureGuiStudioToolOptions();
+  const color=normalizeHexColor(opts.textColor,guiStudioDraft.primary);
+  const size=Math.round(clampGuiNumber(opts.textSize,6,96,12));
+  const fontSpec=guiStudioCanvasFontSpec(opts.textFont||'Minecraft Regular',size);
+  const canvas=document.createElement('canvas');
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  if(!ctx)return;
+  ctx.font=fontSpec.font;
+  ctx.textBaseline='top';
+  ctx.textAlign='left';
+  const chars=[...value];
+  const lineGap=Math.max(1,Math.round(size*.16));
+  const lines=vertical?chars:[value];
+  const widths=lines.map(line=>Math.ceil(ctx.measureText(line||' ').width));
+  const w=Math.max(1,...widths)+4;
+  const h=vertical
+    ? Math.max(1,chars.length)*(size+lineGap)+4
+    : Math.ceil(size*1.25)+4;
+  canvas.width=Math.min(GUI_STUDIO_CANVAS_W,w);
+  canvas.height=Math.min(GUI_STUDIO_CANVAS_H,h);
+  ctx.imageSmoothingEnabled=false;
+  ctx.font=fontSpec.font;
+  ctx.textBaseline='top';
+  ctx.fillStyle=color;
+  if(vertical){
+    chars.forEach((ch,i)=>ctx.fillText(ch,2,2+i*(size+lineGap)));
+  }else{
+    ctx.fillText(value,2,2);
+  }
+  const image=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+  const rgb=guiStudioHexToRgb(color);
+  const alphaThreshold=fontSpec.threshold;
+  for(let y=0;y<canvas.height;y++){
+    for(let x=0;x<canvas.width;x++){
+      const idx=(y*canvas.width+x)*4;
+      if(image[idx+3]<alphaThreshold)continue;
+      paintGuiStudioPoint(point.x+x,point.y+y,guiStudioRgbToHex(rgb.r,rgb.g,rgb.b));
+    }
+  }
+}
+function preloadGuiStudioTextFonts(){
+  const fonts=document.fonts;
+  if(!fonts||typeof fonts.load!=='function')return;
+  GUI_STUDIO_TEXT_FONT_CHOICES.forEach(name=>{
+    if(name==='Serif'||name==='Sans Serif'||name==='Monospace')return;
+    try{fonts.load(guiStudioCanvasFontSpec(name,16).font).catch?.(()=>{});}catch(_err){}
+  });
+}
+function openGuiStudioTextOverlay(point){
+  const workspace=$('#guiStudioPixelWorkspace');
+  const overlay=$('#guiStudioTextOverlay');
+  const input=$('#guiStudioTextInput');
+  if(!workspace||!overlay||!input||!point)return;
+  guiStudioTextOverlayBefore=getGuiStudioState();
+  const canvasRect=$('#guiStudioPixelCanvas')?.getBoundingClientRect();
+  const workspaceRect=workspace.getBoundingClientRect();
+  const left=(canvasRect.left-workspaceRect.left)+(point.x/GUI_STUDIO_CANVAS_W*canvasRect.width);
+  const top=(canvasRect.top-workspaceRect.top)+(point.y/GUI_STUDIO_CANVAS_H*canvasRect.height);
+  overlay.style.left=`${left}px`;
+  overlay.style.top=`${top}px`;
+  overlay.classList.add('open');
+  overlay.dataset.x=String(point.x);
+  overlay.dataset.y=String(point.y);
+  input.value='';
+  input.focus();
+}
+function closeGuiStudioTextOverlay(commit=false){
+  const overlay=$('#guiStudioTextOverlay');
+  const input=$('#guiStudioTextInput');
+  if(!overlay||!input||!overlay.classList.contains('open'))return;
+  if(commit){
+    const text=String(input.value||'').trim();
+    if(!text){
+      overlay.classList.remove('open');
+      guiStudioTextOverlayBefore=null;
+      return;
+    }
+    const point={x:clampGuiNumber(overlay.dataset.x,0,GUI_STUDIO_CANVAS_W-1,0),y:clampGuiNumber(overlay.dataset.y,0,GUI_STUDIO_CANVAS_H-1,0)};
+    addGuiStudioLayer(`Text: ${text.slice(0,18)}`,{}, {kind:'text'});
+    stampGuiStudioTextString(point,text,ensureGuiStudioToolOptions().textDirection==='vertical');
+    renderGuiStudioDraft();
+    if(guiStudioTextOverlayBefore)recordGuiStudioChange(guiStudioTextOverlayBefore);
+  }
+  overlay.classList.remove('open');
+  guiStudioTextOverlayBefore=null;
+}
+function stampGuiStudioText(point,vertical=false){
+  const glyphs={T:['111','010','010','010','010'],Q:['111','101','101','111','001'],L:['100','100','100','100','111']};
+  [...(vertical?'QL':'T')].forEach((ch,i)=>{
+    (glyphs[ch]||glyphs.T).forEach((row,y)=>[...row].forEach((bit,x)=>{
+      if(bit==='1')paintGuiStudioPoint(point.x+x+(vertical?0:i*4),point.y+y+(vertical?i*6:0),guiStudioPaintColor());
+    }));
+  });
+}
+function rotateGuiStudioSelection(){
+  const data=guiStudioPieceData();
+  const layer=guiStudioActiveLayer();
+  if(layer.locked)return;
+  const selection=guiStudioSelectionForPiece();
+  const bounds=selection?.bounds||data.bounds;
+  const next={...layer.pixels};
+  Object.entries(layer.pixels).forEach(([key,color])=>{
+    const [x,y]=key.split(',').map(Number);
+    if(!guiStudioSelectionContains(x,y,selection))return;
+    delete next[key];
+    const nx=bounds.x+(bounds.h-1-(y-bounds.y));
+    const ny=bounds.y+(x-bounds.x);
+    if(nx>=0&&ny>=0&&nx<GUI_STUDIO_CANVAS_W&&ny<GUI_STUDIO_CANVAS_H){
+      next[`${nx},${ny}`]=color;
+      expandGuiStudioBounds(data,nx,ny);
+    }
+  });
+  layer.pixels=next;
+  invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+}
+function moveGuiStudioSelection(dx,dy){
+  const selection=guiStudioSelectionForPiece();
+  if(!selection||(!dx&&!dy))return null;
+  const data=guiStudioPieceData();
+  const layer=guiStudioActiveLayer();
+  if(layer.locked)return null;
+  const beforeBounds=selection.bounds?{...selection.bounds}:null;
+  const moving={};
+  Object.entries(layer.pixels).forEach(([key,color])=>{
+    const [x,y]=key.split(',').map(Number);
+    if(guiStudioSelectionContains(x,y,selection))moving[key]=color;
+  });
+  const movingBounds=guiStudioPointsBounds(Object.keys(moving).map(key=>{const [x,y]=key.split(',').map(Number);return {x,y};}));
+  const zone=guiStudioActiveZone();
+  if(movingBounds){
+    const clamped=clampGuiStudioLayerDelta({pixels:moving},dx,dy);
+    dx=clamped.dx;
+    dy=clamped.dy;
+  }else if(selection.bounds){
+    if(selection.bounds.w<=zone.w)dx=Math.max(zone.x-selection.bounds.x,Math.min(zone.x+zone.w-(selection.bounds.x+selection.bounds.w),dx));
+    if(selection.bounds.h<=zone.h)dy=Math.max(zone.y-selection.bounds.y,Math.min(zone.y+zone.h-(selection.bounds.y+selection.bounds.h),dy));
+  }
+  if(!dx&&!dy)return null;
+  Object.keys(moving).forEach(key=>delete layer.pixels[key]);
+  Object.entries(moving).forEach(([key,color])=>{
+    const [x,y]=key.split(',').map(Number);
+    const nextPoint=guiStudioClampPointToActiveZone({x:x+dx,y:y+dy},zone);
+    const nx=nextPoint.x,ny=nextPoint.y;
+    layer.pixels[`${nx},${ny}`]=color;
+    expandGuiStudioBounds(data,nx,ny);
+  });
+  if(selection.bounds){
+    selection.bounds.x=Math.max(zone.x,Math.min(zone.x+zone.w-selection.bounds.w,selection.bounds.x+dx));
+    selection.bounds.y=Math.max(zone.y,Math.min(zone.y+zone.h-selection.bounds.h,selection.bounds.y+dy));
+  }
+  if(selection.points)selection.points=selection.points.map(p=>guiStudioClampPointToActiveZone({x:p.x+dx,y:p.y+dy},zone));
+  const piece=selectedGuiStudioPiece();
+  clearGuiStudioLayerCanvasForLayer(piece,layer.id,{clearStatic:true});
+  const dirty=guiStudioBoundsUnion(beforeBounds,selection.bounds,movingBounds&&{x:movingBounds.x+dx,y:movingBounds.y+dy,w:movingBounds.w,h:movingBounds.h},movingBounds);
+  if(dirty)guiStudioExpandDirtyBounds(dirty,3);
+  invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+  return dirty;
+}
+function guiStudioSelectionPixels(selection=guiStudioSelectionForPiece()){
+  if(!selection)return [];
+  if(selection.keys)return Object.keys(selection.keys).map(key=>{const [x,y]=key.split(',').map(Number);return {x,y};}).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
+  if(selection.spans)return selection.spans.flatMap(span=>Array.from({length:span.w},(_,i)=>({x:span.x+i,y:span.y})));
+  const b=selection.bounds;
+  if(!b)return [];
+  const pixels=[];
+  const zone=guiStudioActiveZone();
+  for(let y=b.y;y<b.y+b.h;y++){
+    for(let x=b.x;x<b.x+b.w;x++){
+      if(guiStudioPointInActiveZone({x,y},zone)&&guiStudioSelectionContains(x,y,selection))pixels.push({x,y});
+    }
+  }
+  return pixels;
+}
+function guiStudioFillListHasContent(fills=[]){
+  return (fills||[]).some(fill=>{
+    if(fill?.type==='rect')return fill.w>0&&fill.h>0;
+    if(fill?.type==='spans')return (fill.spans||[]).some(span=>span.w>0);
+    return false;
+  });
+}
+function guiStudioLayerHasDrawableContent(layer){
+  return !!(layer&&(Object.keys(layer.pixels||{}).length||guiStudioFillListHasContent(layer.fills)));
+}
+function guiStudioSelectionCoversLayer(selection,layer){
+  if(!selection||!layer||layer.id==='base')return false;
+  const bounds=guiStudioLayerDrawableBounds(layer);
+  if(!bounds)return false;
+  if(selection.type==='rect'&&selection.bounds){
+    const b=selection.bounds;
+    return b.x<=bounds.x&&b.y<=bounds.y&&b.x+b.w>=bounds.x+bounds.w&&b.y+b.h>=bounds.y+bounds.h;
+  }
+  const pixels=guiStudioSelectionPixels(selection);
+  if(!pixels.length||bounds.w*bounds.h>200000)return false;
+  const selected=new Set(pixels.map(p=>`${p.x},${p.y}`));
+  for(let y=bounds.y;y<bounds.y+bounds.h;y++){
+    for(let x=bounds.x;x<bounds.x+bounds.w;x++){
+      if(guiStudioLayerColorAt(layer,x,y)&&!selected.has(`${x},${y}`))return false;
+    }
+  }
+  return true;
+}
+function guiStudioPixelMapToColorSpanFills(pixels={}){
+  const rows=new Map();
+  Object.entries(pixels).forEach(([key,color])=>{
+    const [x,y]=key.split(',').map(Number);
+    if(!Number.isFinite(x)||!Number.isFinite(y))return;
+    const row=rows.get(y)||[];
+    row.push({x,color:normalizeHexColor(color,guiStudioDraft.primary)});
+    rows.set(y,row);
+  });
+  const byColor=new Map();
+  [...rows.entries()].sort((a,b)=>a[0]-b[0]).forEach(([y,row])=>{
+    row.sort((a,b)=>a.x-b.x);
+    let runColor=null,runStart=0,lastX=null;
+    const flush=()=>{
+      if(!runColor)return;
+      const spans=byColor.get(runColor)||[];
+      spans.push({x:runStart,y,w:lastX-runStart+1});
+      byColor.set(runColor,spans);
+      runColor=null;
+    };
+    row.forEach(({x,color})=>{
+      if(color!==runColor||lastX===null||x!==lastX+1){
+        flush();
+        runColor=color;
+        runStart=x;
+      }
+      lastX=x;
+    });
+    flush();
+  });
+  return [...byColor.entries()].map(([color,spans])=>({type:'spans',color,spans,bounds:guiStudioBoundsFromSpans(spans)}));
+}
+function guiStudioCompositeLayerIdsToPixels(layerIds,bounds,selection=null,piece=selectedGuiStudioPiece()){
+  if(!bounds||!layerIds?.length)return null;
+  const data=guiStudioPieceData(piece);
+  const meta=GUI_STUDIO_PIECES[piece]||GUI_STUDIO_PIECES['Quest Main'];
+  const selected=new Set(layerIds);
+  const scratch=document.createElement('canvas');
+  scratch.width=Math.max(1,Math.round(bounds.w));
+  scratch.height=Math.max(1,Math.round(bounds.h));
+  const ctx=scratch.getContext('2d');
+  if(!ctx)return null;
+  ctx.imageSmoothingEnabled=false;
+  ctx.save();
+  ctx.translate(-bounds.x,-bounds.y);
+  data.layers.forEach(layer=>{
+    if(!selected.has(layer.id)||layer.visible===false)return;
+    ctx.save();
+    ctx.globalAlpha=clampGuiNumber(layer.opacity,0,1,1);
+    ctx.globalCompositeOperation=guiStudioCanvasBlendMode(layer.blend);
+    if(layer.id==='base'){
+      drawGuiStudioBase(ctx,meta);
+      drawGuiStudioLayerContent(ctx,layer);
+      ctx.globalCompositeOperation='destination-out';
+      guiStudioApplyBaseEraseMask(ctx,data);
+    }else{
+      drawGuiStudioLayerContent(ctx,layer);
+    }
+    ctx.restore();
+  });
+  ctx.restore();
+  let raw;
+  try{raw=ctx.getImageData(0,0,scratch.width,scratch.height).data;}catch(_err){return null;}
+  const pixels={};
+  let count=0;
+  for(let y=0;y<scratch.height;y++){
+    for(let x=0;x<scratch.width;x++){
+      const sx=bounds.x+x,sy=bounds.y+y;
+      if(selection&&!guiStudioSelectionContains(sx,sy,selection))continue;
+      const i=(y*scratch.width+x)*4;
+      if(raw[i+3]<=12)continue;
+      pixels[`${sx},${sy}`]=guiStudioRgbToHex(raw[i],raw[i+1],raw[i+2]);
+      count++;
+    }
+  }
+  return count?{pixels,count,bounds:{...bounds}}:null;
+}
+function guiStudioCopySelectionToClipboard(){
+  const selection=guiStudioSelectionForPiece();
+  if(!selection)return false;
+  const bounds=selection.bounds||guiStudioPointsBounds(guiStudioSelectionPixels(selection));
+  if(!bounds)return false;
+  const piece=selectedGuiStudioPiece();
+  const data=guiStudioPieceData(piece);
+  const selectedIds=guiStudioSelectedLayerIds(piece).filter(id=>data.layers.some(layer=>layer.id===id));
+  const layerIds=selectedIds.length>1?selectedIds:data.layers.map(layer=>layer.id);
+  const composite=guiStudioCompositeLayerIdsToPixels(layerIds,bounds,selection,piece);
+  if(!composite?.count)return false;
+  const pixels={};
+  Object.entries(composite.pixels).forEach(([key,color])=>{
+    const [x,y]=key.split(',').map(Number);
+    if(Number.isFinite(x)&&Number.isFinite(y))pixels[`${x-bounds.x},${y-bounds.y}`]=color;
+  });
+  guiStudioClipboard={piece:selectedGuiStudioPiece(),w:bounds.w,h:bounds.h,pixels,count:composite.count};
+  return true;
+}
+function guiStudioEraseBoundsFromActiveLayer(bounds){
+  const piece=selectedGuiStudioPiece();
+  const data=guiStudioPieceData(piece);
+  const layer=guiStudioActiveLayer(piece);
+  if(!layer||layer.locked||!bounds)return false;
+  if(layer.id==='base'){
+    data.baseEraseFills=Array.isArray(data.baseEraseFills)?data.baseEraseFills:[];
+    data.baseEraseFills.push({type:'rect',color:'#000000',x:bounds.x,y:bounds.y,w:bounds.w,h:bounds.h,bounds:{...bounds}});
+    if(Object.keys(layer.pixels||{}).length||Object.keys(data.baseErase||{}).length){
+      forEachGuiStudioRectPixel(bounds,(_x,_y,key)=>{
+        delete layer.pixels[key];
+        delete data.baseErase[key];
+      });
+    }
+    updateGuiStudioLayerCanvasRect(piece,layer,bounds,null);
+    updateGuiStudioBaseEraseCanvasRect(piece,bounds,true);
+  }else{
+    layer.eraseFills=Array.isArray(layer.eraseFills)?layer.eraseFills:[];
+    layer.eraseFills.push({type:'rect',color:'#000000',x:bounds.x,y:bounds.y,w:bounds.w,h:bounds.h,bounds:{...bounds}});
+    if(Object.keys(layer.pixels||{}).length||Object.keys(layer.eraseMask||{}).length){
+      forEachGuiStudioRectPixel(bounds,(_x,_y,key)=>{
+        delete layer.pixels[key];
+        if(layer.eraseMask)delete layer.eraseMask[key];
+      });
+    }
+    updateGuiStudioLayerCanvasRect(piece,layer,bounds,null,{erase:true});
+  }
+  guiStudioExpandDirtyBounds(bounds,3);
+  invalidateGuiStudioPiecePreview(piece);
+  return true;
+}
+function guiStudioDeleteSelectionFromActiveLayer(){
+  const selection=guiStudioSelectionForPiece();
+  const layer=guiStudioActiveLayer();
+  if(!selection||!layer||layer.locked)return false;
+  if(guiStudioSelectionCoversLayer(selection,layer)){
+    const deleted=deleteGuiStudioLayer(layer.id);
+    if(deleted)guiStudioDraft.selection=null;
+    return deleted;
+  }
+  if(selection.type==='rect'&&selection.bounds){
+    const erased=guiStudioEraseBoundsFromActiveLayer(selection.bounds);
+    if(erased&&layer.id!=='base'&&!guiStudioLayerHasDrawableContent(layer))deleteGuiStudioLayer(layer.id);
+    if(erased)guiStudioDraft.selection=null;
+    return erased;
+  }
+  const piece=selectedGuiStudioPiece();
+  const pixels=guiStudioSelectionPixels(selection);
+  if(!pixels.length)return false;
+  pixels.forEach(p=>paintGuiStudioPoint(p.x,p.y,null));
+  if(layer.id!=='base'&&!guiStudioLayerHasDrawableContent(layer))deleteGuiStudioLayer(layer.id);
+  guiStudioDraft.selection=null;
+  invalidateGuiStudioPiecePreview(piece);
+  return true;
+}
+function guiStudioPasteClipboard(){
+  if(!guiStudioClipboard?.pixels)return false;
+  const zone=guiStudioActiveZone();
+  const w=Math.max(1,Number(guiStudioClipboard.w)||1);
+  const h=Math.max(1,Number(guiStudioClipboard.h)||1);
+  const x0=Math.max(zone.x,Math.min(zone.x+zone.w-w,Math.round(zone.x+(zone.w-w)/2)));
+  const y0=Math.max(zone.y,Math.min(zone.y+zone.h-h,Math.round(zone.y+(zone.h-h)/2)));
+  const pixels={};
+  Object.entries(guiStudioClipboard.pixels).forEach(([key,color])=>{
+    const [x,y]=key.split(',').map(Number);
+    if(!Number.isFinite(x)||!Number.isFinite(y))return;
+    const nx=x0+x,ny=y0+y;
+    if(guiStudioPointInActiveZone({x:nx,y:ny},zone))pixels[`${nx},${ny}`]=color;
+  });
+  if(!Object.keys(pixels).length)return false;
+  const layer=addGuiStudioLayer('Pasted Selection',{}, {kind:'image'});
+  layer.fills=guiStudioPixelMapToColorSpanFills(pixels);
+  recalcGuiStudioPieceBounds();
+  invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+  guiStudioDraft.selection={
+    piece:selectedGuiStudioPiece(),
+    type:'rect',
+    bounds:guiStudioLayerPixelBounds(layer)
+  };
+  return true;
+}
+function guiStudioLayerPixelBounds(layer){
+  const points=Object.keys(layer?.pixels||{}).map(key=>{
+    const [x,y]=key.split(',').map(Number);
+    return {x,y};
+  }).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
+  Object.keys(layer?.eraseMask||{}).forEach(key=>{
+    const [x,y]=key.split(',').map(Number);
+    if(Number.isFinite(x)&&Number.isFinite(y))points.push({x,y});
+  });
+  (layer?.eraseFills||[]).forEach(fill=>{
+    const b=fill.bounds||(fill.type==='spans'?guiStudioBoundsFromSpans(fill.spans):fill.type==='rect'?{x:fill.x,y:fill.y,w:fill.w,h:fill.h}:null);
+    if(b)points.push({x:b.x,y:b.y},{x:b.x+b.w-1,y:b.y+b.h-1});
+  });
+  (layer?.fills||[]).forEach(fill=>{
+    const b=fill.bounds||(fill.type==='spans'?guiStudioBoundsFromSpans(fill.spans):fill.type==='rect'?{x:fill.x,y:fill.y,w:fill.w,h:fill.h}:null);
+    if(b){
+      points.push({x:b.x,y:b.y},{x:b.x+b.w-1,y:b.y+b.h-1});
+    }
+  });
+  return guiStudioPointsBounds(points);
+}
+function guiStudioMovePreviewForPiece(piece=selectedGuiStudioPiece()){
+  const pointer=guiStudioPointer;
+  if(!pointer?.moveLayer||!pointer.movePreviewActive||pointer.piece!==piece||!pointer.layerId)return null;
+  return {
+    layerId:pointer.layerId,
+    dx:Number(pointer.previewDx)||0,
+    dy:Number(pointer.previewDy)||0,
+    bounds:pointer.layerBounds||guiStudioLayerPixelBounds(guiStudioLayerById(pointer.layerId,piece))
+  };
+}
+function guiStudioLayerDrawableBounds(layer){
+  const points=Object.keys(layer?.pixels||{}).map(key=>{
+    const [x,y]=key.split(',').map(Number);
+    return {x,y};
+  }).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
+  (layer?.fills||[]).forEach(fill=>{
+    const b=fill.bounds||(fill.type==='spans'?guiStudioBoundsFromSpans(fill.spans):fill.type==='rect'?{x:fill.x,y:fill.y,w:fill.w,h:fill.h}:null);
+    if(b)points.push({x:b.x,y:b.y},{x:b.x+b.w-1,y:b.y+b.h-1});
+  });
+  return guiStudioPointsBounds(points);
+}
+function recalcGuiStudioPieceBounds(piece=selectedGuiStudioPiece()){
+  const data=guiStudioPieceData(piece);
+  const meta=GUI_STUDIO_PIECES[piece]||GUI_STUDIO_PIECES['Quest Main'];
+  const points=[
+    {x:meta.bounds.x,y:meta.bounds.y},
+    {x:meta.bounds.x+meta.bounds.w-1,y:meta.bounds.y+meta.bounds.h-1}
+  ];
+  data.layers.forEach(layer=>{
+    Object.keys(layer.pixels||{}).forEach(key=>{
+      const [x,y]=key.split(',').map(Number);
+      if(Number.isFinite(x)&&Number.isFinite(y))points.push({x,y});
+    });
+    Object.keys(layer.eraseMask||{}).forEach(key=>{
+      const [x,y]=key.split(',').map(Number);
+      if(Number.isFinite(x)&&Number.isFinite(y))points.push({x,y});
+    });
+    (layer.eraseFills||[]).forEach(fill=>{
+      const b=fill.bounds||(fill.type==='spans'?guiStudioBoundsFromSpans(fill.spans):fill.type==='rect'?{x:fill.x,y:fill.y,w:fill.w,h:fill.h}:null);
+      if(b)points.push({x:b.x,y:b.y},{x:b.x+b.w-1,y:b.y+b.h-1});
+    });
+    (layer.fills||[]).forEach(fill=>{
+      const b=fill.bounds||(fill.type==='spans'?guiStudioBoundsFromSpans(fill.spans):fill.type==='rect'?{x:fill.x,y:fill.y,w:fill.w,h:fill.h}:null);
+      if(b)points.push({x:b.x,y:b.y},{x:b.x+b.w-1,y:b.y+b.h-1});
+    });
+  });
+  data.bounds=guiStudioPointsBounds(points)||{...meta.bounds};
+}
+function clampGuiStudioLayerDelta(layer,dx,dy){
+  const b=guiStudioLayerPixelBounds(layer);
+  const zone=guiStudioActiveZone();
+  if(!b)return {dx:0,dy:0};
+  let nextDx=dx,nextDy=dy;
+  if(b.w<=zone.w){
+    nextDx=Math.max(zone.x-b.x,Math.min(zone.x+zone.w-(b.x+b.w),nextDx));
+  }
+  if(b.h<=zone.h){
+    nextDy=Math.max(zone.y-b.y,Math.min(zone.y+zone.h-(b.y+b.h),nextDy));
+  }
+  return {dx:nextDx,dy:nextDy};
+}
+function moveGuiStudioLayer(layerId,dx,dy,{live=false}={}){
+  if(!layerId||(!dx&&!dy))return null;
+  const layer=guiStudioLayerById(layerId);
+  if(!layer||layer.locked)return null;
+  const beforeBounds=guiStudioLayerPixelBounds(layer);
+  const clamped=clampGuiStudioLayerDelta(layer,dx,dy);
+  if(!clamped.dx&&!clamped.dy)return null;
+  const next={};
+  Object.entries(layer.pixels||{}).forEach(([key,color])=>{
+    const [x,y]=key.split(',').map(Number);
+    const nx=Math.max(0,Math.min(GUI_STUDIO_CANVAS_W-1,x+clamped.dx));
+    const ny=Math.max(0,Math.min(GUI_STUDIO_CANVAS_H-1,y+clamped.dy));
+    next[`${nx},${ny}`]=color;
+  });
+  layer.pixels=next;
+  const nextErase={};
+  Object.keys(layer.eraseMask||{}).forEach(key=>{
+    const [x,y]=key.split(',').map(Number);
+    const nx=Math.max(0,Math.min(GUI_STUDIO_CANVAS_W-1,x+clamped.dx));
+    const ny=Math.max(0,Math.min(GUI_STUDIO_CANVAS_H-1,y+clamped.dy));
+    nextErase[`${nx},${ny}`]=true;
+  });
+  layer.eraseMask=nextErase;
+  (layer.eraseFills||[]).forEach(fill=>{
+    if(fill.type==='spans'){
+      fill.spans=(fill.spans||[]).map(span=>({x:Math.max(0,Math.min(GUI_STUDIO_CANVAS_W-1,span.x+clamped.dx)),y:Math.max(0,Math.min(GUI_STUDIO_CANVAS_H-1,span.y+clamped.dy)),w:span.w}));
+      fill.bounds=guiStudioBoundsFromSpans(fill.spans);
+    }else if(fill.type==='rect'){
+      fill.x=Math.max(0,Math.min(GUI_STUDIO_CANVAS_W-1,fill.x+clamped.dx));
+      fill.y=Math.max(0,Math.min(GUI_STUDIO_CANVAS_H-1,fill.y+clamped.dy));
+      fill.bounds={x:fill.x,y:fill.y,w:fill.w,h:fill.h};
+    }
+  });
+  (layer.fills||[]).forEach(fill=>{
+    if(fill.type==='spans'){
+      fill.spans=(fill.spans||[]).map(span=>({x:Math.max(0,Math.min(GUI_STUDIO_CANVAS_W-1,span.x+clamped.dx)),y:Math.max(0,Math.min(GUI_STUDIO_CANVAS_H-1,span.y+clamped.dy)),w:span.w}));
+      fill.bounds=guiStudioBoundsFromSpans(fill.spans);
+    }else if(fill.type==='rect'){
+      fill.x=Math.max(0,Math.min(GUI_STUDIO_CANVAS_W-1,fill.x+clamped.dx));
+      fill.y=Math.max(0,Math.min(GUI_STUDIO_CANVAS_H-1,fill.y+clamped.dy));
+      fill.bounds={x:fill.x,y:fill.y,w:fill.w,h:fill.h};
+    }
+  });
+  const piece=selectedGuiStudioPiece();
+  clearGuiStudioLayerCanvasForLayer(piece,layer.id);
+  const afterBounds=guiStudioLayerPixelBounds(layer);
+  const dirty=guiStudioBoundsUnion(beforeBounds,afterBounds);
+  if(!live)recalcGuiStudioPieceBounds(piece);
+  if(dirty)guiStudioExpandDirtyBounds(dirty,3);
+  invalidateGuiStudioPiecePreview(piece);
+  return dirty;
+}
+function clipGuiStudioLayerFillsToZone(layer,zone){
+  if(!Array.isArray(layer?.fills)||!layer.fills.length)return;
+  layer.fills=clipGuiStudioFillListToZone(layer.fills,zone);
+}
+function clipGuiStudioFillListToZone(fills,zone){
+  if(!Array.isArray(fills)||!fills.length)return [];
+  const next=[];
+  fills.forEach(fill=>{
+    if(fill.type==='spans'){
+      const spans=(fill.spans||[]).map(span=>{
+        if(span.y<zone.y||span.y>=zone.y+zone.h)return null;
+        const x=Math.max(span.x,zone.x);
+        const right=Math.min(span.x+span.w,zone.x+zone.w);
+        return right>x?{x,y:span.y,w:right-x}:null;
+      }).filter(Boolean);
+      if(spans.length)next.push({...fill,spans,bounds:guiStudioBoundsFromSpans(spans)});
+    }else if(fill.type==='rect'){
+      const x=Math.max(fill.x,zone.x);
+      const y=Math.max(fill.y,zone.y);
+      const right=Math.min(fill.x+fill.w,zone.x+zone.w);
+      const bottom=Math.min(fill.y+fill.h,zone.y+zone.h);
+      if(right>x&&bottom>y)next.push({...fill,x,y,w:right-x,h:bottom-y,bounds:{x,y,w:right-x,h:bottom-y}});
+    }
+  });
+  return next;
+}
+function clipGuiStudioSelectionToActiveZone(zone=guiStudioActiveZone()){
+  const selection=guiStudioSelectionForPiece();
+  if(!selection)return;
+  if(selection.keys){
+    const keys={};
+    Object.keys(selection.keys).forEach(key=>{
+      const [x,y]=key.split(',').map(Number);
+      if(Number.isFinite(x)&&Number.isFinite(y)&&guiStudioPointInActiveZone({x,y},zone))keys[key]=true;
+    });
+    const points=Object.keys(keys).map(key=>{const [x,y]=key.split(',').map(Number);return {x,y};});
+    guiStudioDraft.selection=points.length?{...selection,keys,bounds:guiStudioPointsBounds(points)}:null;
+    return;
+  }
+  if(selection.bounds){
+    const x=Math.max(selection.bounds.x,zone.x);
+    const y=Math.max(selection.bounds.y,zone.y);
+    const x2=Math.min(selection.bounds.x+selection.bounds.w,zone.x+zone.w);
+    const y2=Math.min(selection.bounds.y+selection.bounds.h,zone.y+zone.h);
+    if(x2<=x||y2<=y){
+      guiStudioDraft.selection=null;
+      return;
+    }
+    selection.bounds={x,y,w:x2-x,h:y2-y};
+  }
+  if(selection.points?.length){
+    const maxX=zone.x+zone.w-1,maxY=zone.y+zone.h-1;
+    selection.points=selection.points.map(p=>({
+      x:Math.max(zone.x,Math.min(maxX,p.x)),
+      y:Math.max(zone.y,Math.min(maxY,p.y))
+    }));
+    selection.bounds=guiStudioPointsBounds(selection.points);
+  }
+}
+function clipGuiStudioLayersToActiveZone(){
+  const zone=guiStudioActiveZone();
+  const data=guiStudioPieceData();
+  data.layers.forEach(layer=>{
+    Object.keys(layer.pixels||{}).forEach(key=>{
+      const [x,y]=key.split(',').map(Number);
+      if(!guiStudioPointInActiveZone({x,y},zone))delete layer.pixels[key];
+    });
+    Object.keys(layer.eraseMask||{}).forEach(key=>{
+      const [x,y]=key.split(',').map(Number);
+      if(!guiStudioPointInActiveZone({x,y},zone))delete layer.eraseMask[key];
+    });
+    clipGuiStudioLayerFillsToZone(layer,zone);
+    layer.eraseFills=clipGuiStudioFillListToZone(layer.eraseFills,zone);
+  });
+  Object.keys(data.baseErase||{}).forEach(key=>{
+    const [x,y]=key.split(',').map(Number);
+    if(!guiStudioPointInActiveZone({x,y},zone))delete data.baseErase[key];
+  });
+  data.baseEraseFills=clipGuiStudioFillListToZone(data.baseEraseFills,zone);
+  clipGuiStudioSelectionToActiveZone(zone);
+  recalcGuiStudioPieceBounds();
+  invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+}
+function guiStudioFollowClientPoint(e){
+  const workspace=$('#guiStudioPixelWorkspace');
+  if(!workspace||!e)return;
+  const r=workspace.getBoundingClientRect();
+  const margin=44;
+  let dx=0,dy=0;
+  if(e.clientX<r.left+margin)dx=(r.left+margin-e.clientX);
+  else if(e.clientX>r.right-margin)dx=-(e.clientX-(r.right-margin));
+  if(e.clientY<r.top+margin)dy=(r.top+margin-e.clientY);
+  else if(e.clientY>r.bottom-margin)dy=-(e.clientY-(r.bottom-margin));
+  if(!dx&&!dy)return;
+  guiStudioDraft.canvasPan=guiStudioDraft.canvasPan||{x:0,y:0};
+  guiStudioDraft.canvasPan.x+=dx;
+  guiStudioDraft.canvasPan.y+=dy;
+  renderGuiStudioCanvasPan();
+  renderGuiStudioAffectedZone();
+}
+function applyGuiStudioCanvasTool(point,e){
+  if(!point)return;
+  if(!guiStudioPointInActiveZone(point))return;
+  if(guiStudioActiveTool==='Eyedropper'){
+    const color=guiStudioPixelColorAtPiece(selectedGuiStudioPiece(),point.x,point.y)||guiStudioRenderedPixel(point.x,point.y)||guiStudioDraft.primary;
+    guiStudioDraft.primary=color;
+    renderGuiStudioPalette();
+    return;
+  }
+  if(guiStudioActiveTool==='Ruler'){
+    guiStudioPointer.shapeEnd=point;
+    return;
+  }
+  if(guiStudioActiveTool==='Paint Bucket'||guiStudioActiveTool==='Gradient Tool'){
+    const tolerance=clampGuiNumber(ensureGuiStudioToolOptions().tolerance,0,64,16);
+    let pixels=null;
+    if(!guiStudioSelectionForPiece()){
+      const keys=guiStudioFloodKeys(point,tolerance);
+      pixels=Object.keys(keys).map(key=>{const [x,y]=key.split(',').map(Number);return {x,y};});
+    }
+    fillGuiStudioAffected(guiStudioPaintColor(e),guiStudioActiveTool==='Gradient Tool',pixels);
+    renderGuiStudioDraft();
+    return;
+  }
+  if(GUI_STUDIO_ERASE_TOOLS.has(guiStudioActiveTool)){
+    if(guiStudioActiveTool==='Magic Eraser')eraseGuiStudioMagic(point);
+    else paintGuiStudioBrush(point,null,guiStudioActiveTool==='Background Eraser'?clampGuiNumber(ensureGuiStudioToolOptions().eraserSize,1,64,3):clampGuiNumber(ensureGuiStudioToolOptions().eraserSize,1,64,2));
+    scheduleGuiStudioCanvasFrame();
+    return;
+  }
+  if(GUI_STUDIO_RETOUCH_TOOLS.has(guiStudioActiveTool)){
+    const size=clampGuiNumber(ensureGuiStudioToolOptions().retouchSize,1,16,2);
+    const radius=Math.max(0,Math.floor(size/2));
+    for(let y=point.y-radius;y<=point.y+radius;y++)for(let x=point.x-radius;x<=point.x+radius;x++)if(x>=0&&y>=0&&x<GUI_STUDIO_CANVAS_W&&y<GUI_STUDIO_CANVAS_H)applyGuiStudioRetouch({x,y});
+    scheduleGuiStudioCanvasFrame();
+    return;
+  }
+  if(guiStudioActiveTool==='Text Type Tool'){
+    openGuiStudioTextOverlay(point);
+    return;
+  }
+  if(['Free Pen','Curvature Pen','Anchor Point Pen','Add Anchor Point','Delete Anchor Point','Convert Pen'].includes(guiStudioActiveTool)){
+    if(guiStudioActiveTool==='Delete Anchor Point')paintGuiStudioBrush(point,null,2);
+    else if(guiStudioDraft.lastPenPoint&&guiStudioActiveTool!=='Add Anchor Point')drawGuiStudioLine(guiStudioDraft.lastPenPoint,point,guiStudioPaintColor(e),1);
+    else paintGuiStudioBrush(point,guiStudioPaintColor(e),1);
+    guiStudioDraft.lastPenPoint={...point};
+    scheduleGuiStudioCanvasFrame();
+    return;
+  }
+  if(GUI_STUDIO_SHAPE_TOOLS.has(guiStudioActiveTool)){
+    guiStudioPointer.shapeEnd=point;
+    return;
+  }
+  const opts=ensureGuiStudioToolOptions();
+  const brushSize=clampGuiNumber(opts.brushSize,1,64,2);
+  const color=guiStudioPaintColor(e);
+  if(guiStudioActiveTool==='Brush'){
+    if(guiStudioPointer?.lastPoint)drawGuiStudioRoundBrushLine(guiStudioPointer.lastPoint,point,color,brushSize);
+    else paintGuiStudioRoundBrush(point,color,brushSize);
+  }else if(guiStudioActiveTool==='Spray Paint'){
+    const density=clampGuiNumber(opts.sprayDensity,1,96,28);
+    if(guiStudioPointer?.lastPoint)drawGuiStudioSprayLine(guiStudioPointer.lastPoint,point,color,brushSize,density);
+    else paintGuiStudioSpray(point,color,brushSize,density);
+  }else{
+    if(guiStudioPointer?.lastPoint)drawGuiStudioLine(guiStudioPointer.lastPoint,point,color,brushSize);
+    else paintGuiStudioBrush(point,color,brushSize);
+  }
+  if(guiStudioPointer)guiStudioPointer.lastPoint=point;
+  scheduleGuiStudioCanvasFrame();
+}
+function drawGuiStudioShape(start,end){
+  if(!start||!end)return;
+  const minX=Math.min(start.x,end.x),maxX=Math.max(start.x,end.x);
+  const minY=Math.min(start.y,end.y),maxY=Math.max(start.y,end.y);
+  const opts=ensureGuiStudioToolOptions();
+  const fillColor=normalizeHexColor(opts.shapeFillColor,guiStudioPaintColor());
+  const strokeColor=normalizeHexColor(opts.shapeStrokeColor,guiStudioPaintColor());
+  const strokeSize=clampGuiNumber(opts.strokeWidth,1,12,1);
+  const layer=guiStudioActiveLayer();
+  const selection=guiStudioSelectionForPiece();
+  const drawStroke=p=>paintGuiStudioBrush(p,strokeColor,strokeSize);
+  if(guiStudioActiveTool==='Line'){
+    drawGuiStudioLine(start,end,strokeColor,strokeSize);
+  }else if(guiStudioActiveTool==='Ellipse'){
+    const b=guiStudioNormalizeBounds(start,end),cx=b.x+b.w/2,cy=b.y+b.h/2,rx=Math.max(1,b.w/2),ry=Math.max(1,b.h/2);
+    if(opts.shapeFill){
+      if(guiStudioSelectionBoundsRelation(b,selection)==='inside'){
+        const spans=[];
+        for(let y=b.y;y<b.y+b.h;y++){
+          const dy=(y+.5-cy)/ry;
+          const half=Math.sqrt(Math.max(0,1-dy*dy))*rx;
+          const x1=Math.ceil(cx-half-.5);
+          const x2=Math.floor(cx+half-.5);
+          if(x2>=x1)spans.push({x:x1,y,w:x2-x1+1});
+        }
+        guiStudioAddSpanListFillToLayer(layer,spans,fillColor);
+      }else{
+        for(let y=b.y;y<b.y+b.h;y++)for(let x=b.x;x<b.x+b.w;x++){
+          if(((x+.5-cx)*(x+.5-cx))/(rx*rx)+((y+.5-cy)*(y+.5-cy))/(ry*ry)<=1)paintGuiStudioPoint(x,y,fillColor);
+        }
+      }
+    }
+    if(opts.shapeStroke){
+      const steps=Math.max(24,Math.ceil(Math.PI*2*Math.max(rx,ry)));
+      let prev=null;
+      for(let i=0;i<=steps;i++){
+        const rad=(i/steps)*Math.PI*2;
+        const p={x:Math.round(cx+Math.cos(rad)*rx),y:Math.round(cy+Math.sin(rad)*ry)};
+        if(prev)drawGuiStudioLine(prev,p,strokeColor,strokeSize);
+        prev=p;
+      }
+    }
+  }else if(guiStudioActiveTool==='Parametric Shape'){
+    const midX=Math.round((minX+maxX)/2),midY=Math.round((minY+maxY)/2);
+    drawGuiStudioLine({x:midX,y:minY},{x:maxX,y:midY},strokeColor,strokeSize);
+    drawGuiStudioLine({x:maxX,y:midY},{x:midX,y:maxY},strokeColor,strokeSize);
+    drawGuiStudioLine({x:midX,y:maxY},{x:minX,y:midY},strokeColor,strokeSize);
+    drawGuiStudioLine({x:minX,y:midY},{x:midX,y:minY},strokeColor,strokeSize);
+  }else{
+    const fillBounds={x:minX,y:minY,w:maxX-minX+1,h:maxY-minY+1};
+    if(opts.shapeFill){
+      if(guiStudioSelectionBoundsRelation(fillBounds,selection)==='inside')guiStudioAddRectFillToLayer(layer,fillBounds,fillColor);
+      else for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++)paintGuiStudioPoint(x,y,fillColor);
+    }
+    if(opts.shapeStroke){
+      const radius=Math.max(0,Math.floor(strokeSize/2));
+      const stamp=radius*2+1;
+      const strokeRects=[
+        {x:minX-radius,y:minY-radius,w:maxX-minX+1+radius*2,h:stamp},
+        {x:minX-radius,y:maxY-radius,w:maxX-minX+1+radius*2,h:stamp},
+        {x:minX-radius,y:minY-radius,w:stamp,h:maxY-minY+1+radius*2},
+        {x:maxX-radius,y:minY-radius,w:stamp,h:maxY-minY+1+radius*2}
+      ];
+      if(strokeRects.every(rect=>guiStudioSelectionBoundsRelation(rect,selection)==='inside')){
+        strokeRects.forEach(rect=>guiStudioAddRectFillToLayer(layer,rect,strokeColor));
+      }else{
+        for(let x=minX;x<=maxX;x++){drawStroke({x,y:minY});drawStroke({x,y:maxY});}
+        for(let y=minY;y<=maxY;y++){drawStroke({x:minX,y});drawStroke({x:maxX,y});}
+      }
+    }
+  }
+}
+function setGuiStudioSelectionFromPointer(pointer,end){
+  if(!pointer?.start)return;
+  const opts=ensureGuiStudioToolOptions();
+  const start=guiStudioClampPointToActiveZone(pointer.start);
+  const finalPoint=guiStudioClampPointToActiveZone(end||pointer.start);
+  if(!start||!finalPoint)return;
+  let selection;
+  if(guiStudioActiveTool==='Magic Wand'){
+    if(opts.contiguous===false){
+      selection=guiStudioColorWandSelection(start,clampGuiNumber(opts.tolerance,0,64,16));
+    }else{
+      const keys=guiStudioFloodKeys(start,clampGuiNumber(opts.tolerance,0,64,16));
+      selection={piece:selectedGuiStudioPiece(),type:'magic',keys,bounds:guiStudioPointsBounds(Object.keys(keys).map(key=>{const [x,y]=key.split(',').map(Number);return {x,y};}))};
+    }
+  }else if(guiStudioActiveTool==='Color Wand'){
+    selection=guiStudioColorWandSelection(start,clampGuiNumber(opts.filterStrength,0,255,0));
+  }else if(guiStudioActiveTool==='Ellipse Select'){
+    selection={piece:selectedGuiStudioPiece(),type:'ellipse',bounds:guiStudioNormalizeBounds(start,finalPoint)};
+  }else if(['Lasso Select','Polygonal Lasso'].includes(guiStudioActiveTool)){
+    const finalEnd=finalPoint;
+    const points=(pointer.points||[start]).map(p=>guiStudioClampPointToActiveZone(p)).filter(Boolean).concat(finalEnd?[finalEnd]:[]);
+    const distinct=points.filter((p,index,list)=>index===0||p.x!==list[index-1].x||p.y!==list[index-1].y);
+    selection=distinct.length>=3?{piece:selectedGuiStudioPiece(),type:'lasso',points:distinct,bounds:guiStudioPointsBounds(distinct)}:null;
+  }else{
+    selection={piece:selectedGuiStudioPiece(),type:'rect',bounds:guiStudioNormalizeBounds(start,finalPoint)};
+  }
+  guiStudioDraft.selection=selection;
+  clipGuiStudioSelectionToActiveZone();
+  renderGuiStudioOptionsBar();
+}
+function readGuiStudioFileAsDataUrl(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(String(reader.result||''));
+    reader.onerror=()=>reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+function loadGuiStudioImage(dataUrl){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>resolve(img);
+    img.onerror=reject;
+    img.src=dataUrl;
+  });
+}
+async function importGuiStudioImageFile(file){
+  if(!file)return;
+  if(!GUI_STUDIO_SUPPORTED_IMPORT_TYPES.has(file.type)){
+    showMsg('Imported Images supports PNG, JPEG, WebP, and GIF files.',false);
+    return;
+  }
+  const before=getGuiStudioState();
+  const dataUrl=await readGuiStudioFileAsDataUrl(file);
+  const id=`import_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,6)}`;
+  guiStudioDraft.imports=[{id,name:file.name,dataUrl},...(guiStudioDraft.imports||[]).filter(item=>item.name!==file.name)].slice(0,GUI_STUDIO_MAX_IMPORTS-1);
+  renderGuiStudioDraft();
+  recordGuiStudioChange(before);
+  showMsg(`${file.name} saved in Imported Images. Drag it onto the editor to place it.`,true);
+}
+async function placeGuiStudioImageDataUrlAsLayer(dataUrl,name='Imported image',centerPoint=null){
+  const img=await loadGuiStudioImage(dataUrl);
+  const zone=guiStudioActiveZone();
+  const maxW=Math.max(1,zone.w),maxH=Math.max(1,zone.h);
+  const scale=Math.min(1,maxW/Math.max(1,img.naturalWidth||img.width),maxH/Math.max(1,img.naturalHeight||img.height));
+  const w=Math.max(1,Math.round((img.naturalWidth||img.width||1)*scale));
+  const h=Math.max(1,Math.round((img.naturalHeight||img.height||1)*scale));
+  const center=guiStudioPointInActiveZone(centerPoint,zone)?centerPoint:{x:zone.x+zone.w/2,y:zone.y+zone.h/2};
+  const x0=Math.max(zone.x,Math.min(zone.x+zone.w-w,Math.round(center.x-w/2)));
+  const y0=Math.max(zone.y,Math.min(zone.y+zone.h-h,Math.round(center.y-h/2)));
+  const canvas=document.createElement('canvas');
+  canvas.width=w;
+  canvas.height=h;
+  const ctx=canvas.getContext('2d');
+  ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(img,0,0,w,h);
+  const raw=ctx.getImageData(0,0,w,h).data;
+  const layerPixels={};
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      const i=(y*w+x)*4;
+      if(raw[i+3]>12)layerPixels[`${x0+x},${y0+y}`]=guiStudioRgbToHex(raw[i],raw[i+1],raw[i+2]);
+    }
+  }
+  guiStudioDraft.selection=null;
+  addGuiStudioLayer(`Image: ${name}`,layerPixels,{kind:'image',sourceName:name,dataUrl});
+}
+function getGuiStudioState(){
+  const modal=$('#guiStudioModal');
+  const activePiece=$$('.gui-studio-sketch-pieces [data-gui-piece]').find(btn=>btn.classList.contains('active'));
+  return {
+    mode:modal?.dataset.mode||'create',
+    piece:activePiece?.dataset.guiPiece||'Quest Button',
+    draft:cloneGuiStudioDraft()
+  };
+}
+function guiStudioPatchValueEqual(a,b){
+  if(a===b)return true;
+  if(a===null||b===null)return false;
+  if(typeof a!=='object'||typeof b!=='object')return false;
+  return false;
+}
+function guiStudioCanDiffArrayByIndex(before,after){
+  if(!Array.isArray(before)||!Array.isArray(after)||before.length!==after.length)return false;
+  if(!before.length)return true;
+  return before.every((item,index)=>{
+    const next=after[index];
+    if(item&&next&&typeof item==='object'&&typeof next==='object'&&'id' in item&&'id' in next)return item.id===next.id;
+    return typeof item!=='object'||item===null||typeof next!=='object'||next===null;
+  });
+}
+function diffGuiStudioValue(before,after,path=[],ops=[]){
+  if(guiStudioPatchValueEqual(before,after))return ops;
+  const beforeObj=before&&typeof before==='object';
+  const afterObj=after&&typeof after==='object';
+  if(Array.isArray(before)||Array.isArray(after)){
+    if(guiStudioCanDiffArrayByIndex(before,after)){
+      for(let i=0;i<before.length;i++)diffGuiStudioValue(before[i],after[i],path.concat(i),ops);
+    }else{
+      ops.push({op:'set',path,value:cloneGuiStudioValue(after)});
+    }
+    return ops;
+  }
+  if(beforeObj&&afterObj){
+    const keys=new Set([...Object.keys(before),...Object.keys(after)]);
+    keys.forEach(key=>{
+      if(!Object.prototype.hasOwnProperty.call(after,key))ops.push({op:'delete',path:path.concat(key)});
+      else if(!Object.prototype.hasOwnProperty.call(before,key))ops.push({op:'set',path:path.concat(key),value:cloneGuiStudioValue(after[key])});
+      else diffGuiStudioValue(before[key],after[key],path.concat(key),ops);
+    });
+    return ops;
+  }
+  ops.push({op:'set',path,value:cloneGuiStudioValue(after)});
+  return ops;
+}
+function setGuiStudioPathValue(target,path,value){
+  if(!path.length)return cloneGuiStudioValue(value);
+  let cursor=target;
+  for(let i=0;i<path.length-1;i++){
+    const key=path[i];
+    if(cursor[key]===undefined||cursor[key]===null){
+      cursor[key]=typeof path[i+1]==='number'?[]:{};
+    }
+    cursor=cursor[key];
+  }
+  cursor[path[path.length-1]]=cloneGuiStudioValue(value);
+  return target;
+}
+function deleteGuiStudioPathValue(target,path){
+  if(!path.length)return target;
+  let cursor=target;
+  for(let i=0;i<path.length-1;i++){
+    cursor=cursor?.[path[i]];
+    if(cursor===undefined||cursor===null)return target;
+  }
+  if(Array.isArray(cursor)&&typeof path[path.length-1]==='number')cursor.splice(path[path.length-1],1);
+  else delete cursor[path[path.length-1]];
+  return target;
+}
+function applyGuiStudioPatch(state,ops=[]){
+  let next=cloneGuiStudioValue(state);
+  ops.forEach(op=>{
+    if(op.op==='set')next=setGuiStudioPathValue(next,op.path,op.value);
+    else if(op.op==='delete')next=deleteGuiStudioPathValue(next,op.path);
+  });
+  return next;
+}
+function makeGuiStudioHistoryEntry(before,after=getGuiStudioState()){
+  const redo=diffGuiStudioValue(before,after);
+  if(!redo.length)return null;
+  const undo=diffGuiStudioValue(after,before);
+  return {type:'patch',undo,redo};
+}
+function updateGuiStudioHistoryButtons(){
+  const undo=$('#guiStudioUndoBtn');
+  const redo=$('#guiStudioRedoBtn');
+  if(undo)undo.disabled=!guiStudioUndoStack.length;
+  if(redo)redo.disabled=!guiStudioRedoStack.length;
+  updateHistoryButtons();
+}
+function recordGuiStudioChange(before){
+  if(guiStudioRestoring)return;
+  if(!before)return;
+  const entry=makeGuiStudioHistoryEntry(before);
+  if(!entry)return;
+  guiStudioUndoStack.push(entry);
+  if(guiStudioUndoStack.length>30)guiStudioUndoStack.shift();
+  guiStudioRedoStack=[];
+  guiStudioSaveActiveDraftToScope();
+  guiStudioSaveActiveHistoryToScope();
+  updateGuiStudioHistoryButtons();
+  scheduleAutosave();
+}
+function withGuiStudioHistory(action){
+  const before=getGuiStudioState();
+  action();
+  recordGuiStudioChange(before);
+}
+function updateGuiStudioNextButton(){
+  const modal=$('#guiStudioModal');
+  const mode=modal?.dataset.mode||'create';
+  const next=$('#guiStudioTopNextBtn');
+  const target=guiStudioModalTarget();
+  if(!next)return;
+  const isFinal=mode==='export';
+  if(isFinal){
+    next.hidden=false;
+    next.disabled=false;
+    next.setAttribute('aria-hidden','false');
+    const label=target==='quest-list'?'Apply to Global QuestList':'Apply to Quest';
+    next.classList.toggle('gui-studio-top-next-text-only',target==='quest-list');
+    next.innerHTML=target==='quest-list'?`<span>${esc(label)}</span>`:`${guiStudioLucideIcon('check','gui-studio-next-icon')}<span>${esc(label)}</span>`;
+    return;
+  }
+  next.classList.remove('gui-studio-top-next-text-only');
+  next.hidden=false;
+  next.disabled=false;
+  next.setAttribute('aria-hidden','false');
+  const label=GUI_STUDIO_NEXT_LABEL[mode]||GUI_STUDIO_NEXT_LABEL.create;
+  next.innerHTML=`${guiStudioLucideIcon('arrow-right','gui-studio-next-icon')}<span>${esc(label)}</span>`;
+}
+function setGuiStudioFrameZoom(value=1){
+  guiStudioFrameZoom=Math.max(.1,Math.min(20,Number(value)||1));
+  const modal=$('#guiStudioModal');
+  if(modal)modal.style.setProperty('--gui-studio-preview-zoom',guiStudioFrameZoom.toFixed(2));
+  const readout=$('#guiStudioCanvasFitBtn');
+  if(readout)readout.textContent=`${Math.round(guiStudioFrameZoom*100)}%`;
+  renderGuiStudioActiveZone();
+  renderGuiStudioAffectedZone();
+}
+function fitGuiStudioFramePreview(){
+  setGuiStudioFrameZoom(1);
+}
+function setGuiStudioMode(mode='texture'){
+  const modal=$('#guiStudioModal');if(!modal)return;
+  modal.dataset.mode=mode;
+  $$('[data-gui-mode]',modal).forEach(btn=>btn.classList.toggle('active',btn.dataset.guiMode===mode));
+  $$('[data-gui-panel]',modal).forEach(panel=>panel.classList.toggle('active',panel.dataset.guiPanel===mode));
+  const label=$('#guiStudioModeLabel');
+  if(label)label.textContent=GUI_STUDIO_TAB_COPY[mode]||GUI_STUDIO_TAB_COPY.texture;
+  const copy=$('#guiStudioModeCopy');
+  if(copy)copy.textContent=GUI_STUDIO_TAB_COPY[mode]||GUI_STUDIO_TAB_COPY.texture;
+  const frameCopy=$('#guiStudioFrameModeCopy');
+  if(frameCopy)frameCopy.textContent=GUI_STUDIO_TAB_COPY[mode]||GUI_STUDIO_TAB_COPY.create;
+  updateGuiStudioNextButton();
+  if(mode!=='create')renderGuiStudioLayout();
+}
+function syncGuiStudioPieceUi(piece=selectedGuiStudioPiece()){
+  const modal=$('#guiStudioModal');
+  if(!modal)return;
+  renderGuiStudioTargetTextureButtons(guiStudioModalTarget());
+  piece=syncGuiStudioSelectedPieceForTarget(guiStudioModalTarget());
+  const target=$$('[data-gui-piece]',modal).find(btn=>btn.dataset.guiPiece===piece);
+  if(!target)return;
+  $$('[data-gui-piece]',modal).forEach(btn=>btn.classList.toggle('active',btn===target));
+  $('#guiStudioOthersBtn')?.classList.toggle('active',guiStudioTargetOtherPieces().includes(piece));
+  const label=$('#guiStudioFramePartLabel');
+  if(label)label.textContent=target.dataset.guiPiece||target.textContent.trim();
+  const meta=GUI_STUDIO_PIECES[target.dataset.guiPiece]||GUI_STUDIO_PIECES['Quest Main'];
+  const code=$('.gui-studio-sketch-canvas-head code');
+  if(code)code.textContent=`assets/questlog/textures/gui/${meta.texture}`;
+}
+function setGuiStudioPiece(piece){
+  const modal=$('#guiStudioModal');
+  if(!modal)return;
+  if(!guiStudioPieceAllowedForTarget(piece))piece=guiStudioDefaultPieceForTarget();
+  const target=$$('[data-gui-piece]',modal).find(btn=>btn.dataset.guiPiece===piece);
+  if(!target)return;
+  closeGuiStudioResetConfirm();
+  clearGuiStudioMultiSelectedLayers();
+  guiStudioDraft.selectedPiece=target.dataset.guiPiece;
+  syncGuiStudioPieceUi(target.dataset.guiPiece);
+  renderGuiStudioPixelCanvas();
+  renderGuiStudioOptionsBar();
+  scheduleGuiStudioPreviewWarm(guiStudioCurrentWarmPieces(),{forceRefresh:true});
+  renderGuiStudioImports({forceRefresh:true});
+}
+function closeGuiStudioToolOptions(){
+  const menu=$('#guiStudioToolOptionsMenu');
+  if(!menu)return;
+  menu.classList.remove('open');
+  menu.setAttribute('aria-hidden','true');
+  menu.innerHTML='';
+}
+function openGuiStudioToolOptions(btn,e){
+  const menu=$('#guiStudioToolOptionsMenu');
+  e?.preventDefault?.();
+  if(!menu)return;
+  closeGuiStudioToolOptions();
+  if(!btn?.dataset?.toolOptions)return;
+  const options=btn.dataset.toolOptions.split('|').map(v=>v.trim()).filter(Boolean);
+  if(!options.length)return;
+  menu.innerHTML=options.map(option=>`<button type="button" role="menuitem" data-tool-option="${esc(option)}" data-tip="${esc(guiStudioTooltipForLabel(option))}">${esc(option)}</button>`).join('');
+  const rail=btn.closest('.gui-studio-sketch-tools');
+  const railRect=rail.getBoundingClientRect();
+  const btnRect=btn.getBoundingClientRect();
+  menu.style.setProperty('--gui-tool-menu-top',`${Math.max(6,btnRect.top-railRect.top)}px`);
+  menu.style.setProperty('--gui-tool-menu-left',`${Math.max(46,btnRect.right-railRect.left+6)}px`);
+  menu.classList.add('open');
+  menu.setAttribute('aria-hidden','false');
+  applyGuiStudioTooltipMetadata(menu);
+}
+function closeGuiStudioLayerMenu(){
+  const menu=$('#guiStudioLayerMenu');
+  if(!menu)return;
+  guiStudioLayerMenuLayerId=null;
+  menu.classList.remove('open');
+  menu.setAttribute('aria-hidden','true');
+}
+function openGuiStudioLayerMenu(layerId,e){
+  const menu=$('#guiStudioLayerMenu');
+  const layer=guiStudioLayerById(layerId);
+  if(!menu||!layer)return;
+  e?.preventDefault?.();
+  guiStudioLayerMenuLayerId=layerId;
+  const actionIds=guiStudioLayerIdsForMenuAction(layerId);
+  const isMultiMerge=actionIds.length>1&&actionIds.includes(layerId);
+  const mergeDisabled=actionIds.filter(id=>{
+    const item=guiStudioLayerById(id);
+    return item&&item.id!=='base'&&!item.locked;
+  }).length<2;
+  menu.innerHTML=[
+    isMultiMerge
+      ? `<button type="button" data-layer-menu-action="merge" ${mergeDisabled?'class="disabled" aria-disabled="true" disabled':''}>Merge</button>`
+      : '<button type="button" data-layer-menu-action="blending">Blending Options</button>',
+    '<button type="button" data-layer-menu-action="duplicate">Duplicate Layer</button>',
+    '<button type="button" data-layer-menu-action="select-pixels">Select Pixels</button>',
+    '<button type="button" data-layer-menu-action="toggle-visibility">'+(layer.visible?'Hide Layer':'Show Layer')+'</button>',
+    '<button type="button" data-layer-menu-action="toggle-lock">'+(layer.locked?'Unlock Layer':'Lock Layer')+'</button>',
+    `<button type="button" data-layer-menu-action="delete" ${layer.id==='base'?'class="disabled" aria-disabled="true" disabled':''}>Delete Layer</button>`,
+    isMultiMerge?'':`<div class="gui-studio-layer-menu-options" data-layer-menu-options>
+      <label>Blend <select data-layer-menu-blend>${GUI_STUDIO_BLEND_MODES.map(mode=>`<option value="${mode}" ${layer.blend===mode?'selected':''}>${mode[0].toUpperCase()+mode.slice(1)}</option>`).join('')}</select></label>
+      <label>Opacity <input type="range" min="0" max="100" value="${Math.round(clampGuiNumber(layer.opacity,0,1,1)*100)}" data-layer-menu-opacity></label>
+    </div>`
+  ].join('');
+  const side=$('.gui-studio-sketch-side');
+  const sideRect=side?.getBoundingClientRect();
+  const x=e?.clientX??0,y=e?.clientY??0;
+  menu.style.left=`${sideRect?Math.max(8,Math.min(sideRect.width-242,x-sideRect.left)):8}px`;
+  menu.style.top=`${sideRect?Math.max(8,y-sideRect.top):8}px`;
+  menu.classList.add('open');
+  menu.setAttribute('aria-hidden','false');
+}
+function setGuiStudioActiveLayer(layerId){
+  const data=guiStudioPieceData();
+  if(!data.layers.some(layer=>layer.id===layerId))return;
+  data.activeLayerId=layerId;
+  clearGuiStudioMultiSelectedLayers();
+  renderGuiStudioLayerPanel();
+}
+function reorderGuiStudioLayer(dragId,targetId){
+  if(!dragId||!targetId||dragId===targetId)return false;
+  const data=guiStudioPieceData();
+  const visual=data.layers.slice().reverse();
+  const from=visual.findIndex(layer=>layer.id===dragId);
+  const to=visual.findIndex(layer=>layer.id===targetId);
+  if(from<0||to<0)return false;
+  const [moved]=visual.splice(from,1);
+  const targetIndex=visual.findIndex(layer=>layer.id===targetId);
+  if(targetIndex<0)return false;
+  visual.splice(from<to?targetIndex+1:targetIndex,0,moved);
+  data.layers=visual.reverse();
+  data.activeLayerId=dragId;
+  invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+  return true;
+}
+function duplicateGuiStudioLayer(layerId){
+  const data=guiStudioPieceData();
+  const source=data.layers.find(layer=>layer.id===layerId);
+  if(!source)return;
+  const copy=createGuiStudioLayer(`${source.name} Copy`,source.pixels);
+  copy.fills=JSON.parse(JSON.stringify(source.fills||[]));
+  copy.eraseFills=JSON.parse(JSON.stringify(source.eraseFills||[]));
+  copy.eraseMask=JSON.parse(JSON.stringify(source.eraseMask||{}));
+  copy.visible=source.visible;
+  copy.locked=false;
+  copy.opacity=source.opacity;
+  copy.blend=source.blend;
+  const sourceIndex=data.layers.indexOf(source);
+  data.layers.splice(sourceIndex+1,0,copy);
+  data.activeLayerId=copy.id;
+  invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+}
+function guiStudioLayerIdsDrawableBounds(layerIds,piece=selectedGuiStudioPiece()){
+  const data=guiStudioPieceData(piece);
+  return layerIds.reduce((bounds,id)=>{
+    const layer=data.layers.find(item=>item.id===id);
+    if(!layer||layer.visible===false)return bounds;
+    const next=layer.id==='base'?guiStudioActiveZone():guiStudioLayerDrawableBounds(layer);
+    return guiStudioBoundsUnion(bounds,next);
+  },null);
+}
+function mergeGuiStudioSelectedLayers(layerId=guiStudioLayerMenuLayerId){
+  const piece=selectedGuiStudioPiece();
+  const data=guiStudioPieceData(piece);
+  const ids=guiStudioLayerIdsForMenuAction(layerId,piece);
+  const mergeIds=ids
+    .map(id=>data.layers.find(layer=>layer.id===id))
+    .filter(layer=>layer&&layer.id!=='base'&&!layer.locked)
+    .map(layer=>layer.id);
+  if(mergeIds.length<2){
+    showMsg('Select at least two unlocked paint layers to merge. The source texture layer stays separate.',false);
+    return false;
+  }
+  const bounds=guiStudioLayerIdsDrawableBounds(mergeIds,piece);
+  if(!bounds){
+    showMsg('Selected layers do not have visible paint to merge.',false);
+    return false;
+  }
+  const composite=guiStudioCompositeLayerIdsToPixels(mergeIds,bounds,null,piece);
+  if(!composite?.count){
+    showMsg('Selected layers do not have visible paint to merge.',false);
+    return false;
+  }
+  const merged=createGuiStudioLayer('Merged Layer',{});
+  merged.fills=guiStudioPixelMapToColorSpanFills(composite.pixels);
+  data.layers=data.layers.filter(layer=>!mergeIds.includes(layer.id));
+  data.layers.push(merged);
+  data.activeLayerId=merged.id;
+  guiStudioMultiSelectedLayerIds=new Set([merged.id]);
+  recalcGuiStudioPieceBounds(piece);
+  invalidateGuiStudioPiecePreview(piece);
+  return true;
+}
+function deleteGuiStudioLayer(layerId){
+  const data=guiStudioPieceData();
+  if(layerId==='base')return false;
+  if(data.layers.length<=1)return false;
+  const index=data.layers.findIndex(layer=>layer.id===layerId);
+  if(index<0)return false;
+  data.layers.splice(index,1);
+  if(data.activeLayerId===layerId)data.activeLayerId=data.layers[Math.max(0,index-1)]?.id||data.layers[0].id;
+  guiStudioMultiSelectedLayerIds.delete(layerId);
+  if(guiStudioDraft.selection?.piece===selectedGuiStudioPiece())guiStudioDraft.selection=null;
+  recalcGuiStudioPieceBounds();
+  invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+  return true;
+}
+function selectGuiStudioLayerPixels(layerId){
+  const layer=guiStudioLayerById(layerId);
+  const points=Object.keys(layer?.pixels||{}).map(key=>{const [x,y]=key.split(',').map(Number);return {x,y};}).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
+  (layer?.fills||[]).forEach(fill=>{
+    if(fill.type==='spans'){
+      (fill.spans||[]).forEach(span=>{
+        for(let x=span.x;x<span.x+span.w;x++)points.push({x,y:span.y});
+      });
+    }else if(fill.type==='rect'){
+      for(let y=fill.y;y<fill.y+fill.h;y++)for(let x=fill.x;x<fill.x+fill.w;x++)points.push({x,y});
+    }
+  });
+  guiStudioDraft.selection=points.length?{
+    piece:selectedGuiStudioPiece(),
+    type:'layer-pixels',
+    keys:points.reduce((keys,p)=>{keys[`${p.x},${p.y}`]=true;return keys;},{}),
+    bounds:guiStudioPointsBounds(points)
+  }:null;
+}
+function applyGuiStudioLayerAction(action,layerId=guiStudioLayerMenuLayerId){
+  const layer=guiStudioLayerById(layerId);
+  if(!layer)return;
+  if(action==='blending'){
+    setGuiStudioActiveLayer(layerId);
+    showMsg('Layer blending options are active in the Layers panel.',true);
+    closeGuiStudioLayerMenu();
+    return;
+  }
+  withGuiStudioHistory(()=>{
+    if(action==='merge'){
+      if(mergeGuiStudioSelectedLayers(layerId))showMsg('Selected layers merged into one layer.',true);
+    }else if(action==='duplicate')duplicateGuiStudioLayer(layerId);
+    else if(action==='delete'){
+      if(!deleteGuiStudioLayer(layerId))showMsg(layerId==='base'?'Default source texture layer cannot be deleted. Use Reset to Default instead.':'Keep at least one paint layer in this GUI piece.',false);
+    }else if(action==='select-pixels')selectGuiStudioLayerPixels(layerId);
+    else if(action==='toggle-visibility')layer.visible=!layer.visible;
+    else if(action==='toggle-lock')layer.locked=!layer.locked;
+    if(action!=='select-pixels')invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+    renderGuiStudioDraft();
+  });
+  closeGuiStudioLayerMenu();
+}
+function beginGuiStudioLayerRename(layerId){
+  const row=$(`#guiStudioLayerList [data-layer-id="${CSS.escape(layerId)}"]`);
+  const label=row?.querySelector('[data-layer-name]');
+  const layer=guiStudioLayerById(layerId);
+  if(!row||!label||!layer)return;
+  guiStudioLayerRenameBefore=getGuiStudioState();
+  const input=document.createElement('input');
+  input.type='text';
+  input.className='gui-studio-layer-rename-input';
+  input.value=layer.name||'Layer';
+  input.maxLength=80;
+  input.setAttribute('aria-label','Layer name');
+  label.replaceWith(input);
+  input.focus();
+  input.select();
+  const finish=(save=true)=>{
+    if(!guiStudioLayerRenameBefore)return;
+    const before=guiStudioLayerRenameBefore;
+    guiStudioLayerRenameBefore=null;
+    const next=String(input.value||'').trim().slice(0,80)||layer.name||'Layer';
+    if(save&&next!==layer.name){
+      layer.name=next;
+      recordGuiStudioChange(before);
+    }
+    renderGuiStudioLayerPanel();
+  };
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();finish(true);}
+    if(e.key==='Escape'){e.preventDefault();finish(false);}
+  });
+  input.addEventListener('blur',()=>finish(true),{once:true});
+}
+function applyGuiStudioState(state){
+  guiStudioRestoring=true;
+  if(state.draft)guiStudioDraft=cloneGuiStudioDraft(state.draft);
+  guiStudioSaveActiveDraftToScope();
+  invalidateGuiStudioAllPreviews();
+  setGuiStudioMode(state.mode||'create');
+  setGuiStudioPiece(state.piece||'Quest Button');
+  renderGuiStudioDraft();
+  renderGuiStudioPieceThumbs({forceRefresh:true});
+  renderGuiStudioImports({forceRefresh:true});
+  renderGuiStudioLayout();
+  guiStudioRestoring=false;
+  guiStudioSaveActiveHistoryToScope();
+  updateGuiStudioHistoryButtons();
+}
+function undoGuiStudioChange(){
+  if(!guiStudioUndoStack.length)return;
+  const entry=guiStudioUndoStack.pop();
+  if(entry?.type==='patch'){
+    const previous=applyGuiStudioPatch(getGuiStudioState(),entry.undo);
+    guiStudioRedoStack.push(entry);
+    if(guiStudioRedoStack.length>30)guiStudioRedoStack.shift();
+    applyGuiStudioState(previous);
+    return;
+  }
+  const current=getGuiStudioState();
+  guiStudioRedoStack.push(current);
+  if(guiStudioRedoStack.length>30)guiStudioRedoStack.shift();
+  applyGuiStudioState(entry);
+}
+function redoGuiStudioChange(){
+  if(!guiStudioRedoStack.length)return;
+  const entry=guiStudioRedoStack.pop();
+  if(entry?.type==='patch'){
+    const next=applyGuiStudioPatch(getGuiStudioState(),entry.redo);
+    guiStudioUndoStack.push(entry);
+    if(guiStudioUndoStack.length>30)guiStudioUndoStack.shift();
+    applyGuiStudioState(next);
+    return;
+  }
+  const current=getGuiStudioState();
+  guiStudioUndoStack.push(current);
+  if(guiStudioUndoStack.length>30)guiStudioUndoStack.shift();
+  applyGuiStudioState(entry);
+}
+function openQuestlogListPreviewModal(e){
+  e?.preventDefault?.();
+  syncCurrentForExport();
+  if(!defaultChapterFiles().length){
+    showMsg('Add a chapter and mark it as the default chapter before opening the Questlog list preview.',false);
+    return;
+  }
+  renderQuestlogListPreviewModal();
+  $('#questlogListPreviewModal')?.classList.add('open');
+}
+function closeQuestlogListPreviewModal(){
+  $('#questlogListPreviewModal')?.classList.remove('open');
+}
+function questlogListClickInsideSurface(e){
+  const x=e.clientX,y=e.clientY;
+  const inside=(el,pad=0)=>{
+    if(!el)return false;
+    const r=el.getBoundingClientRect();
+    return x>=r.left-pad&&x<=r.right+pad&&y>=r.top-pad&&y<=r.bottom+pad;
+  };
+  const modal=$('#questlogListPreviewModal');
+  if(!modal?.classList.contains('open'))return true;
+  return inside($('.ql-list-panel',modal),36)||
+    inside($('.ql-list-search',modal),10)||
+    inside($('.ql-list-tabs',modal),16)||
+    $$('.ql-list-tool',modal).some(el=>inside(el,8));
+}
+
 // ── Tabs ──────────────────────────────────────────────────────────
 function buildTabs(){
-  const host=$('#formTabs');host.innerHTML='';
+  const host=$('#formTabs');if(!host)return;host.innerHTML='';
   if(!currentFile||!getCD())return;
   if(mode==='chapter')return;
 
@@ -1069,7 +13864,7 @@ function buildTabs(){
     // only show main tabs in current order position
     const btn=document.createElement('button');
     btn.className='tab-btn'+(active===k?' active':'');
-    btn.textContent={display:'Display',progress:'Progress',sounds:'Sounds'}[k];
+    btn.textContent={display:'Display',progress:'Progress'}[k];
     btn.dataset.key=k;
     btn.onclick=()=>{setTab(k);buildTabs();};
     host.appendChild(btn);
@@ -1079,7 +13874,8 @@ function buildTabs(){
   const advWrap=document.createElement('div');advWrap.className='adv-wrap';
   const advBtn=document.createElement('button');
   advBtn.className='tab-btn'+(ADV_KEYS.includes(active)?' active':'');
-  advBtn.textContent=ADV_KEYS.includes(active)?`Advanced · ${{layout:'Layout',labels:'Labels',badge:'Badge'}[active]}`:'Advanced ▾';
+  const advLabel=ADV_KEYS.includes(active)?`Advanced · ${{layout:'Layout',labels:'Labels',badge:'Badge'}[active]}`:'Advanced';
+  advBtn.innerHTML=`<span>${esc(advLabel)}</span>${guiStudioLucideIcon('chevron-down','tab-chevron')}`;
   const advMenu=document.createElement('div');advMenu.className='adv-menu';
   [{k:'layout',l:'Layout'},{k:'labels',l:'Labels'},{k:'badge',l:'Badge'}].forEach(({k,l})=>{
     const btn2=document.createElement('button');btn2.textContent=l;
@@ -1106,15 +13902,30 @@ function buildTabs(){
   sections.forEach(s=>{
     const sum=s.querySelector(':scope > summary');if(!sum||sum.querySelector('.panel-move'))return;
     const ctrl=document.createElement('span');ctrl.className='panel-move';ctrl.style.cssText='float:right;display:inline-flex;gap:2px;';
-    ctrl.innerHTML=`<button type="button" title="Move up">↑</button><button type="button" title="Move down">↓</button>`;
-    const[u,d]=ctrl.querySelectorAll('button');
-    u.onclick=e=>{e.preventDefault();e.stopPropagation();movePK(s.dataset.panelKey,-1);};
-    d.onclick=e=>{e.preventDefault();e.stopPropagation();movePK(s.dataset.panelKey,1);};
+    if(s.dataset.panelKey==='display')return;
+    else{
+      ctrl.innerHTML=`<button type="button" title="Move up">↑</button><button type="button" title="Move down">↓</button>`;
+      const[u,d]=ctrl.querySelectorAll('button');
+      u.onclick=e=>{e.preventDefault();e.stopPropagation();movePK(s.dataset.panelKey,-1);};
+      d.onclick=e=>{e.preventDefault();e.stopPropagation();movePK(s.dataset.panelKey,1);};
+    }
     sum.appendChild(ctrl);
   });
+  placeFormTabs(active);renderInlineQuestPreview();
 }
 
 function setTab(k){localStorage.setItem('ql.activeTab',k);if(ADV_KEYS.includes(k))activeAdvKey=k;else activeAdvKey=null;}
+function restoreFormTabsToAnchor(){
+  const row=$('.form-tabs-row'),anchor=$('#formTabsAnchor');
+  if(row&&anchor?.parentElement&&row.previousElementSibling!==anchor)anchor.parentElement.insertBefore(row,anchor.nextSibling);
+}
+function placeFormTabs(activeKey){
+  const row=$('.form-tabs-row'),slot=$('#displayTabSlot'),anchor=$('#formTabsAnchor');
+  if(!row)return;
+  if(mode==='quest'&&currentFile&&slot&&!slot.contains(row))slot.appendChild(row);
+  else if(!slot&&anchor&&anchor.parentElement&&row.previousElementSibling!==anchor)anchor.parentElement.insertBefore(row,anchor.nextSibling);
+  else if((mode!=='quest'||!currentFile)&&anchor&&anchor.parentElement&&row.previousElementSibling!==anchor)anchor.parentElement.insertBefore(row,anchor.nextSibling);
+}
 function movePK(k,dir){const o=normOrder(panelOrder);const i=o.indexOf(k);const n=i+dir;if(i<0||n<0||n>=o.length)return;const t=o[i];o[i]=o[n];o[n]=t;panelOrder=o;saveOrder();syncQ();renderMain();}
 
 // ── Render main ───────────────────────────────────────────────────
@@ -1122,14 +13933,20 @@ function renderMain(){
   rawMode=!!$('#viewRaw')?.checked;
   const label=$('#jsonPanelLabel');if(label)label.textContent=rawMode?'JSON editor':'Live JSON';
   if(!currentFile||!getCD()){
+    restoreFormTabsToAnchor();
     $(' #panelForm').innerHTML='<div class="empty-state"><p style="color:var(--mu)">Select or create a file</p></div>';
     $(' #formTabs').innerHTML='';
-    $('#liveJson').value='';dValidate();return;
+    placeFormTabs();
+    $('#liveJson').value='';refreshQuestPreview();updateRightPanelMode();dValidate();return;
   }
+  restoreFormTabsToAnchor();
   $('#panelForm').innerHTML='';
-  if(mode==='chapter'){$('#panelForm').innerHTML=renderChForm(getCD());$('#formTabs').innerHTML='';bindChForm();}
+  if(mode==='chapter'){$('#panelForm').innerHTML=renderChForm(getCD());$('#formTabs').innerHTML='';placeFormTabs();bindChForm();}
   else{$('#panelForm').innerHTML=renderQForm(getCD());buildTabs();bindQForm();}
   if(!jsonFocused)refreshJson();
+  refreshQuestPreview();
+  renderInlineChapterListPreview();
+  updateRightPanelMode();
 dValidate();
 }
 
@@ -1138,10 +13955,26 @@ function renderRend(p,val){
   let k='item';if(typeof val==='string'&&val)k='stringitem';else if(val&&val.texture)k='texture';else if(val&&val.item)k='item';
   return`<div class="field" data-tip="Choose how this icon is written in Questlog JSON."><label>${p} kind</label><select data-r="${p}-kind"><option value="item" ${k==='item'?'selected':''}>Item (object)</option><option value="texture" ${k==='texture'?'selected':''}>Texture</option><option value="stringitem" ${k==='stringitem'?'selected':''}>Item ID (string)</option></select></div><div class="field" data-r="${p}-item" data-tip="Minecraft item ID used for the Questlog icon."><label>Item ID</label><input type="text" data-r="${p}-itemv" value="${esc(val&&val.item?val.item:'')}" placeholder="minecraft:diamond" /></div><div class="field hidden" data-r="${p}-tex" data-tip="Resource-pack texture path used for the Questlog icon."><label>Texture path</label><input type="text" data-r="${p}-texv" value="${esc(val&&val.texture?val.texture:'')}" /></div><div class="field hidden" data-r="${p}-str" data-tip="Legacy/simple item ID string format."><label>Item ID string</label><input type="text" data-r="${p}-strv" value="${typeof val==='string'?esc(val):''}" /></div>`;
 }
+const DISPLAY_ICON_DEFAULT_PREVIEW={item:'minecraft:book'};
+function updateDisplayIconPreview(){
+  const box=$('.display-icon-preview');if(!box)return;
+  const kind=$('[data-r="icon-kind"]')?.value||'item';
+  const raw=(kind==='texture'?$('[data-r="icon-texv"]')?.value:kind==='stringitem'?$('[data-r="icon-strv"]')?.value:$('[data-r="icon-itemv"]')?.value)?.trim()||'';
+  const iconValue=raw?(kind==='texture'?{texture:raw}:{item:raw}):DISPLAY_ICON_DEFAULT_PREVIEW;
+  const texture=minecraftPreviewTextureUrl(iconValue);
+  const short=raw?(raw.split(/[/:]/).filter(Boolean).pop()||raw):'quest';
+  const usingDefault=!raw;
+  box.classList.toggle('real-texture',!!texture);
+  box.classList.toggle('default-texture',usingDefault);
+  if(texture)box.style.setProperty('--mc-icon-texture',`url("${texture}")`);
+  else box.style.removeProperty('--mc-icon-texture');
+  box.textContent=texture?'':(raw?(short[0]||'I').toUpperCase():'');
+  box.title=raw?(texture?`Quest icon preview: ${raw}`:`Quest icon preview placeholder: ${raw}`):'Quest icon preview: default book texture until an icon is configured';
+}
 
 // ── Description toolbar HTML ──────────────────────────────────────
 function descToolbar(id){
-  return`<div class="desc-toolbar"><div class="drop-wrap" data-target="${id}"><button type="button" class="btn btn-sm insert-trigger">+ Insert ▾</button><div class="drop-menu"><button type="button" data-fmt-template="quest">Quest link</button><button type="button" data-fmt-template="image">Image</button><button type="button" data-fmt-template="image-anim">Animated image</button></div></div><div class="drop-wrap" data-target="${id}"><button type="button" class="btn btn-sm fmt-trigger">§ Format ▾</button><div class="drop-menu fmt-menu"><div class="fmt-section-label">Colors</div>${MC_COLORS.map(c=>`<button type="button" data-fmt-code="${esc(c.code)}"><span class="color-swatch" style="background:${c.color}"></span>${c.name}</button>`).join('')}<div class="fmt-section-label">Styles</div>${MC_STYLES.map(s=>`<button type="button" data-fmt-code="${esc(s.code)}">${s.name}</button>`).join('')}</div></div></div>`;
+  return`<div class="desc-toolbar"><div class="drop-wrap" data-target="${id}"><button type="button" class="btn btn-sm insert-trigger">${guiStudioLucideIcon('plus','desc-toolbar-icon')}<span>Insert</span>${guiStudioLucideIcon('chevron-down','desc-toolbar-chevron')}</button><div class="drop-menu"><button type="button" data-fmt-template="quest">Quest link</button><button type="button" data-fmt-template="image">Image</button><button type="button" data-fmt-template="image-anim">Animated image</button></div></div><div class="drop-wrap" data-target="${id}"><button type="button" class="btn btn-sm fmt-trigger" data-tip="Minecraft formatting codes can be used in descriptions, quest titles, objective names, requirement names, and reward names.">${guiStudioLucideIcon('palette','desc-toolbar-icon')}<span>Format</span>${guiStudioLucideIcon('chevron-down','desc-toolbar-chevron')}</button><div class="drop-menu fmt-menu"><div class="fmt-section-label">Colors</div>${MC_COLORS.map(c=>`<button type="button" data-fmt-code="${esc(c.code)}"><span class="color-swatch" style="background:${c.color}"></span>${c.name}</button>`).join('')}<div class="fmt-section-label">Styles</div>${MC_STYLES.map(s=>`<button type="button" data-fmt-code="${esc(s.code)}">${s.name}</button>`).join('')}</div></div></div>`;
 }
 
 function renderDescField(id,label,value,collapsible){
@@ -1151,9 +13984,73 @@ function renderDescField(id,label,value,collapsible){
   if(collapsible&&!hasVal)return`<div class="opt-desc-wrap" data-opt-id="${id}"><button type="button" class="btn opt-expand">+ Add ${label.toLowerCase()}</button><div class="hidden">${inner}</div></div>`;
   return`<div class="field"><label>${label}</label>${inner}</div>`;
 }
+function descriptionSelectionMenuHtml(){
+  return`<div class="desc-selection-menu" id="descSelectionMenu" aria-hidden="true">
+    <div class="desc-pop-group">
+      <button type="button" class="desc-pop-row">${guiStudioLucideIcon('palette','desc-pop-icon')}<span>Format</span>${guiStudioLucideIcon('chevron-right','desc-pop-chevron')}</button>
+      <div class="desc-pop-sub">
+        <div class="fmt-section-label">Colors</div>
+        ${MC_COLORS.map(c=>`<button type="button" data-fmt-code="${esc(c.code)}"><span class="color-swatch" style="background:${c.color}"></span>${c.name}</button>`).join('')}
+        <div class="fmt-section-label">Styles</div>
+        ${MC_STYLES.map(s=>`<button type="button" data-fmt-code="${esc(s.code)}">${s.name}</button>`).join('')}
+      </div>
+    </div>
+    <div class="desc-pop-group">
+      <button type="button" class="desc-pop-row">${guiStudioLucideIcon('plus','desc-pop-icon')}<span>Insert</span>${guiStudioLucideIcon('chevron-right','desc-pop-chevron')}</button>
+      <div class="desc-pop-sub">
+        <button type="button" data-fmt-template="quest">Quest link</button>
+        <button type="button" data-fmt-template="image">Image</button>
+        <button type="button" data-fmt-template="image-anim">Animated image</button>
+      </div>
+    </div>
+  </div>`;
+}
+function descriptionEditorHtml(q){
+  const main=typeof q.description==='string'?q.description:q.description!=null?JSON.stringify(q.description):'';
+  const completed=typeof q.description_completed==='string'?q.description_completed:q.description_completed!=null?JSON.stringify(q.description_completed):'';
+  const failed=typeof q.description_failed==='string'?q.description_failed:q.description_failed!=null?JSON.stringify(q.description_failed):'';
+  return`<div class="field description-field" data-tip="Quest descriptions support Questlog rich text links and Minecraft formatting codes. Highlight text, then right-click the selection to open Format and Insert actions.">
+    <div class="description-editor">
+      <div class="desc-tabs" role="tablist" aria-label="Quest description state">
+        <button type="button" class="desc-tab active" data-desc-tab="main">Main</button>
+        <button type="button" class="desc-tab" data-desc-tab="completed">Completed</button>
+        <button type="button" class="desc-tab" data-desc-tab="failed">Failed</button>
+      </div>
+      <div class="desc-pane active" data-desc-pane="main"><textarea id="qf_description" placeholder="Write the quest description the player will read in Questlog...">${esc(main)}</textarea></div>
+      <div class="desc-pane" data-desc-pane="completed"><textarea id="qf_description_completed" placeholder="Optional completed description">${esc(completed)}</textarea></div>
+      <div class="desc-pane" data-desc-pane="failed"><textarea id="qf_description_failed" placeholder="Optional failed description">${esc(failed)}</textarea></div>
+      ${descriptionSelectionMenuHtml()}
+    </div>
+  </div>`;
+}
 
 function nhc(raw,fb){const v=String(raw||'').trim();if(/^#[0-9a-fA-F]{6}$/.test(v))return v.toUpperCase();if(/^#[0-9a-fA-F]{3}$/.test(v)){const h=v.slice(1);return`#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`.toUpperCase();}return fb;}
 function rcf(label,id,val,fb){return`<div class="field"><label>${label}</label><div class="color-pair"><input type="color" id="${id}_picker" data-color-for="${id}" value="${nhc(val||fb,fb)}" /><input type="text" id="${id}" value="${esc(val||fb)}" /></div></div>`;}
+function advTextField(label,id,value,tip='',placeholder=''){return`<div class="field"${tip?` data-tip="${esc(tip)}"`:''}><label>${label}</label><input type="text" id="${id}" value="${esc(value||'')}"${placeholder?` placeholder="${esc(placeholder)}"`:''} /></div>`;}
+function advNumField(label,id,value,tip='',unit='px'){return`<div class="field"${tip?` data-tip="${esc(tip)}"`:''}><label>${label}${unit?` <span class="advanced-unit">${esc(unit)}</span>`:''}</label><input type="number" id="${id}" value="${value}" /></div>`;}
+function advGroup(title,body){return`<div class="advanced-group"><div class="sub-h">${title}</div>${body}</div>`;}
+function hiddenAdvancedFields(fields){
+  return fields.map(([id,value])=>`<input type="hidden" id="${id}" value="${esc(value)}">`).join('');
+}
+function advancedGuiEditorCard(fields){
+  return`<div class="advanced-gui-editor-card">
+    <div><strong>Panel size and position</strong><span>Use GUI Editor Layout &amp; Position for left/right panel placement. Existing JSON panel fields stay preserved here as hidden values instead of repeating the same controls.</span></div>
+    <button type="button" class="btn" id="advancedLayoutGuiStudioBtn">${guiStudioLucideIcon('palette','')}<span>Open GUI Editor</span></button>
+    ${hiddenAdvancedFields(fields)}
+  </div>`;
+}
+function progressSectionHtml({kind,title,desc,count,noun,buttonId,buttonText,listId}){
+  return`<section class="progress-section progress-section-${kind}">
+    <header class="progress-section-head">
+      <span class="progress-section-icon" aria-hidden="true">${guiStudioLucideIcon(progressSectionIconName(kind),'progress-section-svg')}</span>
+      <span class="progress-section-copy"><strong>${title}</strong><em>${desc}</em></span>
+      <span class="progress-section-count">${count} ${noun}${count===1?'':'s'}</span>
+      <button type="button" class="btn progress-add-btn progress-add-${kind}" id="${buttonId}">+ ${buttonText}</button>
+      <span class="progress-section-caret" aria-hidden="true">^</span>
+    </header>
+    <div class="progress-section-list" id="${listId}"></div>
+  </section>`;
+}
 
 // ── Quest form ────────────────────────────────────────────────────
 function renderQForm(q){
@@ -1162,95 +14059,171 @@ function renderQForm(q){
   const incMain=q.include_in_main!==undefined?q.include_in_main:defIncMain(ch);
   const badge=d('badge',null);
   return`
+<div class="display-identity-panel">
+  <div class="display-icon-preview default-texture" data-tip="Quest icon preview. Uses a default book texture until an icon is configured." aria-label="Quest icon preview"></div>
+  <div>
+    <div class="display-identity-fields"><div class="field" data-tip="The player-facing quest title shown in Questlog."><label>Title</label><input type="text" id="qf_title" value="${esc(q.title||'')}" /></div><div class="field" data-tip="Questlog uses this number to order quests inside a chapter."><label>Order</label><input type="number" id="qf_sort_order" value="${d('sort_order',0)}" /></div><div class="field" data-tip="The chapter this quest belongs to, usually namespace:chapter_file_name."><label>Chapter ID</label><input type="text" id="qf_chapter" value="${esc(ch)}" placeholder="questlog:main" /></div></div>
+    <div class="display-toggles" aria-label="Quest display options"><div class="display-toggle-group"><span class="display-toggle-group-label">File</span><label class="toggle-label" data-tip="Mark the quest text as translatable for language files."><input type="checkbox" id="qf_translatable" ${d('translatable',false)?'checked':''} /> Translatable</label><label class="toggle-label" data-tip="Show this quest in the main Questlog view when appropriate."><input type="checkbox" id="qf_include_in_main" ${incMain?'checked':''} /> Include in main</label><label class="toggle-label" data-tip="Hide even after requirements are met. Usually requirements are enough for normal gating."><input type="checkbox" id="qf_hidden" ${d('hidden',false)?'checked':''} /> Hidden</label></div><div class="display-toggle-group"><span class="display-toggle-group-label">Notify</span><label class="toggle-label" data-tip="Show a toast when this quest becomes available."><input type="checkbox" id="qf_toast_on_unlock" ${d('toast_on_unlock',true)?'checked':''} /> Unlock toast</label><label class="toggle-label" data-tip="Show a toast when this quest is completed."><input type="checkbox" id="qf_toast_on_complete" ${d('toast_on_complete',true)?'checked':''} /> Complete toast</label><label class="toggle-label" data-tip="Show a larger popup when the quest unlocks."><input type="checkbox" id="qf_show_popup_on_unlock" ${d('show_popup_on_unlock',false)?'checked':''} /> Popup</label></div></div>
+    <div class="hint display-hidden-hint">Hidden suppresses even after requirements are met. Requirements auto-gate - no need for hidden.</div>
+  </div>
+</div>
+<div class="display-tabs-wrap"><div class="display-tab-slot" id="displayTabSlot"></div></div>
 <details class="section" data-panel-key="display" open>
   <summary>Display &amp; Text</summary>
   <div class="sec-body">
-    <div class="g2"><div class="field" data-tip="The player-facing quest title shown in Questlog."><label>Title</label><input type="text" id="qf_title" value="${esc(q.title||'')}" /></div><div class="field" data-tip="Questlog uses this number to order quests inside a chapter."><label>Sort order</label><input type="number" id="qf_sort_order" value="${d('sort_order',0)}" /></div><div class="field" data-tip="The chapter this quest belongs to, usually namespace:chapter_file_name."><label>Chapter ID</label><input type="text" id="qf_chapter" value="${esc(ch)}" placeholder="questlog:main" /></div></div>
-    <div style="display:flex;flex-wrap:wrap;gap:12px;margin:10px 0;"><label class="toggle-label" data-tip="Mark the quest text as translatable for language files."><input type="checkbox" id="qf_translatable" ${d('translatable',false)?'checked':''} /> Translatable</label><label class="toggle-label" data-tip="Show this quest in the main Questlog view when appropriate."><input type="checkbox" id="qf_include_in_main" ${incMain?'checked':''} /> Include in main</label><label class="toggle-label" data-tip="Hide even after requirements are met. Usually requirements are enough for normal gating."><input type="checkbox" id="qf_hidden" ${d('hidden',false)?'checked':''} /> Hidden permanently</label></div>
-    <div class="hint" style="margin-bottom:10px;">⚠ <strong>Hidden</strong> suppresses even after requirements are met. Requirements auto-gate — no need for hidden.</div>
-    <div class="field" data-tip="Main quest description. Supports Questlog rich text links and formatting codes."><label>Description</label>${descToolbar('qf_description')}<textarea id="qf_description">${esc(typeof q.description==='string'?q.description:q.description!=null?JSON.stringify(q.description):'')}</textarea></div>
-    <div class="hint" style="margin-bottom:8px;">Supports <span class="kbd">[text](quest:ns:id)</span>, <span class="kbd">[text](image:ns:path)</span></div>
-    ${renderDescField('qf_description_completed','Description (completed)',q.description_completed,true)}
-    ${renderDescField('qf_description_failed','Description (failed)',q.description_failed,true)}
-    <div class="g2" style="margin-top:10px;">${renderRend('icon',q.icon)}</div>
+    ${descriptionEditorHtml(q)}
+    <div class="display-meta-grid">
+      ${renderRend('icon',q.icon)}
+      <div class="field" data-tip="Sound played when the quest is completed. Use a Minecraft sound ID."><label>Completed sound</label><input type="text" id="qf_completed_sound" value="${esc(d('completed_sound','')||'')}" placeholder="minecraft:block.amethyst_block.hit" /></div>
+      <div class="field" data-tip="Sound played when the quest unlocks or triggers. Use a Minecraft sound ID."><label>Triggered sound</label><input type="text" id="qf_triggered_sound" value="${esc(d('triggered_sound','')||'')}" placeholder="minecraft:item.trident.hit_ground" /></div>
+    </div>
+    <div class="inline-quest-preview" id="displayQuestPreviewMount" aria-label="Live Questlog quest preview"></div>
   </div>
 </details>
 
 <details class="section" data-panel-key="progress" open>
   <summary>Requirements, Objectives &amp; Rewards</summary>
   <div class="sec-body">
-    <div class="sub-h">Requirements (unlock)</div><div id="reqList"></div><button type="button" class="btn btn-dashed" id="addReq" data-tip="Add a requirement that unlocks or gates this quest.">+ Add requirement</button>
-    <div class="sub-h" style="margin-top:14px;">Objectives</div><div id="objList"></div><button type="button" class="btn btn-dashed" id="addObj" data-tip="Add a player task needed to complete this quest.">+ Add objective</button>
-    <div class="sub-h" style="margin-top:14px;">Failures — optional</div><div id="failList"></div><button type="button" class="btn btn-dashed" id="addFail" data-tip="Add an optional failure condition.">+ Add failure</button>
-    <div class="sub-h" style="margin-top:14px;">Rewards</div><div id="rewList"></div><button type="button" class="btn btn-dashed" id="addRew" data-tip="Add a completion reward.">+ Add reward</button>
-  </div>
-</details>
-
-<details class="section" data-panel-key="sounds">
-  <summary>Sounds &amp; Notifications</summary>
-  <div class="sec-body">
-    <div class="g2" style="grid-template-columns:1fr 1fr;"><div class="field" data-tip="Sound played when the quest is completed. Use a Minecraft sound ID."><label>Completed sound</label><input type="text" id="qf_completed_sound" value="${esc(d('completed_sound','')||'')}" placeholder="minecraft:block.amethyst_block.hit" /></div><div class="field" data-tip="Sound played when the quest unlocks or triggers. Use a Minecraft sound ID."><label>Triggered sound</label><input type="text" id="qf_triggered_sound" value="${esc(d('triggered_sound','')||'')}" placeholder="minecraft:item.trident.hit_ground" /></div></div>
-    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;"><label class="toggle-label" data-tip="Show a toast when this quest becomes available."><input type="checkbox" id="qf_toast_on_unlock" ${d('toast_on_unlock',true)?'checked':''} /> Toast on unlock</label><label class="toggle-label" data-tip="Show a toast when this quest is completed."><input type="checkbox" id="qf_toast_on_complete" ${d('toast_on_complete',true)?'checked':''} /> Toast on complete</label><label class="toggle-label" data-tip="Show a larger popup when the quest unlocks."><input type="checkbox" id="qf_show_popup_on_unlock" ${d('show_popup_on_unlock',false)?'checked':''} /> Popup on unlock</label></div>
+    <div class="progress-board">
+      ${progressSectionHtml({kind:'req',title:'Requirements (unlock)',desc:'Conditions that must be met to unlock this quest.',count:(q.requirements||[]).length,noun:'requirement',buttonId:'addReq',buttonText:'Add requirement',listId:'reqList'})}
+      ${progressSectionHtml({kind:'obj',title:'Objectives',desc:'Tasks the player needs to complete.',count:(q.objectives||[]).length,noun:'objective',buttonId:'addObj',buttonText:'Add objective',listId:'objList'})}
+      ${progressSectionHtml({kind:'fail',title:'Failures (optional)',desc:'Conditions that fail this quest.',count:(q.failures||[]).length,noun:'failure',buttonId:'addFail',buttonText:'Add failure',listId:'failList'})}
+      ${progressSectionHtml({kind:'rew',title:'Rewards',desc:'Rewards given when the quest is completed.',count:(q.rewards||[]).length,noun:'reward',buttonId:'addRew',buttonText:'Add reward',listId:'rewList'})}
+    </div>
   </div>
 </details>
 
 <details class="section" data-panel-key="layout">
-  <summary>UI Layout &amp; Textures</summary>
-  <div class="sec-body"><div class="g2">
-    <div class="field"><label>Background texture</label><input type="text" id="qf_background_texture" value="${esc(d('background_texture','')||'')}" /></div>
-    <div class="field"><label>Right panel texture</label><input type="text" id="qf_right_panel_texture" value="${esc(d('right_panel_texture','')||'')}" /></div>
-    <div class="field"><label>Peripheral texture</label><input type="text" id="qf_peripheral_texture" value="${esc(d('peripheral_texture','')||'')}" /></div>
-    <div class="field"><label>Overlay</label><input type="text" id="qf_overlay" value="${esc(d('overlay','')||'')}" /></div>
-    <div class="field"><label>Overlay W</label><input type="number" id="qf_overlay_width" value="${d('overlay_width','')}" /></div>
-    <div class="field"><label>Overlay H</label><input type="number" id="qf_overlay_height" value="${d('overlay_height','')}" /></div>
-    <div class="field"><label>Overlay X</label><input type="number" id="qf_overlay_x_offset" value="${d('overlay_x_offset',0)}" /></div>
-    <div class="field"><label>Overlay Y</label><input type="number" id="qf_overlay_y_offset" value="${d('overlay_y_offset',0)}" /></div>
-    <div class="field"><label>Left panel W</label><input type="number" id="qf_left_panel_width" value="${d('left_panel_width',275)}" /></div>
-    <div class="field"><label>Right panel W</label><input type="number" id="qf_right_panel_width" value="${d('right_panel_width',170)}" /></div>
-    <div class="field"><label>Panel H</label><input type="number" id="qf_panel_height" value="${d('panel_height',166)}" /></div>
-    <div class="field"><label>Left panel X</label><input type="number" id="qf_left_panel_x_offset" value="${d('left_panel_x_offset',0)}" /></div>
-    <div class="field"><label>Left panel Y</label><input type="number" id="qf_left_panel_y_offset" value="${d('left_panel_y_offset',0)}" /></div>
-    <div class="field"><label>Right panel X</label><input type="number" id="qf_right_panel_x_offset" value="${d('right_panel_x_offset',0)}" /></div>
-    <div class="field"><label>Right panel Y</label><input type="number" id="qf_right_panel_y_offset" value="${d('right_panel_y_offset',0)}" /></div>
-  </div></div>
+  <summary>Textures &amp; Overlay</summary>
+  <div class="sec-body">
+    <div class="advanced-note">These fields are mostly for resource-pack styling. Panel placement now lives in GUI Editor Layout &amp; Position, while any loaded JSON panel fields remain preserved here.</div>
+    ${advGroup('Texture sources',`<div class="advanced-grid wide">
+      ${advTextField('Background texture','qf_background_texture',d('background_texture','')||'','Optional full Questlog background texture path.')}
+      ${advTextField('Right panel texture','qf_right_panel_texture',d('right_panel_texture','')||'','Optional texture path for the right info panel.')}
+      ${advTextField('Peripheral texture','qf_peripheral_texture',d('peripheral_texture','')||'','Optional side/peripheral texture path.')}
+      ${advTextField('Overlay texture','qf_overlay',d('overlay','')||'','Optional overlay texture path.')}
+    </div>`)}
+    ${advGroup('Overlay size and position',`<div class="advanced-grid">
+      ${advNumField('Overlay width','qf_overlay_width',d('overlay_width',''),'Pixel width of the overlay texture.')}
+      ${advNumField('Overlay height','qf_overlay_height',d('overlay_height',''),'Pixel height of the overlay texture.')}
+      ${advNumField('Overlay X offset','qf_overlay_x_offset',d('overlay_x_offset',0),'Horizontal overlay offset.')}
+      ${advNumField('Overlay Y offset','qf_overlay_y_offset',d('overlay_y_offset',0),'Vertical overlay offset.')}
+    </div>`)}
+    ${advancedGuiEditorCard([
+      ['qf_left_panel_width',d('left_panel_width',275)],
+      ['qf_right_panel_width',d('right_panel_width',170)],
+      ['qf_panel_height',d('panel_height',166)],
+      ['qf_left_panel_x_offset',d('left_panel_x_offset',0)],
+      ['qf_left_panel_y_offset',d('left_panel_y_offset',0)],
+      ['qf_right_panel_x_offset',d('right_panel_x_offset',0)],
+      ['qf_right_panel_y_offset',d('right_panel_y_offset',0)]
+    ])}
+  </div>
 </details>
 
 <details class="section" data-panel-key="labels">
   <summary>Button Labels &amp; Palette</summary>
-  <div class="sec-body g2">
-    <div class="field"><label>Back button</label><input type="text" id="qf_back_button_text" value="${esc(d('back_button_text','gui.back'))}" /></div>
-    <div class="field"><label>Collect button</label><input type="text" id="qf_collect_button_text" value="${esc(d('collect_button_text','questlog.reward.collect'))}" /></div>
-    <div class="field"><label>Uncollected</label><input type="text" id="qf_uncollected_text" value="${esc(d('uncollected_text','questlog.reward.uncollected'))}" /></div>
-    <div class="field"><label>Collected</label><input type="text" id="qf_collected_text" value="${esc(d('collected_text','questlog.reward.collected'))}" /></div>
-    ${rcf('Text color','qf_text_color',d('text_color','#4C381B'),'#4C381B')}
-    ${rcf('Completed text','qf_completed_text_color',d('completed_text_color','#529E52'),'#529E52')}
-    ${rcf('Hovered text','qf_hovered_text_color',d('hovered_text_color','#FFFFFF'),'#FFFFFF')}
-    ${rcf('Title color','qf_title_color',d('title_color','#4C381B'),'#4C381B')}
-    ${rcf('Progress text','qf_progress_text_color',d('progress_text_color','#9E7852'),'#9E7852')}
+  <div class="sec-body">
+    <div class="advanced-note">Labels and colors are optional. Defaults are omitted from export so normal quests stay clean.</div>
+    ${advGroup('Button and reward labels',`<div class="advanced-grid wide">
+      ${advTextField('Back button','qf_back_button_text',d('back_button_text','gui.back'),'Translation key or literal text for the back button.')}
+      ${advTextField('Collect button','qf_collect_button_text',d('collect_button_text','questlog.reward.collect'),'Translation key or literal text for the reward collect button.')}
+      ${advTextField('Uncollected reward','qf_uncollected_text',d('uncollected_text','questlog.reward.uncollected'),'Text shown for uncollected rewards.')}
+      ${advTextField('Collected reward','qf_collected_text',d('collected_text','questlog.reward.collected'),'Text shown after rewards are collected.')}
+    </div>`)}
+    ${advGroup('Questlog text colors',`<div class="advanced-grid">
+      ${rcf('Text color','qf_text_color',d('text_color','#4C381B'),'#4C381B')}
+      ${rcf('Completed text','qf_completed_text_color',d('completed_text_color','#529E52'),'#529E52')}
+      ${rcf('Hovered text','qf_hovered_text_color',d('hovered_text_color','#FFFFFF'),'#FFFFFF')}
+      ${rcf('Title color','qf_title_color',d('title_color','#4C381B'),'#4C381B')}
+      ${rcf('Progress text','qf_progress_text_color',d('progress_text_color','#9E7852'),'#9E7852')}
+    </div>`)}
   </div>
 </details>
 
 <details class="section" data-panel-key="badge">
   <summary>Badge — optional</summary>
-  <div class="sec-body g2">
+  <div class="sec-body">
+    <div class="advanced-note">Badges are optional icon overlays. Leave texture empty to remove the badge from exported JSON.</div>
+    <div class="advanced-grid">
     <div class="field"><label>Texture</label><input type="text" id="qb_texture" value="${badge?esc(badge.texture||''):''}" /></div>
     <div class="field"><label>U / V</label><input type="text" id="qb_uv" value="${badge?(badge.u??0)+', '+(badge.v??0):'0, 0'}" /></div>
     <div class="field"><label>W / H</label><input type="text" id="qb_wh" value="${badge?(badge.width??16)+', '+(badge.height??16):'16, 16'}" /></div>
     <div class="field"><label>Tex size W×H</label><input type="text" id="qb_twh" value="${badge?(badge.texture_width??256)+', '+(badge.texture_height??256):'256, 256'}" /></div>
     <div class="field"><label>Frames</label><input type="number" id="qb_frames" value="${badge?badge.frames??1:1}" /></div>
     <div class="field"><label>Frame time (ms)</label><input type="number" id="qb_frame_time" value="${badge?badge.frame_time??100:100}" /></div>
+    </div>
   </div>
 </details>`;
 }
 
 function renderChForm(c){
   const d=(k,v)=>(c[k]!==undefined?c[k]:v);
-  return`<div class="section"><div class="sec-body"><div class="g2"><div class="field" data-tip="The player-facing chapter name shown in Questlog."><label>Display name</label><input type="text" id="cf_name" value="${esc(c.name||'')}" /></div><div class="field" data-tip="Questlog uses this number to order chapters."><label>Order</label><input type="number" id="cf_order" value="${d('order',0)}" /></div></div><div style="display:flex;flex-wrap:wrap;gap:12px;margin:10px 0;"><label class="toggle-label" data-tip="Mark chapter text as translatable for language files."><input type="checkbox" id="cf_translatable" ${d('translatable',false)?'checked':''} /> Translatable</label><label class="toggle-label" data-tip="Use this as the default chapter when Questlog opens."><input type="checkbox" id="cf_default_chapter" ${d('default_chapter',false)?'checked':''} /> Default chapter</label><label class="toggle-label" data-tip="Hide the chapter until Questlog conditions reveal it."><input type="checkbox" id="cf_hidden" ${d('hidden',false)?'checked':''} /> Hidden</label></div><div class="hint" style="margin-bottom:10px;">Hidden chapters still show quests if requirements are met.</div><div class="g2">${renderRend('chicon',c.icon)}</div></div></div>`;
+  const showListPreview=!['workbench','canvas'].includes(document.body?.dataset.layout);
+  return`<div class="section chapter-editor-section"><div class="sec-body chapter-editor-body"><div class="g2"><div class="field" data-tip="The player-facing chapter name shown in Questlog."><label>Display name</label><input type="text" id="cf_name" value="${esc(c.name||'')}" /></div><div class="field" data-tip="Questlog uses this number to order chapters."><label>Order</label><input type="number" id="cf_order" value="${d('order',0)}" /></div></div><div style="display:flex;flex-wrap:wrap;gap:12px;margin:10px 0;"><label class="toggle-label" data-tip="Mark chapter text as translatable for language files."><input type="checkbox" id="cf_translatable" ${d('translatable',false)?'checked':''} /> Translatable</label><label class="toggle-label" data-tip="Use this as the default chapter when Questlog opens."><input type="checkbox" id="cf_default_chapter" ${d('default_chapter',false)?'checked':''} /> Default chapter</label><label class="toggle-label" data-tip="Hide the chapter until Questlog conditions reveal it."><input type="checkbox" id="cf_hidden" ${d('hidden',false)?'checked':''} /> Hidden</label></div><div class="hint" style="margin-bottom:10px;">Hidden chapters still show quests if requirements are met.</div><div class="g2">${renderRend('chicon',c.icon)}</div>${showListPreview?`<div class="chapter-list-preview-card"><div class="chapter-list-preview-head"><span>Questlog list preview</span><div class="chapter-list-preview-tools"><small>Uses this chapter and its linked quests.</small></div></div><div class="inline-chapter-list-preview" id="chapterQuestListPreviewMount" aria-label="Live Questlog chapter list preview"></div></div>`:''}</div></div>`;
 }
 
 // ── Objectives ────────────────────────────────────────────────────
 function oSel(sel){return`<select class="obj-type" data-tip="Choose the Questlog objective type this entry uses.">${OBJ_TYPES.map(t=>`<option value="${t}" ${t===sel?'selected':''}>${t}</option>`).join('')}</select>`;}
 function rSel(sel){return`<select class="rew-type" data-tip="Choose the Questlog reward type this entry gives.">${REW_TYPES.map(t=>`<option value="${t}" ${t===sel?'selected':''}>${t}</option>`).join('')}</select>`;}
+function cleanTypeName(type){const raw=String(type||'').split(':').pop().replace(/_/g,' ');return raw.replace(/\b\w/g,m=>m.toUpperCase());}
+function progressCardLabel(kind,isNot,i){if(isNot)return'Inverted';if(kind==='req')return`Requirement #${i+1}`;if(kind==='fail')return`Failure #${i+1}`;return`Objective #${i+1}`;}
+function progressSectionIconName(kind){
+  if(kind==='req')return'key-round';
+  if(kind==='obj')return'target';
+  if(kind==='fail')return'circle-x';
+  if(kind==='rew')return'gift';
+  return'info';
+}
+function progressFallbackIconName(summary,sectionKind,isReward){
+  const type=String(summary?.type||'');
+  if(isReward){
+    if(type==='questlog:experience')return'activity';
+    if(type==='questlog:command')return'file-code-2';
+    if(type==='questlog:loot_table')return'package';
+    return'gift';
+  }
+  if(sectionKind==='req')return'key-round';
+  if(sectionKind==='fail')return'circle-x';
+  if(type==='questlog:visit_biome')return'trees';
+  if(type==='questlog:visit_dimension')return'door-open';
+  if(type==='questlog:visit_structure')return'landmark';
+  if(type==='questlog:visit_position')return'map-pin';
+  if(type==='questlog:effect_added'||type==='questlog:enchant')return'sparkles';
+  if(type==='questlog:read')return'book-open-check';
+  if(type.includes('entity'))return'user';
+  if(type.includes('visit'))return'map-pin';
+  if(type.includes('stat'))return'activity';
+  if(type.includes('quest')||type.includes('advancement'))return'check';
+  if(type.includes('block'))return'package';
+  return'target';
+}
+function progressFallbackIcon(summary,sectionKind,isReward=false){
+  const icon=progressFallbackIconName(summary,sectionKind,isReward);
+  const cls=`progress-entry-icon progress-entry-${esc(summary?.kind||sectionKind)} progress-entry-symbol progress-entry-symbol-${esc(sectionKind)}`;
+  return`<span class="${cls}" aria-hidden="true">${guiStudioLucideIcon(icon,'progress-entry-symbol-svg')}</span>`;
+}
+function progressObjectiveSummary(o){
+  const type=o?.type||'questlog:item_obtain';
+  const title=o?.name||cleanTypeName(type);
+  const id=o?.item||o?.block||o?.entity||o?.biome||o?.dimension||o?.structure||o?.quest||o?.advancement||o?.stat||o?.effect||type;
+  const amount=objectiveSupportsAmount(type)?Math.max(1,parseInt(o?.required_amount,10)||1):0;
+  const iconValue=previewEntryIconValue(o);
+  return{title,id,amount:amount?`x${amount}`:'Any',kind:type.includes('block')?'block':type.includes('entity')?'entity':'item',type,iconValue};
+}
+function progressRewardSummary(r){
+  const type=r?.type||'questlog:item';
+  const title=r?.name||cleanTypeName(type);
+  const id=r?.item||r?.loot_table||r?.command||String(r?.experience??'')||type;
+  const amount=type==='questlog:experience'?`${parseInt(r?.experience,10)||0} XP`:`x${Math.max(1,parseInt(r?.count,10)||1)}`;
+  const iconValue=type==='questlog:experience'?null:previewEntryIconValue(r);
+  return{title,id,amount,kind:type==='questlog:experience'?'xp':'item',type,iconValue};
+}
+function progressCompactRow(o,i,kind,isReward=false){
+  const s=isReward?progressRewardSummary(o):progressObjectiveSummary(o);
+  const icon=s.iconValue?previewIconTile(s.iconValue,`progress-entry-icon progress-entry-${s.kind}`):progressFallbackIcon(s,kind,isReward);
+  return`<div class="progress-compact-row"><span class="progress-drag-handle" aria-hidden="true">...</span>${icon}<span class="progress-entry-copy"><strong>${esc(s.title)}</strong><code>${esc(s.id)}</code></span><span class="progress-entry-amount">${esc(s.amount)}</span><button type="button" class="btn progress-edit-btn" aria-label="Edit this entry" data-tip="Edit this entry.">${guiStudioLucideIcon('pencil','progress-compact-icon')}</button><button type="button" class="btn progress-compact-remove" aria-label="Delete this entry" data-tip="Delete this entry.">${guiStudioLucideIcon('trash-2','progress-compact-icon')}</button></div>`;
+}
 
 function renderOF(o){
   const t=o.type||'questlog:item_obtain';const ra=o.required_amount!==undefined?o.required_amount:1;
@@ -1258,10 +14231,10 @@ function renderOF(o){
   const iv=o.icon===undefined||o.icon===null?'':typeof o.icon==='string'?o.icon:JSON.stringify(o.icon);
   const ci=`<div class="field"><label>Icon — optional</label><input type="text" class="obj-icon" value="${esc(iv)}" placeholder='item id or {"item":"..."}' /></div>`;
   const amt=s=>s?`<div class="field" data-tip="How many times the player must do this objective. Some Questlog objective types do not use this."><label>Required amount</label><input type="number" class="obj-amt" min="1" value="${ra}" /></div>`:'';
-  if(t==='questlog:or'){const k=Array.isArray(o.objectives)?o.objectives:[];return`${cn}<div class="nested or-kids">${k.map((c,i)=>wrapOC(c,i)).join('')}</div><button type="button" class="btn btn-dashed add-or-child" style="margin-top:5px;">+ Sub-objective</button>`;}
-  if(t==='questlog:not'){const ch=o.objective||{type:'questlog:read'};return`${cn}<div class="nested not-child">${wrapOC(ch,0,true)}</div>`;}
+  if(t==='questlog:or'){const k=Array.isArray(o.objectives)?o.objectives:[];return`${cn}<div class="nested or-kids">${k.map((c,i)=>wrapOC(c,i,false,'obj')).join('')}</div><button type="button" class="btn btn-dashed add-or-child" style="margin-top:5px;">+ Sub-objective</button>`;}
+  if(t==='questlog:not'){const ch=o.objective||{type:'questlog:read'};return`${cn}<div class="nested not-child">${wrapOC(ch,0,true,'obj')}</div>`;}
   if(t==='questlog:unobtainable')return`${cn}${ci}`;
-  if(t==='questlog:read')return`${cn}${ci}<div class="field"><label>Quest ID</label><input type="text" class="obj-read-quest" value="${esc(o.quest||'')}" placeholder="questlog:my_quest" /></div>`;
+  if(t==='questlog:read')return`${cn}<div class="field"><label>Quest ID</label><input type="text" class="obj-read-quest" value="${esc(o.quest||'')}" placeholder="questlog:my_quest" /></div>${ci}`;
   let e='';
   switch(t){
     case'questlog:stat':e=`<div class="field"><label>Statistic</label><select class="obj-stat">${MC_STATS.map(s=>`<option value="${s}" ${o.stat===s?'selected':''}>${s}</option>`).join('')}</select><input type="text" class="obj-stat-custom" style="margin-top:5px" placeholder="Or custom stat id" value="${o.stat&&!MC_STATS.includes(o.stat)?esc(o.stat):''}" /></div><label class="toggle-label" style="margin-bottom:8px;"><input type="checkbox" class="obj-retro" ${o.retroactive!==false?'checked':''} /> Retroactive</label>${amt(true)}`;break;
@@ -1280,20 +14253,31 @@ function renderOF(o){
     case'questlog:advancement':e=`<div class="field"><label>Advancement ID</label><input type="text" class="obj-adv" value="${esc(o.advancement||'')}" /></div>${amt(true)}`;break;
     default:e=`<div class="field"><label>Extra JSON</label><textarea class="obj-raw">${esc(JSON.stringify(o,null,2))}</textarea></div>`;
   }
-  return`${cn}${ci}${e}`;
+  return`${cn}${e}${ci}`;
 }
 
-function wrapOC(o,i,isNot){return`<div class="obj-card" data-i="${i}"><div class="card-head"><span class="card-title">${isNot?'Inverted':'Objective #'+(i+1)}</span><div class="card-actions">${oSel(o.type||'questlog:item_obtain')}<button type="button" class="btn btn-sm btn-danger small-rm ${isNot?'hidden':''}">✕</button></div></div><div class="obj-fields">${renderOF(o)}</div></div>`;}
+function wrapOC(o,i,isNot,kind='obj'){return`<div class="obj-card is-collapsed" data-i="${i}">${progressCompactRow(o,i,kind,false)}<div class="card-head progress-edit-head"><span class="card-title">${progressCardLabel(kind,isNot,i)}</span><div class="card-actions">${oSel(o.type||'questlog:item_obtain')}</div></div><div class="obj-fields">${renderOF(o)}</div></div>`;}
 
-function renderOL(c,arr,k){c.innerHTML=arr.map((o,i)=>wrapOC(o,i)).join('');c.dataset.listKey=k;bindOC(c);}
+function renderOL(c,arr,k){c.innerHTML=arr.map((o,i)=>wrapOC(o,i,false,k)).join('');c.dataset.listKey=k;bindOC(c);}
 
 function bindOC(root){
+  if(!root.dataset.progressBlurBound){
+    root.dataset.progressBlurBound='1';
+    root.addEventListener('focusout',e=>{
+      if(e.target?.matches?.('.obj-block,.obj-entity,.obj-item,.obj-bitem,.obj-icon')){
+        setTimeout(()=>{syncQ();renderMain();},0);
+      }
+    });
+  }
   root.querySelectorAll('.obj-card').forEach(card=>{
     const ts=card.querySelector(':scope > .card-head .obj-type');if(ts)ts.onchange=()=>{syncQ();renderMain();};
-    const rm=card.querySelector(':scope > .card-head .small-rm');if(rm&&!rm.classList.contains('hidden'))rm.onclick=()=>{card.remove();syncQ();refreshJson();};
+    const rm=card.querySelector(':scope > .card-head .small-rm');if(rm&&!rm.classList.contains('hidden'))rm.onclick=()=>{card.remove();syncQ();renderMain();};
+    const cr=card.querySelector(':scope > .progress-compact-row .progress-compact-remove');if(cr)cr.onclick=()=>{card.remove();syncQ();renderMain();};
+    const edit=card.querySelector(':scope > .progress-compact-row .progress-edit-btn');if(edit)edit.onclick=()=>{card.classList.remove('is-collapsed');};
+    const save=card.querySelector(':scope > .card-head .progress-save-btn');if(save)save.onclick=()=>{syncQ();renderMain();};
   });
   root.querySelectorAll('.add-or-child').forEach(btn=>{
-    btn.onclick=()=>{const oc=btn.closest('.obj-card');const ts=oc?.querySelector(':scope > .card-head .obj-type');if(!ts||ts.value!=='questlog:or')return;const ok=oc.querySelector('.obj-fields .nested.or-kids');if(!ok)return;const idx=ok.querySelectorAll(':scope > .obj-card').length;ok.insertAdjacentHTML('beforeend',wrapOC({type:'questlog:item_obtain',item:'minecraft:dirt',required_amount:1},idx));bindOC(ok);syncQ();refreshJson();};
+    btn.onclick=()=>{const oc=btn.closest('.obj-card');const ts=oc?.querySelector(':scope > .card-head .obj-type');if(!ts||ts.value!=='questlog:or')return;const ok=oc.querySelector('.obj-fields .nested.or-kids');if(!ok)return;const idx=ok.querySelectorAll(':scope > .obj-card').length;ok.insertAdjacentHTML('beforeend',wrapOC({type:'questlog:item_obtain',item:'minecraft:dirt',required_amount:1},idx,false,'obj'));bindOC(ok);syncQ();refreshJson();};
   });
 }
 
@@ -1310,15 +14294,15 @@ function readOC(card){
   if(objectiveSupportsAmount(type))sA();
   switch(type){
     case'questlog:stat':{const s=qIC(card,'.obj-stat')?.value;const cu=qIC(card,'.obj-stat-custom')?.value?.trim();o.stat=cu||s||'minecraft:walk_one_cm';o.retroactive=!!qIC(card,'.obj-retro')?.checked;break;}
-    case'questlog:block_mine':case'questlog:block_place':case'questlog:block_interact':o.block=qIC(card,'.obj-block')?.value?.trim()||'minecraft:stone';if(type==='questlog:block_interact'){const it=qIC(card,'.obj-bitem')?.value?.trim();if(it)o.item=it;}break;
+    case'questlog:block_mine':case'questlog:block_place':case'questlog:block_interact':o.block=qIC(card,'.obj-block')?.value?.trim()||'minecraft:stone';if(type==='questlog:block_interact'){const it=itemIdInputValue(qIC(card,'.obj-bitem'));if(it)o.item=it;}break;
     case'questlog:entity_breed':case'questlog:entity_death':case'questlog:entity_kill':case'questlog:entity_tame':o.entity=qIC(card,'.obj-entity')?.value?.trim()||'minecraft:zombie';break;
     case'questlog:entity_approach':o.entity=qIC(card,'.obj-entity')?.value?.trim()||'minecraft:villager';o.range=parseFloat(qIC(card,'.obj-range')?.value)||5;break;
-    case'questlog:item_craft':case'questlog:item_drop':case'questlog:item_obtain':case'questlog:item_use':case'questlog:item_equip':o.item=qIC(card,'.obj-item')?.value?.trim()||'minecraft:dirt';if(type==='questlog:item_equip')o.slot=qIC(card,'.obj-slot')?.value||'mainhand';break;
+    case'questlog:item_craft':case'questlog:item_drop':case'questlog:item_obtain':case'questlog:item_use':case'questlog:item_equip':o.item=itemIdInputValue(qIC(card,'.obj-item'),'minecraft:dirt');if(type==='questlog:item_equip')o.slot=qIC(card,'.obj-slot')?.value||'mainhand';break;
     case'questlog:visit_biome':o.biome=qIC(card,'.obj-biome')?.value?.trim()||'minecraft:plains';break;
     case'questlog:visit_dimension':o.dimension=qIC(card,'.obj-dim')?.value?.trim()||'minecraft:overworld';break;
     case'questlog:visit_structure':o.structure=qIC(card,'.obj-structure')?.value?.trim()||'minecraft:village';break;
     case'questlog:visit_position':{const pc=cls=>{const el=qIC(card,cls);const v=el?.value?.trim();if(v===''||v===null||v===undefined)return undefined;const n=Number(v);return isNaN(n)?undefined:n;};const b={};const vMX=pc('.obj-minx');if(vMX!==undefined)b.minX=vMX;const vMY=pc('.obj-miny');if(vMY!==undefined)b.minY=vMY;const vMZ=pc('.obj-minz');if(vMZ!==undefined)b.minZ=vMZ;const vXX=pc('.obj-maxx');if(vXX!==undefined)b.maxX=vXX;const vXY=pc('.obj-maxy');if(vXY!==undefined)b.maxY=vXY;const vXZ=pc('.obj-maxz');if(vXZ!==undefined)b.maxZ=vXZ;if(Object.keys(b).length)o.bounds=b;break;}
-    case'questlog:enchant':{const en=qIC(card,'.obj-ench')?.value?.trim();if(en)o.enchantment=en;const lv=qIC(card,'.obj-elvl')?.value;if(lv!==''&&lv!=null)o.level=parseInt(lv,10);const its=[...card.querySelectorAll('.obj-item')].filter(el=>el.closest('.obj-card')===card);const last=its[its.length-1]?.value?.trim();if(last)o.item=last;break;}
+    case'questlog:enchant':{const en=qIC(card,'.obj-ench')?.value?.trim();if(en)o.enchantment=en;const lv=qIC(card,'.obj-elvl')?.value;if(lv!==''&&lv!=null)o.level=parseInt(lv,10);const its=[...card.querySelectorAll('.obj-item')].filter(el=>el.closest('.obj-card')===card);const last=itemIdInputValue(its[its.length-1]);if(last)o.item=last;break;}
     case'questlog:effect_added':o.effect=qIC(card,'.obj-effect')?.value?.trim()||'minecraft:regeneration';break;
     case'questlog:trample':break;
     case'questlog:quest_complete':o.quest=qIC(card,'.obj-quest')?.value?.trim()||'questlog:other';break;
@@ -1336,13 +14320,128 @@ function renderRC(r,i){
   else if(t==='questlog:command')body=`<div class="field"><label>Command</label><input type="text" class="rw-cmd" value="${esc(r.command||'')}" /></div><div class="field"><label>Permission level</label><input type="number" class="rw-plvl" value="${r.permission_level??2}" /></div>`;
   else if(t==='questlog:experience')body=`<div class="field"><label>Amount</label><input type="number" class="rw-xp" value="${r.experience??0}" /></div><label class="toggle-label"><input type="checkbox" class="rw-levels" ${(r.level??r.levels)?'checked':''} /> Grant as levels</label>`;
   else if(t==='questlog:loot_table')body=`<div class="field"><label>Loot table</label><input type="text" class="rw-loot" value="${esc(r.loot_table||'')}" /></div>`;
-  return`<div class="rew-card" data-ri="${i}"><div class="card-head"><span class="card-title">Reward #${i+1}</span><div class="card-actions">${rSel(t)}<button type="button" class="btn btn-sm btn-danger small-rm rew-remove">✕</button></div></div><div class="field"><label>Name — optional</label><input type="text" class="rw-name" value="${esc(r.name||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-trans" ${r.translatable?'checked':''} /> Translation key</label><div class="field"><label>Icon</label><input type="text" class="rw-icon" value="${esc(r.icon!=null?(typeof r.icon==='string'?r.icon:JSON.stringify(r.icon)):'')}" /></div><div class="field"><label>Claim sound</label><input type="text" class="rw-sound" value="${esc(r.claim_sound||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-autoclaim" ${r.auto_claim?'checked':''} /> Auto-claim</label>${body}</div>`;
+  return`<div class="rew-card is-collapsed" data-ri="${i}">${progressCompactRow(r,i,'rew',true)}<div class="card-head progress-edit-head"><span class="card-title">Reward #${i+1}</span><div class="card-actions">${rSel(t)}</div></div><div class="rew-fields"><div class="field"><label>Name — optional</label><input type="text" class="rw-name" value="${esc(r.name||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-trans" ${r.translatable?'checked':''} /> Translation key</label>${body}<div class="field"><label>Icon</label><input type="text" class="rw-icon" value="${esc(r.icon!=null?(typeof r.icon==='string'?r.icon:JSON.stringify(r.icon)):'')}" /></div><div class="field"><label>Claim sound</label><input type="text" class="rw-sound" value="${esc(r.claim_sound||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-autoclaim" ${r.auto_claim?'checked':''} /> Auto-claim</label></div></div>`;
 }
 
 // ── Bind dropdowns (insert + format) ─────────────────────────────
+let activeDescTextarea=null;
+let activeDescFormatState=null;
+function selectedTextAreaRange(ta){return ta&&ta.selectionStart!==undefined&&ta.selectionEnd!==undefined&&ta.selectionStart!==ta.selectionEnd;}
+const MC_FORMAT_CODE_RE=/(\u00A7|\u00C2\u00A7)[0-9a-fk-or]/gi;
+function stripMinecraftCodes(text){return String(text||'').replace(MC_FORMAT_CODE_RE,'');}
+function minecraftCodeId(code){return String(code||'').slice(-1).toLowerCase();}
+function normalizeMinecraftCodes(codes,nextCode){
+  const incoming=minecraftCodeId(nextCode);
+  if(incoming==='r')return[];
+  const colorCodes=new Set('0123456789abcdef'.split(''));
+  let out=(codes||[]).filter(Boolean);
+  if(colorCodes.has(incoming)){
+    out=out.filter(c=>!colorCodes.has(minecraftCodeId(c)));
+    out.unshift(nextCode);
+  }else if(!out.some(c=>minecraftCodeId(c)===incoming)){
+    out.push(nextCode);
+  }
+  const color=out.find(c=>colorCodes.has(minecraftCodeId(c)));
+  const styles=out.filter(c=>!colorCodes.has(minecraftCodeId(c))&&minecraftCodeId(c)!=='r');
+  return color?[color,...styles]:styles;
+}
+function captureDescFormatState(ta){
+  if(!selectedTextAreaRange(ta))return null;
+  const start=ta.selectionStart,end=ta.selectionEnd;
+  const selected=ta.value.slice(start,end);
+  const codes=[...selected.matchAll(MC_FORMAT_CODE_RE)].map(m=>m[0]).filter(c=>minecraftCodeId(c)!=='r');
+  const plain=stripMinecraftCodes(selected);
+  activeDescFormatState={ta,wrapStart:start,wrapEnd:end,textStart:start,textEnd:end,codes,plain};
+  return activeDescFormatState;
+}
+function isFormatTextControl(el){
+  return el?.matches?.('#qf_title,#cf_name,#qf_description,#qf_description_completed,#qf_description_failed,.obj-name,.rw-name');
+}
+function hideDescSelectionMenu(){
+  const menu=$('#descSelectionMenu');if(menu){menu.classList.remove('open');menu.setAttribute('aria-hidden','true');}
+  activeDescFormatState=null;
+}
+function showDescSelectionMenu(ta,e){
+  if(!selectedTextAreaRange(ta)){hideDescSelectionMenu();return;}
+  activeDescTextarea=ta;
+  captureDescFormatState(ta);
+  const menu=$('#descSelectionMenu');if(!menu)return;
+  const tr=ta.getBoundingClientRect();
+  const maxX=Math.max(8,window.innerWidth-340),maxY=Math.max(8,window.innerHeight-120);
+  const x=Math.min(Math.max(e?.clientX??tr.left+24,8),maxX);
+  const y=Math.min(Math.max((e?.clientY??tr.top)-10,8),maxY);
+  menu.style.left=`${x}px`;menu.style.top=`${y}px`;
+  menu.classList.add('open');menu.setAttribute('aria-hidden','false');
+}
+function applyDescTemplate(ta,tpl){
+  if(!ta)return;
+  const s=ta.selectionStart??0,e=ta.selectionEnd??s,sel=ta.value.slice(s,e)||'text';
+  const ins=tpl==='image'?`[${sel}](image:namespace:path)`:tpl==='image-anim'?`[${sel}](image:namespace:path:16:16:8:100)`:`[${sel}](quest:namespace:quest_id)`;
+  ta.setRangeText(ins,s,e,'end');ta.focus();
+  try{ta.setSelectionRange(s,s+ins.length);captureDescFormatState(ta);}catch{}
+  ta.dispatchEvent(new Event('input',{bubbles:true}));
+}
+function applyDescFormat(ta,code){
+  if(!ta)return;
+  const s=ta.selectionStart??ta.value.length,e=ta.selectionEnd??s,sel=ta.value.slice(s,e);
+  if(sel)ta.setRangeText(`${code}${sel}§r`,s,e,'end');
+  else ta.setRangeText(code,s,s,'end');
+  ta.focus();ta.dispatchEvent(new Event('input',{bubbles:true}));
+}
+function applyDescFormatStacked(ta,code){
+  if(!ta)return;
+  let state=activeDescFormatState&&activeDescFormatState.ta===ta?activeDescFormatState:captureDescFormatState(ta);
+  if(!state){
+    const pos=ta.selectionStart??ta.value.length;
+    ta.setRangeText(code,pos,pos,'end');
+    ta.focus();ta.dispatchEvent(new Event('input',{bubbles:true}));
+    return;
+  }
+  state.codes=normalizeMinecraftCodes(state.codes,code);
+  const reset=MC_STYLES.find(s=>minecraftCodeId(s.code)==='r')?.code||'§r';
+  const prefix=state.codes.join('');
+  const replacement=prefix?`${prefix}${state.plain}${reset}`:state.plain;
+  const start=state.wrapStart,end=state.wrapEnd;
+  ta.setRangeText(replacement,start,end,'end');
+  const textStart=start+prefix.length;
+  const textEnd=textStart+state.plain.length;
+  activeDescFormatState={ta,wrapStart:start,wrapEnd:start+replacement.length,textStart,textEnd,codes:state.codes,plain:state.plain};
+  ta.focus();
+  try{ta.setSelectionRange(textStart,textEnd);}catch{}
+  ta.dispatchEvent(new Event('input',{bubbles:true}));
+}
+applyDescFormat=applyDescFormatStacked;
+function setupDescriptionEditor(){
+  $$('.desc-tab').forEach(btn=>{
+    btn.onclick=()=>{const editor=btn.closest('.description-editor'),key=btn.dataset.descTab;if(!editor||!key)return;editor.querySelectorAll('.desc-tab').forEach(b=>b.classList.toggle('active',b===btn));editor.querySelectorAll('.desc-pane').forEach(p=>p.classList.toggle('active',p.dataset.descPane===key));hideDescSelectionMenu();};
+  });
+  $$('#panelForm textarea,#panelForm input[type="text"]').forEach(ta=>{
+    if(!isFormatTextControl(ta))return;
+    if(ta.dataset.descBound)return;ta.dataset.descBound='1';
+    ta.addEventListener('mouseup',e=>{if(e.button===0)setTimeout(hideDescSelectionMenu,0);});
+    ta.addEventListener('contextmenu',e=>{if(selectedTextAreaRange(ta)){e.preventDefault();showDescSelectionMenu(ta,e);}else hideDescSelectionMenu();});
+    ta.addEventListener('keyup',e=>{if(e.key==='Escape'||!selectedTextAreaRange(ta))hideDescSelectionMenu();});
+    ta.addEventListener('blur',()=>setTimeout(()=>{if(!document.activeElement?.closest?.('#descSelectionMenu'))hideDescSelectionMenu();},120));
+  });
+  const menus=$$('#descSelectionMenu');
+  const menu=menus[menus.length-1]||null;
+  menus.slice(0,-1).forEach(m=>m.remove());
+  if(menu&&!menu.dataset.bound){
+    if(menu.parentElement!==document.body)document.body.appendChild(menu);
+    menu.dataset.bound='1';
+    menu.addEventListener('mousedown',e=>e.preventDefault());
+    menu.querySelectorAll('[data-fmt-template]').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();applyDescTemplate(activeDescTextarea,btn.dataset.fmtTemplate);showDescSelectionMenu(activeDescTextarea,e);}));
+    menu.querySelectorAll('[data-fmt-code]').forEach(btn=>btn.addEventListener('click',e=>{e.stopPropagation();applyDescFormat(activeDescTextarea,btn.dataset.fmtCode);}));
+  }
+}
+
 function setupDropdowns(){
   // Close all menus on doc click
-  document.addEventListener('click',()=>$$('.drop-menu.open').forEach(m=>m.classList.remove('open')));
+  document.addEventListener('click',e=>{
+    $$('.drop-menu.open').forEach(m=>m.classList.remove('open'));
+    if(!e.target?.closest?.('.description-editor,#descSelectionMenu'))hideDescSelectionMenu();
+  });
+  setupDescriptionEditor();
 
   // Insert dropdowns
   $$('.drop-wrap').forEach(wrap=>{
@@ -1379,11 +14478,26 @@ function toggR(p){const k=document.querySelector(`[data-r="${p}-kind"]`);if(!k)r
 function bindQForm(){
   const q=getCD();
   setupDropdowns();bindColorPickers();toggR('icon');
+  updateDisplayIconPreview();
+  renderInlineQuestPreview();
+  $('#advancedLayoutGuiStudioBtn')?.addEventListener('click',()=>openGuiStudio('quest-menu'));
+  $$('[data-r^="icon"]').forEach(el=>{el.addEventListener('input',updateDisplayIconPreview);el.addEventListener('change',updateDisplayIconPreview);});
   renderOL($('#reqList'),q.requirements||[],'req');renderOL($('#objList'),q.objectives||[],'obj');renderOL($('#failList'),q.failures||[],'fail');
   const rw=$('#rewList');rw.innerHTML=(q.rewards||[]).map((r,i)=>renderRC(r,i)).join('');
+  if(!rw.dataset.progressBlurBound){
+    rw.dataset.progressBlurBound='1';
+    rw.addEventListener('focusout',e=>{
+      if(e.target?.matches?.('.rw-item,.rw-icon')){
+        setTimeout(()=>{syncQ();renderMain();},0);
+      }
+    });
+  }
   rw.querySelectorAll('.rew-card').forEach(card=>{
     card.querySelector('.rew-type').onchange=()=>{syncQ();const i=+card.dataset.ri;q.rewards[i]={type:card.querySelector('.rew-type').value};setCD(q);renderMain();};
-    card.querySelector('.rew-remove').onclick=()=>{syncQ();q.rewards.splice(+card.dataset.ri,1);setCD(q);renderMain();};
+    card.querySelector('.rew-remove')?.addEventListener('click',()=>{syncQ();q.rewards.splice(+card.dataset.ri,1);setCD(q);renderMain();});
+    card.querySelector('.progress-compact-remove')?.addEventListener('click',()=>{syncQ();q.rewards.splice(+card.dataset.ri,1);setCD(q);renderMain();});
+    card.querySelector('.progress-edit-btn')?.addEventListener('click',()=>{card.classList.remove('is-collapsed');});
+    card.querySelector('.progress-save-btn')?.addEventListener('click',()=>{syncQ();renderMain();});
   });
   $('#addReq').onclick=()=>{syncQ();if(!Array.isArray(q.requirements))q.requirements=[];q.requirements.push({type:'questlog:item_obtain',item:'minecraft:dirt',required_amount:1});setCD(q);renderMain();};
   $('#addObj').onclick=()=>{syncQ();if(!Array.isArray(q.objectives))q.objectives=[];q.objectives.push({type:'questlog:item_obtain',item:'minecraft:dirt',required_amount:1});setCD(q);renderMain();};
@@ -1395,12 +14509,14 @@ function bindChForm(){
   const sync=()=>{
     touchFile('chapter',currentFile);
     const c=getCD();c.name=$('#cf_name').value;c.order=parseInt($('#cf_order').value,10)||0;c.translatable=$('#cf_translatable').checked;c.default_chapter=$('#cf_default_chapter').checked;c.hidden=$('#cf_hidden').checked;
-    const k=document.querySelector('[data-r="chicon-kind"]')?.value;if(k==='stringitem'){const v=document.querySelector('[data-r="chicon-strv"]')?.value?.trim();if(v)c.icon=v;else delete c.icon;}else if(k==='item'){const v=document.querySelector('[data-r="chicon-itemv"]')?.value?.trim();if(v)c.icon={item:v};else delete c.icon;}else{const v=document.querySelector('[data-r="chicon-texv"]')?.value?.trim();if(v)c.icon={texture:v};else delete c.icon;}
-    trimCh(c);setCD(c);dRefresh();renderFileList();
+    if(c.default_chapter)Object.keys(chapters).forEach(fn=>{if(fn!==currentFile&&chapters[fn]){chapters[fn].default_chapter=false;touchFile('chapter',fn);}});
+    const k=document.querySelector('[data-r="chicon-kind"]')?.value;if(k==='stringitem'){const v=itemIdInputValue(document.querySelector('[data-r="chicon-strv"]'));if(v)c.icon=v;else delete c.icon;}else if(k==='item'){const v=itemIdInputValue(document.querySelector('[data-r="chicon-itemv"]'));if(v)c.icon={item:v};else delete c.icon;}else{const v=document.querySelector('[data-r="chicon-texv"]')?.value?.trim();if(v)c.icon={texture:v};else delete c.icon;}
+    trimCh(c);setCD(c);dRefresh();renderFileList();renderInlineChapterListPreview();
   };
   $('#cf_name').oninput=sync;['#cf_order','#cf_translatable','#cf_default_chapter','#cf_hidden'].forEach(s=>{const el=$(s);el.oninput=el.onclick=sync;});
   toggR('chicon');const ck=document.querySelector('[data-r="chicon-kind"]');if(ck){const p=ck.onchange;ck.onchange=()=>{if(p)p();sync();};}
   $$('[data-r^="chicon"]').forEach(el=>{el.oninput=sync;});$('#cf_order').onchange=sync;
+  $('#chapterGuiStudioBtn')?.addEventListener('click',()=>openGuiStudio('quest-list'));
 }
 
 // ── Sync quest ────────────────────────────────────────────────────
@@ -1415,9 +14531,9 @@ function syncQ(){
   const dv=$('#qf_description')?.value||'';q.description=pMJ(dv);if(q.description===''||q.description===undefined)delete q.description;
   const dc=$('#qf_description_completed');q.description_completed=dc?pMJ(dc.value,true):undefined;if(q.description_completed===undefined)delete q.description_completed;
   const df=$('#qf_description_failed');q.description_failed=df?pMJ(df.value,true):undefined;if(q.description_failed===undefined)delete q.description_failed;
-  const ik=document.querySelector('[data-r="icon-kind"]')?.value;if(ik==='stringitem'){const v=document.querySelector('[data-r="icon-strv"]')?.value?.trim();if(v)q.icon=v;else delete q.icon;}else if(ik==='item'){const v=document.querySelector('[data-r="icon-itemv"]')?.value?.trim();if(v)q.icon={item:v};else delete q.icon;}else{const v=document.querySelector('[data-r="icon-texv"]')?.value?.trim();if(v)q.icon={texture:v};else delete q.icon;}
+  const ik=document.querySelector('[data-r="icon-kind"]')?.value;if(ik==='stringitem'){const v=itemIdInputValue(document.querySelector('[data-r="icon-strv"]'));if(v)q.icon=v;else delete q.icon;}else if(ik==='item'){const v=itemIdInputValue(document.querySelector('[data-r="icon-itemv"]'));if(v)q.icon={item:v};else delete q.icon;}else{const v=document.querySelector('[data-r="icon-texv"]')?.value?.trim();if(v)q.icon={texture:v};else delete q.icon;}
   q.requirements=readOL($('#reqList'));q.objectives=readOL($('#objList'));const f=readOL($('#failList'));if(f.length)q.failures=f;else delete q.failures;
-  q.rewards=[...$('#rewList').querySelectorAll('.rew-card')].map(card=>{const t=card.querySelector('.rew-type').value;const r={type:t};const n=card.querySelector('.rw-name')?.value?.trim();if(n)r.name=n;if(card.querySelector('.rw-trans')?.checked)r.translatable=true;const ic=card.querySelector('.rw-icon')?.value?.trim();if(ic){try{r.icon=JSON.parse(ic);}catch{r.icon=ic;}}const snd=card.querySelector('.rw-sound')?.value?.trim();if(snd)r.claim_sound=snd;if(card.querySelector('.rw-autoclaim')?.checked)r.auto_claim=true;if(t==='questlog:item'){r.item=card.querySelector('.rw-item')?.value?.trim()||'minecraft:stone';r.count=parseInt(card.querySelector('.rw-count')?.value,10)||1;}else if(t==='questlog:command'){r.command=card.querySelector('.rw-cmd')?.value?.trim()||'/say hi';r.permission_level=parseInt(card.querySelector('.rw-plvl')?.value,10)||2;}else if(t==='questlog:experience'){r.experience=parseInt(card.querySelector('.rw-xp')?.value,10)||0;if(card.querySelector('.rw-levels')?.checked)r.level=true;}else if(t==='questlog:loot_table'){r.loot_table=card.querySelector('.rw-loot')?.value?.trim()||'minecraft:chests/spawn_bonus_chest';}return r;});
+  q.rewards=[...$('#rewList').querySelectorAll('.rew-card')].map(card=>{const t=card.querySelector('.rew-type').value;const r={type:t};const n=card.querySelector('.rw-name')?.value?.trim();if(n)r.name=n;if(card.querySelector('.rw-trans')?.checked)r.translatable=true;const ic=card.querySelector('.rw-icon')?.value?.trim();if(ic){try{r.icon=JSON.parse(ic);}catch{r.icon=ic;}}const snd=card.querySelector('.rw-sound')?.value?.trim();if(snd)r.claim_sound=snd;if(card.querySelector('.rw-autoclaim')?.checked)r.auto_claim=true;if(t==='questlog:item'){r.item=itemIdInputValue(card.querySelector('.rw-item'),'minecraft:stone');r.count=parseInt(card.querySelector('.rw-count')?.value,10)||1;}else if(t==='questlog:command'){r.command=card.querySelector('.rw-cmd')?.value?.trim()||'/say hi';r.permission_level=parseInt(card.querySelector('.rw-plvl')?.value,10)||2;}else if(t==='questlog:experience'){r.experience=parseInt(card.querySelector('.rw-xp')?.value,10)||0;if(card.querySelector('.rw-levels')?.checked)r.level=true;}else if(t==='questlog:loot_table'){r.loot_table=card.querySelector('.rw-loot')?.value?.trim()||'minecraft:chests/spawn_bonus_chest';}return r;});
   const cs=$('#qf_completed_sound')?.value?.trim();if(cs)q.completed_sound=cs;else delete q.completed_sound;const ts=$('#qf_triggered_sound')?.value?.trim();if(ts)q.triggered_sound=ts;else delete q.triggered_sound;
   q.toast_on_unlock=$('#qf_toast_on_unlock')?.checked;q.toast_on_complete=$('#qf_toast_on_complete')?.checked;q.show_popup_on_unlock=$('#qf_show_popup_on_unlock')?.checked;
   sOS(q,'background_texture',$('#qf_background_texture')?.value||'');sOS(q,'right_panel_texture',$('#qf_right_panel_texture')?.value||'');sOS(q,'peripheral_texture',$('#qf_peripheral_texture')?.value||'');sOS(q,'overlay',$('#qf_overlay')?.value||'');
@@ -1435,14 +14551,51 @@ function syncQ(){
 
 
 // ── Minecraft ID autocomplete ─────────────────────────────────────
-const VANILLA_IDS = (()=>{
-  const d = window.MC_ID_DATA || {items:[],blocks:[],entities:[]};
+function modPackDataCount(pack){
+  return ['items','blocks','entities','sounds','biomes'].reduce((sum,key)=>sum+registryRows(pack,key).length,0);
+}
+function registryRows(pack,kind){
+  const rows=pack?.[kind];
+  if(Array.isArray(rows))return rows;
+  return rows&&typeof rows==='object'&&rows.id?[rows]:[];
+}
+function modPackSupportsTarget(pack,target=modSuggestionTarget){
+  return Array.isArray(pack?.supportedVersions)&&pack.supportedVersions.includes(target);
+}
+function activeModPacks(){
+  const packs = Array.isArray(window.MOD_ID_PACKS?.packs) ? window.MOD_ID_PACKS.packs : [];
+  return packs.filter(pack=>enabledModSuggestions.has(pack.id)&&modPackSupportsTarget(pack)&&modPackDataCount(pack)>0);
+}
+function saveEnabledModSuggestions(){
+  localStorage.setItem(MOD_SUGGESTION_ENABLED_KEY,JSON.stringify([...enabledModSuggestions]));
+}
+function buildKnownIds(){
+  const d = window.MC_ID_DATA || {items:[],blocks:[],entities:[],biomes:[]};
+  const modPacks = activeModPacks();
+  const modRows = kind => modPacks.flatMap(pack => {
+    const rows = registryRows(pack,kind);
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name ? `${row.name} · ${pack.name || pack.id || 'Mod pack'}` : pack.name || pack.id || ''
+    }));
+  });
+  const mergeRows = (...lists) => {
+    const seen = new Set();
+    const out = [];
+    for (const list of lists) for (const row of list || []) {
+      if(!row?.id || seen.has(row.id)) continue;
+      seen.add(row.id);
+      out.push(row);
+    }
+    return out;
+  };
   const soundRows=(window.MC_SOUND_IDS||[]).map(id=>({id,name:id.replace(/^minecraft:/,'')}));
   const byKind = {
-    item: d.items || [],
-    block: d.blocks || [],
-    entity: d.entities || [],
-    sound: soundRows
+    item: mergeRows(d.items, modRows('items')),
+    block: mergeRows(d.blocks, modRows('blocks')),
+    entity: mergeRows(d.entities, modRows('entities')),
+    sound: mergeRows(soundRows, modRows('sounds')),
+    biome: mergeRows(d.biomes, modRows('biomes'))
   };
   return {
     data: byKind,
@@ -1450,37 +14603,118 @@ const VANILLA_IDS = (()=>{
       item: new Set((byKind.item||[]).map(x=>x.id)),
       block: new Set((byKind.block||[]).map(x=>x.id)),
       entity: new Set((byKind.entity||[]).map(x=>x.id)),
-      sound: new Set((byKind.sound||[]).map(x=>x.id))
+      sound: new Set((byKind.sound||[]).map(x=>x.id)),
+      biome: new Set((byKind.biome||[]).map(x=>x.id))
     }
   };
-})();
+}
+let VANILLA_IDS = buildKnownIds();
+function refreshKnownIds(){
+  VANILLA_IDS=buildKnownIds();
+  if(acInput)showAc(acInput);
+}
 let acBox=null, acInput=null;
+const RECENT_ID_SUGGESTION_LIMIT=8;
+function loadRecentIdSuggestions(){
+  try{
+    const raw=JSON.parse(localStorage.getItem(ID_SUGGESTION_RECENT_KEY)||'{}');
+    if(!raw||typeof raw!=='object')return {};
+    const out={};
+    Object.entries(raw).forEach(([kind,list])=>{
+      if(Array.isArray(list))out[kind]=list.filter(v=>typeof v==='string'&&v.trim()).slice(0,RECENT_ID_SUGGESTION_LIMIT);
+    });
+    return out;
+  }catch{return {};}
+}
+let recentIdSuggestions=loadRecentIdSuggestions();
+function saveRecentIdSuggestions(){
+  localStorage.setItem(ID_SUGGESTION_RECENT_KEY,JSON.stringify(recentIdSuggestions));
+}
+function cleanSuggestionId(value){
+  const id=normalizeTypedMinecraftId(value||'').trim();
+  if(!id||id.startsWith('#')||!id.includes(':'))return '';
+  return id;
+}
+function rememberIdSuggestion(kind,value){
+  if(!kind||kind==='quest')return;
+  const id=cleanSuggestionId(value);
+  if(!id)return;
+  const list=Array.isArray(recentIdSuggestions[kind])?[...recentIdSuggestions[kind]]:[];
+  recentIdSuggestions={...recentIdSuggestions,[kind]:[id,...list.filter(x=>x!==id)].slice(0,RECENT_ID_SUGGESTION_LIMIT)};
+  saveRecentIdSuggestions();
+}
 function acKindForInput(el){
   if(!el || el.tagName!=='INPUT' || el.type!=='text')return null;
   if(el.matches('#qf_completed_sound,#qf_triggered_sound,.rw-sound'))return 'sound';
   if(el.matches('.obj-block'))return 'block';
   if(el.matches('.obj-entity'))return 'entity';
+  if(el.matches('.obj-biome'))return 'biome';
+  if(el.matches('.obj-dim'))return 'dimension';
+  if(el.matches('.obj-structure'))return 'structure';
+  if(el.matches('.obj-ench'))return 'enchantment';
+  if(el.matches('.obj-effect'))return 'effect';
+  if(el.matches('.obj-adv'))return 'advancement';
+  if(el.matches('.obj-stat-custom'))return 'stat';
+  if(el.matches('.rw-loot'))return 'loot_table';
+  if(el.matches('.obj-quest,.obj-read-quest'))return 'quest';
   if(el.matches('.obj-item,.obj-bitem,.rw-item,.obj-icon,.rw-icon'))return 'item';
   const r=el.getAttribute('data-r')||'';
   if(/(?:^|-)itemv$|(?:^|-)strv$/.test(r))return 'item';
   return null;
 }
 function acLabel(x){return x.name && x.name!==x.id ? `${x.id} — ${x.name}` : x.id;}
-function acFilter(kind,q){
-  const all=VANILLA_IDS.data[kind]||[];
+function acKnownRows(kind){
+  if(kind==='quest'){
+    return Object.keys(quests||{}).map(fn=>({id:questIdFromFile(fn),name:(quests[fn]?.title||fn.replace(/\.json$/i,''))}));
+  }
+  return VANILLA_IDS.data[kind]||[];
+}
+function acRecentRows(kind){
+  return (recentIdSuggestions[kind]||[]).map(id=>({id,name:'Recently used'}));
+}
+function mergeSuggestionRows(...lists){
+  const out=[],seen=new Set();
+  for(const list of lists)for(const row of list||[]){
+    if(!row?.id||seen.has(row.id))continue;
+    seen.add(row.id);
+    out.push(row);
+  }
+  return out;
+}
+function acFilterRows(rows,q,{minecraftDefault=false}={}){
   let raw=String(q||'').trim().toLowerCase();
   if(!raw || raw.startsWith('#'))return [];
-  raw=raw.replace(/^minecraft:/,'');
-  const full='minecraft:'+raw;
+  const namespaced=raw.includes(':');
+  const short=namespaced?raw.split(':').pop():raw.replace(/^minecraft:/,'');
+  const full=namespaced||!minecraftDefault?raw:'minecraft:'+short;
   const starts=[], contains=[];
-  for(const x of all){
+  for(const x of rows||[]){
     const id=x.id.toLowerCase();
     const name=String(x.name||'').toLowerCase();
-    if(id.startsWith(full) || id.replace(/^minecraft:/,'').startsWith(raw))starts.push(x);
-    else if(id.includes(raw) || name.includes(raw))contains.push(x);
+    const noNs=id.replace(/^[^:]+:/,'');
+    if(id.startsWith(full) || (!namespaced&&noNs.startsWith(short)))starts.push(x);
+    else if(id.includes(raw) || (!namespaced&&noNs.includes(short)) || name.includes(raw))contains.push(x);
     if(starts.length+contains.length>=80)break;
   }
   return starts.concat(contains).slice(0,80);
+}
+function acSuggestionPayload(kind,q){
+  const raw=String(q||'').trim();
+  if(kind==='quest'){
+    const questRows=acKnownRows(kind);
+    return {title:raw?'Matching quest IDs':'Existing quest IDs',rows:(raw?acFilterRows(questRows,raw):questRows).slice(0,80)};
+  }
+  const known=acKnownRows(kind);
+  const recent=acRecentRows(kind);
+  const hasKnown=known.length>0;
+  if(!raw)return {title:`Recent ${kind.replace(/_/g,' ')} IDs`,rows:recent.slice(0,RECENT_ID_SUGGESTION_LIMIT)};
+  return {
+    title:hasKnown?`Matching ${kind} IDs`:`Recent ${kind.replace(/_/g,' ')} IDs`,
+    rows:mergeSuggestionRows(
+      acFilterRows(recent,raw,{minecraftDefault:hasKnown}),
+      acFilterRows(known,raw,{minecraftDefault:hasKnown})
+    ).slice(0,80)
+  };
 }
 function ensureAcBox(){
   if(acBox)return acBox;
@@ -1500,14 +14734,15 @@ function positionAc(){
 }
 function showAc(input){
   const kind=acKindForInput(input);if(!kind)return hideAc();
-  const rows=acFilter(kind,input.value);
+  const {title,rows}=acSuggestionPayload(kind,input.value);
   const box=ensureAcBox();
   if(!rows.length){hideAc();return;}
-  box.innerHTML=`<div class="mc-ac-head">Vanilla ${kind} IDs</div>`+rows.map(x=>`<button type="button" class="mc-ac-row" data-id="${esc(x.id)}"><span>${esc(x.id)}</span>${x.name?`<small>${esc(x.name)}</small>`:''}</button>`).join('');
+  box.innerHTML=`<div class="mc-ac-head">${esc(title)}</div>`+rows.map(x=>`<button type="button" class="mc-ac-row" data-id="${esc(x.id)}"><span>${esc(x.id)}</span>${x.name?`<small>${esc(x.name)}</small>`:''}</button>`).join('');
   $$('.mc-ac-row',box).forEach(btn=>{
     btn.onmousedown=e=>{
       e.preventDefault();
       input.value=btn.dataset.id;
+      rememberIdSuggestion(kind,input.value);
       input.dispatchEvent(new Event('input',{bubbles:true}));
       input.dispatchEvent(new Event('change',{bubbles:true}));
       hideAc();
@@ -1517,6 +14752,7 @@ function showAc(input){
 }
 document.addEventListener('focusin',e=>{if(acKindForInput(e.target))setTimeout(()=>showAc(e.target),0);});
 document.addEventListener('input',e=>{if(acKindForInput(e.target))showAc(e.target);});
+document.addEventListener('change',e=>{const kind=acKindForInput(e.target);if(kind)rememberIdSuggestion(kind,e.target.value);});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')hideAc();});
 document.addEventListener('mousedown',e=>{if(acBox&&!acBox.contains(e.target)&&e.target!==acInput)hideAc();});
 ensureAcBox().addEventListener('mousedown',e=>e.stopPropagation());
@@ -1599,7 +14835,7 @@ function validateObjective(o,out,file,kind,path,questIds,depth=0){
   if(fld){
     const val=o[fld];
     if(!val)addMissing(out,file,kind,path+'.'+fld,`Add a ${fld} ID.`);
-    else if(['item','block','entity'].includes(fld)){
+    else if(['item','block','entity','biome'].includes(fld)){
       const st=vanillaStatus(fld,val);
       if(st===false)addIssue(out,'error',file,kind,path+'.'+fld,`Unknown vanilla ${fld} ID: ${val}`);
     }
@@ -1653,7 +14889,7 @@ function validateQuest(fn,q,out,questIds,chapterIds){
   if(q.objectives!==undefined&&!Array.isArray(q.objectives))addIssue(out,'error',fn,kind,'objectives','Objectives are damaged. Use the visual editor to rebuild this section.');
   if(q.rewards!==undefined&&!Array.isArray(q.rewards))addIssue(out,'error',fn,kind,'rewards','Rewards are damaged. Use the visual editor to rebuild this section.');
   if(!Array.isArray(q.objectives)||!q.objectives.length)addMissing(out,fn,kind,'objectives','Add at least one objective so the player has something to complete.');
-  
+
   if(Array.isArray(q.requirements)&&q.requirements.length&&q.hidden===true)addIssue(out,'warn',fn,kind,'hidden','Hidden is true. Requirements already lock quests; hidden can keep it suppressed even when unlocked.');
   const ch=q.chapter;
   if(ch&&ch!=='questlog:main'&&ch!=='main'){
@@ -1690,11 +14926,39 @@ function validateAll(currentOnly){
   return out;
 }
 
+const VALIDATION_SECTION_LABELS={requirements:'Requirements',objectives:'Objectives',failures:'Failures',rewards:'Rewards'};
+const VALIDATION_FIELD_LABELS={
+  file:'Filename',root:'JSON root',title:'Quest title',name:'Display name',order:'Order',sort_order:'Order',chapter:'Chapter ID',hidden:'Hidden toggle',
+  type:'Type',required_amount:'Required amount',item:'Item ID',block:'Block ID',entity:'Entity ID',biome:'Biome ID',dimension:'Dimension ID',
+  structure:'Structure ID',effect:'Effect ID',advancement:'Advancement ID',quest:'Quest reference',stat:'Statistic ID',slot:'Equipment slot',
+  range:'Range',bounds:'Position bounds',objectives:'Nested objectives',objective:'Nested objective',
+  claim_sound:'Claim sound',completed_sound:'Completed sound',triggered_sound:'Triggered sound',count:'Item count',command:'Command',
+  experience:'Experience amount',loot_table:'Loot table',permission_level:'Permission level',
+  text_color:'Normal text color',completed_text_color:'Completed text color',hovered_text_color:'Hovered text color',
+  title_color:'Title color',progress_text_color:'Progress text color'
+};
+function validationFieldLabel(field){
+  const raw=String(field||'').replace(/\[\d+\]/g,'').split('.').filter(Boolean).pop()||String(field||'');
+  return VALIDATION_FIELD_LABELS[raw]||raw.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+}
+function validationPathLabel(issue){
+  const p=issue.path||'root';
+  if(issue.kind==='chapter'){
+    return VALIDATION_FIELD_LABELS[p]||validationFieldLabel(p);
+  }
+  const list=p.match(/^(requirements|objectives|failures|rewards)\[(\d+)\](?:\.(.+))?$/);
+  if(list){
+    const base=`${VALIDATION_SECTION_LABELS[list[1]]} #${Number(list[2])+1}`;
+    return list[3]?`${base} > ${validationFieldLabel(list[3])}`:base;
+  }
+  if(VALIDATION_SECTION_LABELS[p])return VALIDATION_SECTION_LABELS[p];
+  return VALIDATION_FIELD_LABELS[p]||validationFieldLabel(p);
+}
 function panelForIssue(issue){
   if(issue.kind==='chapter')return null;
   const p=issue.path||'';
+  if(/sound|toast|popup/.test(p))return 'display';
   if(/^(requirements|objectives|failures|rewards)/.test(p))return 'progress';
-  if(/sound|toast|popup/.test(p))return 'sounds';
   if(/texture|overlay|panel_/.test(p))return 'layout';
   if(/text_color|button_text|collected_text|uncollected_text|progress_text_color/.test(p))return 'labels';
   if(/^badge/.test(p))return 'badge';
@@ -1707,23 +14971,28 @@ function targetForIssue(issue){
     return $(map[p])?.closest('.field')||$('#panelForm');
   }
   const direct={
-    title:'#qf_title',sort_order:'#qf_sort_order',chapter:'#qf_chapter',hidden:'#qf_hidden',
+    file:'#filename',title:'#qf_title',sort_order:'#qf_sort_order',chapter:'#qf_chapter',hidden:'#qf_hidden',
     completed_sound:'#qf_completed_sound',triggered_sound:'#qf_triggered_sound',
     text_color:'#qf_text_color',completed_text_color:'#qf_completed_text_color',
     hovered_text_color:'#qf_hovered_text_color',title_color:'#qf_title_color',
     progress_text_color:'#qf_progress_text_color'
   };
   if(direct[p])return $(direct[p])?.closest('.field,.toggle-label')||$(direct[p]);
-  const listMatch=p.match(/^(requirements|objectives|failures|rewards)\[(\d+)\](?:\.(\w+))?/);
+  const rootOnly={requirements:'#reqList',objectives:'#objList',failures:'#failList',rewards:'#rewList'}[p];
+  if(rootOnly)return $(rootOnly)?.closest('.progress-section')||$(rootOnly);
+  const listMatch=p.match(/^(requirements|objectives|failures|rewards)\[(\d+)\](?:\.(.+))?/);
   if(listMatch){
     const root={requirements:'#reqList',objectives:'#objList',failures:'#failList',rewards:'#rewList'}[listMatch[1]];
     const card=$(root)?.querySelector(`:scope > .${listMatch[1]==='rewards'?'rew':'obj'}-card[data-${listMatch[1]==='rewards'?'ri':'i'}="${listMatch[2]}"]`);
     if(!card)return $(root);
-    const field=listMatch[3]||'';
+    const fieldPath=listMatch[3]||'';
+    const field=(fieldPath.match(/(?:^|\.)([a-z_]+)(?:\[\d+\])?$/)||[])[1]||fieldPath.split('.')[0]||'';
     const cls={
       type:'.obj-type,.rew-type',name:'.obj-name,.rw-name',required_amount:'.obj-amt',
       item:'.obj-item,.rw-item',block:'.obj-block',entity:'.obj-entity',quest:'.obj-quest,.obj-read-quest',
-      advancement:'.obj-adv',claim_sound:'.rw-sound',count:'.rw-count',command:'.rw-cmd',
+      biome:'.obj-biome',dimension:'.obj-dimension',structure:'.obj-structure',effect:'.obj-effect',
+      advancement:'.obj-adv',stat:'.obj-stat',slot:'.obj-slot',range:'.obj-range',
+      claim_sound:'.rw-sound',count:'.rw-count',command:'.rw-cmd',
       experience:'.rw-xp',loot_table:'.rw-loot',permission_level:'.rw-plvl'
     }[field];
     const el=cls?card.querySelector(cls):null;
@@ -1748,20 +15017,27 @@ function jumpToIssue(issue){
 }
 
 function renderValidation(){
-  const list=$('#validationList'),badge=$('#validationBadge');if(!list||!badge)return;
+  const list=$('#validationList'),badge=$('#validationBadge'),tabBadge=$('#validationTabBadge');if(!list)return;
   const project=$('#validateProject')?.checked!==false;
   const issues=validateAll(!project);
   const missing=issues.filter(i=>i.level==='missing').length;
   const errors=issues.filter(i=>i.level==='error').length;
   const warns=issues.filter(i=>i.level==='warn').length;
-  badge.className='validation-badge '+(errors?'err':missing?'missing':warns?'warn':'ok');
+  if(badge)badge.className='validation-badge '+(errors?'err':missing?'missing':warns?'warn':'ok');
   const parts=[]; if(missing)parts.push(`${missing} missing`); if(errors)parts.push(`${errors} error${errors===1?'':'s'}`); if(warns)parts.push(`${warns} warning${warns===1?'':'s'}`);
+  const tabProblemCount=missing+errors+warns;
+  if(tabBadge){tabBadge.classList.toggle('hidden',!tabProblemCount);tabBadge.textContent=tabProblemCount>99?'99+':String(tabProblemCount);tabBadge.title=parts.length?parts.join(' · '):'No issues';}
   badge.textContent=parts.length?parts.join(' · '):'No issues';
-  if(!issues.length){list.innerHTML=`<div class="validation-empty">No problems found. Clean JSON, tidy satchel. ✨</div>`;return;}
+  if(!issues.length){list.innerHTML=`<div class="validation-empty">No problems found. Clean JSON, tidy satchel. ✨</div>`;renderWorkbenchPanels();return;}
   const order={missing:0,error:1,warn:2,info:3};
   const sorted=[...issues].sort((a,b)=>(order[a.level]??9)-(order[b.level]??9)||String(a.file).localeCompare(String(b.file)));
-  list.innerHTML=sorted.slice(0,100).map((i,idx)=>`<div class="validation-issue ${i.level}" data-issue-index="${idx}" data-file="${esc(i.file)}" data-kind="${esc(i.kind)}" data-path="${esc(i.path)}" data-tip="Click to jump to this warning in the editor."><div class="validation-issue-top"><span class="validation-sev">${esc(i.level)}</span><span class="validation-file">${esc(i.file)}</span><span class="validation-path">${esc(i.path)}</span></div><div class="validation-msg">${esc(i.msg)}</div></div>`).join('')+(sorted.length>100?`<div class="validation-empty">${sorted.length-100} more issues hidden.</div>`:'');
+  list.innerHTML=sorted.slice(0,100).map((i,idx)=>{
+    const location=validationPathLabel(i);
+    const tip=`Click to jump to ${location}. Raw path: ${i.path||'root'}`;
+    return `<div class="validation-issue ${i.level}" data-issue-index="${idx}" data-file="${esc(i.file)}" data-kind="${esc(i.kind)}" data-path="${esc(i.path)}" data-tip="${esc(tip)}"><div class="validation-issue-top"><span class="validation-sev">${esc(i.level)}</span><span class="validation-file">${esc(i.file)}</span><span class="validation-path" title="${esc(i.path||'root')}">${esc(location)}</span></div><div class="validation-msg">${esc(i.msg)}</div></div>`;
+  }).join('')+(sorted.length>100?`<div class="validation-empty">${sorted.length-100} more issues hidden.</div>`:'');
   $$('.validation-issue',list).forEach(el=>{el.onclick=()=>jumpToIssue(sorted[Number(el.dataset.issueIndex)]);});
+  renderWorkbenchPanels();
 }
 const dValidate=debounce(renderValidation,220);
 
@@ -1830,7 +15106,9 @@ function bulkDeleteSelected(){
     button:'Delete selected',
     onConfirm:()=>{
       pushHistorySnapshot();
-      selected.forEach(({kind,file})=>{if(kind==='quest'){delete quests[file];delete fileMeta[metaKey('quest',file)];}else{delete chapters[file];delete fileMeta[metaKey('chapter',file)];}if(currentFile===file&&mode===kind)currentFile=null;});
+      let removedDefault=false;
+      selected.forEach(({kind,file})=>{if(kind==='quest'){delete quests[file];delete fileMeta[metaKey('quest',file)];}else{removedDefault=removedDefault||!!chapters[file]?.default_chapter;delete chapters[file];delete fileMeta[metaKey('chapter',file)];}if(currentFile===file&&mode===kind)currentFile=null;});
+      if(removedDefault)normalizeDefaultChapter();
       if(!currentFile){const q=Object.keys(quests).sort()[0],c=Object.keys(chapters).sort()[0];if(q){mode='quest';currentFile=q;}else if(c){mode='chapter';currentFile=c;}}
       recordActivity('Bulk deleted','project','',`${selected.length} files`);
       closeBulkDeleteModal();
@@ -1848,40 +15126,164 @@ function toggleSidebarMenu(buttonId,menuId){
   const btn=$(buttonId),menu=$(menuId);
   if(!btn||!menu)return;
   btn.onclick=e=>{
+    e.preventDefault();
     e.stopPropagation();
     closeSettingsMenu();
     const open=!menu.classList.contains('open');
     closeSidebarMenus(menu);
     menu.classList.toggle('open',open);
+    btn.setAttribute('aria-expanded',open?'true':'false');
   };
+  btn.addEventListener('pointerdown',e=>e.stopPropagation());
   menu.addEventListener('click',e=>{
-    if(e.target.closest('button'))closeSidebarMenus();
+    if(e.target.closest('button')){
+      closeSidebarMenus();
+      btn.setAttribute('aria-expanded','false');
+    }
   });
 }
 toggleSidebarMenu('#btnAddMenu','#addMenu');
 toggleSidebarMenu('#btnImportExportMenu','#importExportMenu');
-document.addEventListener('click',()=>closeSidebarMenus());
+const sidebarFilesExportBtn=$('#btnImportExportMenu');
+if(sidebarFilesExportBtn){
+  sidebarFilesExportBtn.onclick=e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    openExportPreviewModal();
+  };
+}
+document.addEventListener('click',e=>{
+  const files=e.target.closest?.('#btnImportExportMenu');
+  if(files){
+    e.preventDefault();
+    e.stopPropagation();
+    openExportPreviewModal();
+    return;
+  }
+  const close=e.target.closest?.('#exportPreviewCloseBtn,#exportPreviewCancelBtn');
+  if(close){
+    e.preventDefault();
+    e.stopPropagation();
+    closeExportPreviewModal();
+    return;
+  }
+  const zip=e.target.closest?.('#exportPreviewZipBtn');
+  if(zip){
+    e.preventDefault();
+    e.stopPropagation();
+    handleExportPreviewZipClick();
+  }
+},true);
+function closeFocusedDockMenus(){
+  $('#focusedExportToggle')?.setAttribute('aria-expanded','false');
+}
+document.addEventListener('click',()=>{closeSidebarMenus();closeSortMenu();closeModSupportSortMenu();closeFocusedDockMenus();});
+function closeModSupportSortMenu(){
+  $('#modSupportSortMenu')?.classList.remove('open');
+  $('#modSupportSortButton')?.setAttribute('aria-expanded','false');
+}
+function moveLayoutControls(){
+  const history=$('.history-actions'),historySlot=$('#formHistorySlot');
+  if(history&&historySlot&&!historySlot.contains(history))historySlot.appendChild(history);
+  const quick=$('.quick-actions'),quickSlot=$('#sidebarQuickSlot');
+  if(quick&&quickSlot&&!quickSlot.contains(quick))quickSlot.appendChild(quick);
+  const settings=$('.settings-wrap'),settingsSlot=$('#sidebarSettingsSlot');
+  if(settings&&settingsSlot&&!settingsSlot.contains(settings))settingsSlot.appendChild(settings);
+}
 function closeSettingsMenu(){
+  if(personalizationDraft){
+    closePersonalizationModal(false);
+    return;
+  }
   $('#settingsMenu')?.classList.remove('open');
+  document.body?.classList.remove('preferences-open');
+}
+function closePreferenceResetModal(){
+  $('#preferenceResetModal')?.classList.remove('open');
+}
+function openPreferenceResetModal(){
+  closePersonalizationModal(false);
+  $('#preferenceResetModal')?.classList.add('open');
+}
+function resetFloatingLayoutsToDefaults(){
+  ['workbench','canvas'].forEach(layout=>{
+    const keys=floatingPanelStorageKeys(layout);
+    localStorage.removeItem(keys.layout);
+    localStorage.removeItem(keys.hidden);
+    localStorage.removeItem(keys.locked);
+  });
+  localStorage.removeItem(CANVAS_VIEW_KEY);
+  localStorage.removeItem(CANVAS_ITEMS_KEY);
+  localStorage.removeItem(CANVAS_DRAWINGS_KEY);
+  localStorage.removeItem(CANVAS_LINKS_KEY);
+  localStorage.removeItem(WORKBENCH_NOTES_KEY);
+  canvasItems=[];
+  canvasDrawings=[];
+  canvasLinks=[];
+  canvasSelection.clear();
+  canvasLinkDraft=null;
+  activeFloatingPanelLayout=currentFloatingPanelLayout();
+  workbenchPanelLayout=loadWorkbenchLayout(activeFloatingPanelLayout);
+  workbenchHiddenPanels=loadWorkbenchHiddenPanels(activeFloatingPanelLayout);
+  workbenchLockedPanels=loadWorkbenchLockedPanels(activeFloatingPanelLayout);
+  canvasView=defaultCanvasView();
+  saveCanvasView();
+  applyCanvasView();
+  renderCanvasItems();
+  renderCanvasLayer();
+  renderWorkbenchAddPanelMenu();
+  applyWorkbenchPanelLayout();
+}
+function performPreferenceReset(){
+  const prefs=defaultPersonalization();
+  localStorage.setItem(LIGHT_THEME_CHOICE_KEY,DEFAULT_LIGHT_THEME_ID);
+  localStorage.setItem(DARK_THEME_CHOICE_KEY,DEFAULT_DARK_THEME_ID);
+  localStorage.setItem(PERSONALIZATION_KEY,JSON.stringify(prefs));
+  personalizationDraft=null;
+  applyTheme(DEFAULT_DARK_THEME_ID);
+  applyPersonalization(prefs);
+  resetFloatingLayoutsToDefaults();
+  closePreferenceResetModal();
+  showMsg('Preferences and panel layouts reset to defaults.',true);
 }
 function setupSettingsMenu(){
   const btn=$('#btnSettings'),menu=$('#settingsMenu');
   if(!btn||!menu)return;
+  mountPreferencesSettings();
+  setupPreferenceTabs();
   const versionPill=$('#versionPill');
   if(versionPill)versionPill.textContent=`v${APP_VERSION}`;
   const autosaveBox=$('#autosaveToggle');
   if(autosaveBox)autosaveBox.checked=autosaveEnabled;
   const tooltipBox=$('#tooltipsToggle');
   if(tooltipBox)tooltipBox.checked=tooltipsEnabled;
+  updateUiSoundControls();
+  renderModSupportControls();
   btn.onclick=e=>{
     e.stopPropagation();
     closeSidebarMenus();
     renderProjectStatusMini();
-    menu.classList.toggle('open');
+    if(menu.classList.contains('open'))closePersonalizationModal(false);
+    else openPersonalizationModal();
   };
+  $('#settingsCloseBtn')?.addEventListener('click',e=>{e.stopPropagation();closePersonalizationModal(false);});
+  $('#preferencesResetVisualBtn')?.addEventListener('click',e=>{e.preventDefault();openPreferenceResetModal();});
+  $('#preferencesThemeSwapBtn')?.addEventListener('click',e=>{e.preventDefault();toggleWebsiteTheme();});
+  const exportOverrideBtn=$('#exportReadinessOverrideToggle');
+  if(exportOverrideBtn&&!exportOverrideBtn.dataset.bound){
+    exportOverrideBtn.dataset.bound='true';
+    exportOverrideBtn.addEventListener('click',e=>{
+      e.preventDefault();
+      setExportReadinessOverride(!exportReadinessOverrideEnabled);
+    });
+  }
+  updateExportReadinessOverrideControl();
+  $('#preferenceResetCancelBtn')?.addEventListener('click',closePreferenceResetModal);
+  $('#preferenceResetConfirmBtn')?.addEventListener('click',performPreferenceReset);
+  $('#preferenceResetModal')?.addEventListener('click',e=>{if(e.target===$('#preferenceResetModal'))closePreferenceResetModal();});
   menu.addEventListener('click',e=>e.stopPropagation());
-  document.addEventListener('click',closeSettingsMenu);
-  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettingsMenu();closeChangelogModal();closeTutorialPrompt();closeConfirmModal();closeBulkDeleteModal();}});
+  document.addEventListener('click',e=>{if(menu.classList.contains('open')&&!menu.contains(e.target))closePersonalizationModal(false);});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSettingsMenu();closeSortMenu();closeModSupportSortMenu();closeFocusedDockMenus();closeChangelogModal();closeTutorialPrompt();closeConfirmModal();closeBulkDeleteModal();closePreferenceResetModal();closePersonalizationModal(false);closeGuiStudio();closeQuestlogListPreviewModal();closeQuestPreviewModal();}});
 }
 function setupSidebarResize(){
   const app=$('.app-body'),handle=$('#sidebarResizer');if(!app||!handle)return;
@@ -1910,26 +15312,1772 @@ function setupSidebarResize(){
     if(Number.isFinite(width))localStorage.setItem(SIDEBAR_WIDTH_KEY,String(width));
   });
 }
+function clampFocusedPanelWidth(value,min,max,fallback){
+  const n=Number(value);
+  return Math.max(min,Math.min(max,Number.isFinite(n)?Math.round(n):fallback));
+}
+function updateFocusedPanelState(){
+  const body=document.body;if(!body)return;
+  const focused=body.dataset.layout==='focused';
+  focusedLeftWidth=clampFocusedPanelWidth(focusedLeftWidth,220,430,280);
+  focusedRightWidth=clampFocusedPanelWidth(focusedRightWidth,280,560,360);
+  body.style.setProperty('--focused-left-width',`${focusedLeftWidth}px`);
+  body.style.setProperty('--focused-right-width',`${focusedRightWidth}px`);
+  body.classList.toggle('focused-left-open',focused&&focusedLeftOpen);
+  body.classList.toggle('focused-right-open',focused&&focusedRightOpen);
+  const left=$('#focusedLeftToggle'),right=$('#focusedRightToggle');
+  if(left){
+    left.setAttribute('aria-expanded',focused&&focusedLeftOpen?'true':'false');
+    left.setAttribute('data-tip',focusedLeftOpen?'Hide the navigator panel.':'Show the navigator panel.');
+    left.setAttribute('aria-label',focusedLeftOpen?'Hide navigator panel':'Show navigator panel');
+    const label=$('#focusedLeftLabel');if(label)label.textContent=focusedLeftOpen?'Hide navigator':'Navigator';
+  }
+  if(right){
+    right.setAttribute('aria-expanded',focused&&focusedRightOpen?'true':'false');
+    right.setAttribute('data-tip',focusedRightOpen?'Hide the JSON and checklist panel.':'Show the JSON and checklist panel.');
+    right.setAttribute('aria-label',focusedRightOpen?'Hide JSON and checklist panel':'Show JSON and checklist panel');
+    const label=$('#focusedRightLabel');if(label)label.textContent=focusedRightOpen?'Hide side panel':'Side panel';
+  }
+  refreshFocusedDockIcons();
+}
+function setFocusedPanelOpen(side,open){
+  if(side==='left'){
+    focusedLeftOpen=!!open;
+    localStorage.setItem(FOCUSED_LEFT_OPEN_KEY,focusedLeftOpen?'true':'false');
+  }else{
+    focusedRightOpen=!!open;
+    localStorage.setItem(FOCUSED_RIGHT_OPEN_KEY,focusedRightOpen?'true':'false');
+  }
+  updateFocusedPanelState();
+}
+function setupFocusedPanelControls(){
+  window.__focusedLayoutControlsReady=true;
+  onClick('#focusedLeftToggle',e=>{e.preventDefault();e.stopPropagation();setFocusedPanelOpen('left',!focusedLeftOpen);});
+  onClick('#focusedRightToggle',e=>{e.preventDefault();e.stopPropagation();setFocusedPanelOpen('right',!focusedRightOpen);});
+  onClick('#focusedSettingsToggle',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    closeFocusedDockMenus();
+    openPersonalizationModal();
+  });
+  onClick('#focusedExportToggle',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    closeFocusedDockMenus();
+    $('#btnDownloadAll')?.click();
+  });
+  const bindResize=(sel,side)=>{
+    const handle=$(sel);if(!handle)return;
+    handle.addEventListener('pointerdown',e=>{
+      const isLeft=side==='left';
+      if(isLeft&&!focusedLeftOpen)return;
+      if(!isLeft&&!focusedRightOpen)return;
+      e.preventDefault();
+      e.stopPropagation();
+      const startX=e.clientX;
+      const startWidth=isLeft?focusedLeftWidth:focusedRightWidth;
+      handle.setPointerCapture?.(e.pointerId);
+      const move=ev=>{
+        const delta=isLeft?ev.clientX-startX:startX-ev.clientX;
+        if(isLeft)focusedLeftWidth=clampFocusedPanelWidth(startWidth+delta,220,430,280);
+        else focusedRightWidth=clampFocusedPanelWidth(startWidth+delta,280,560,360);
+        updateFocusedPanelState();
+      };
+      const up=ev=>{
+        document.removeEventListener('pointermove',move);
+        handle.releasePointerCapture?.(ev.pointerId);
+        if(isLeft)localStorage.setItem(FOCUSED_LEFT_WIDTH_KEY,String(focusedLeftWidth));
+        else localStorage.setItem(FOCUSED_RIGHT_WIDTH_KEY,String(focusedRightWidth));
+      };
+      document.addEventListener('pointermove',move);
+      document.addEventListener('pointerup',up,{once:true});
+    });
+  };
+  bindResize('#focusedLeftResize','left');
+  bindResize('#focusedRightResize','right');
+  updateFocusedPanelState();
+}
+function isFloatingPanelLayout(){
+  const layout=document.body?.dataset.layout;
+  return layout==='workbench'||layout==='canvas';
+}
+function currentFloatingPanelLayout(){
+  const layout=document.body?.dataset.layout;
+  return layout==='canvas'?'canvas':'workbench';
+}
+function isCanvasLayout(layout=currentFloatingPanelLayout()){
+  return layout==='canvas';
+}
+function floatingPanelStorageKeys(layout=currentFloatingPanelLayout()){
+  return layout==='canvas'
+    ? {layout:CANVAS_LAYOUT_KEY,hidden:CANVAS_HIDDEN_KEY,locked:CANVAS_LOCKED_KEY}
+    : {layout:WORKBENCH_LAYOUT_KEY,hidden:WORKBENCH_HIDDEN_KEY,locked:WORKBENCH_LOCKED_KEY};
+}
+function clampCanvasZoom(value){
+  return Math.max(.1,Math.min(2,Number(value)||1));
+}
+function defaultCanvasView(){
+  const rect=$('.app-body')?.getBoundingClientRect();
+  if(!rect)return {x:0,y:0,zoom:1};
+  const hidden=defaultWorkbenchHiddenPanels();
+  const panels=Object.entries(defaultCanvasLayout()).filter(([key])=>!hidden.has(key)).map(([,panel])=>panel);
+  const minX=Math.min(...panels.map(panel=>panel.x));
+  const minY=Math.min(...panels.map(panel=>panel.y));
+  const maxX=Math.max(...panels.map(panel=>panel.x+panel.w));
+  const maxY=Math.max(...panels.map(panel=>panel.y+panel.h));
+  const boundsW=Math.max(1,maxX-minX);
+  const boundsH=Math.max(1,maxY-minY);
+  const availableW=Math.max(320,rect.width-80);
+  const availableH=Math.max(260,rect.height-80);
+  const zoom=clampCanvasZoom(Math.min(1,availableW/boundsW,availableH/boundsH));
+  return {
+    x:Math.round((rect.width-boundsW*zoom)/2-minX*zoom),
+    y:Math.max(52,Math.round((rect.height-boundsH*zoom)/2-minY*zoom)),
+    zoom
+  };
+}
+function loadCanvasView(){
+  try{
+    const raw=localStorage.getItem(CANVAS_VIEW_KEY);
+    if(!raw){
+      canvasView=defaultCanvasView();
+      return;
+    }
+    const saved=JSON.parse(raw||'{}');
+    canvasView={
+      x:Number.isFinite(Number(saved.x))?Number(saved.x):0,
+      y:Number.isFinite(Number(saved.y))?Number(saved.y):0,
+      zoom:clampCanvasZoom(saved.zoom)
+    };
+  }catch(_err){
+    canvasView=defaultCanvasView();
+  }
+}
+function saveCanvasView(){
+  localStorage.setItem(CANVAS_VIEW_KEY,JSON.stringify(canvasView));
+}
+function applyCanvasView(){
+  const app=$('.app-body');if(!app)return;
+  const zoom=clampCanvasZoom(canvasView.zoom);
+  canvasView.zoom=zoom;
+  app.style.setProperty('--canvas-pan-x',`${canvasView.x}px`);
+  app.style.setProperty('--canvas-pan-y',`${canvasView.y}px`);
+  app.style.setProperty('--canvas-zoom',String(zoom));
+  app.style.setProperty('--canvas-dot-spacing',`${Math.max(6,Math.round(36*zoom))}px`);
+  const readout=$('#canvasZoomResetBtn .canvas-zoom-label')||$('#canvasZoomResetBtn span');
+  if(readout)readout.textContent=`${Math.round(zoom*100)}%`;
+  if(document.body?.dataset.layout==='canvas'){
+    applyWorkbenchPanelLayout();
+    renderCanvasItems();
+  }
+}
+function setCanvasZoom(value,origin){
+  const oldZoom=clampCanvasZoom(canvasView.zoom);
+  const nextZoom=clampCanvasZoom(value);
+  if(Math.abs(nextZoom-oldZoom)<.001)return;
+  if(origin){
+    canvasView.x=origin.x-(origin.x-canvasView.x)*(nextZoom/oldZoom);
+    canvasView.y=origin.y-(origin.y-canvasView.y)*(nextZoom/oldZoom);
+  }
+  canvasView.zoom=nextZoom;
+  applyCanvasView();
+  saveCanvasView();
+  updateWorkbenchPreviewScale();
+}
+function resetCanvasView(){
+  canvasView=defaultCanvasView();
+  applyCanvasView();
+  saveCanvasView();
+  updateWorkbenchPreviewScale();
+}
+function loadCanvasItems(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(CANVAS_ITEMS_KEY)||'[]');
+    canvasItems=Array.isArray(saved)?saved.map(item=>clampCanvasItem(item)).filter(Boolean):[];
+  }catch(_err){
+    canvasItems=[];
+  }
+}
+function saveCanvasItems(){
+  localStorage.setItem(CANVAS_ITEMS_KEY,JSON.stringify(canvasItems));
+}
+function loadCanvasDrawings(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(CANVAS_DRAWINGS_KEY)||'[]');
+    canvasDrawings=Array.isArray(saved)?saved.map(clampCanvasDrawing).filter(Boolean):[];
+  }catch(_err){canvasDrawings=[];}
+}
+function saveCanvasDrawings(){
+  localStorage.setItem(CANVAS_DRAWINGS_KEY,JSON.stringify(canvasDrawings));
+}
+function loadCanvasLinks(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(CANVAS_LINKS_KEY)||'[]');
+    canvasLinks=Array.isArray(saved)?saved.map(clampCanvasLink).filter(Boolean):[];
+  }catch(_err){canvasLinks=[];}
+}
+function saveCanvasLinks(){
+  localStorage.setItem(CANVAS_LINKS_KEY,JSON.stringify(canvasLinks));
+}
+function cleanupCanvasDomForNonCanvas(){
+  $('#canvasLinkSvgLayer')?.remove();
+  $('#canvasDrawingSvgLayer')?.remove();
+  $$('.canvas-free-item').forEach(el=>el.remove());
+  $$('.canvas-anchor').forEach(el=>el.remove());
+  canvasLinkDraft=null;
+}
+function saveCanvasSurfaceState(){
+  saveCanvasItems();
+  saveCanvasDrawings();
+  saveCanvasLinks();
+}
+function canvasItemId(){
+  return `canvas_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
+}
+function canvasDrawingId(){
+  return `drawing_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
+}
+function canvasLinkId(){
+  return `link_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
+}
+function clampCanvasItem(item){
+  if(!item||!['text','note','image'].includes(item.type))return null;
+  const out={...item};
+  out.id=out.id||canvasItemId();
+  out.x=Math.max(-50000,Math.min(50000,Number(out.x)||0));
+  out.y=Math.max(-50000,Math.min(50000,Number(out.y)||0));
+  out.w=Math.max(120,Math.min(2600,Number(out.w)||260));
+  out.h=Math.max(64,Math.min(1800,Number(out.h)||120));
+  out.z=Math.max(1,Math.min(9999,Math.round(Number(out.z)||nextCanvasItemZ())));
+  out.text=String(out.text||'');
+  out.src=String(out.src||'');
+  out.name=String(out.name||'');
+  return out;
+}
+function canvasItemTypeCount(type){
+  return canvasItems.filter(item=>item.type===type).length;
+}
+function canAddCanvasItemType(type){
+  if(canvasItemTypeCount(type)>=100){
+    showMsg(`Canvas limit reached: 100 ${type==='image'?'images':type==='note'?'notes':'text boxes'}.`,false);
+    return false;
+  }
+  return true;
+}
+function clampCanvasDrawing(drawing){
+  if(!drawing||!Array.isArray(drawing.points)||drawing.points.length<2)return null;
+  return {
+    id:drawing.id||canvasDrawingId(),
+    color:String(drawing.color||canvasDrawColor),
+    width:Math.max(1,Math.min(14,Number(drawing.width)||3)),
+    points:drawing.points.map(p=>({x:Number(p.x)||0,y:Number(p.y)||0})).slice(0,2400),
+    z:Math.max(1,Math.min(9999,Math.round(Number(drawing.z)||nextCanvasItemZ())))
+  };
+}
+function canvasRefKey(ref){
+  return ref&&ref.kind&&ref.id?`${ref.kind}:${ref.id}`:'';
+}
+function canvasRefFromKey(key){
+  const [kind,...rest]=String(key||'').split(':');
+  const id=rest.join(':');
+  return kind&&id?{kind,id}:null;
+}
+function normalizeCanvasRef(ref){
+  if(!ref||!ref.id)return null;
+  const kind=ref.kind==='panel'?'panel':'item';
+  return {kind,id:String(ref.id)};
+}
+function clampCanvasLink(link){
+  if(!link)return null;
+  const rawNodes=Array.isArray(link.nodes)
+    ? link.nodes
+    : [normalizeCanvasRef(link.from),normalizeCanvasRef(link.to)];
+  const seen=new Set();
+  const nodes=rawNodes.map(normalizeCanvasRef).filter(Boolean).filter(ref=>{
+    const key=canvasRefKey(ref);
+    if(seen.has(key))return false;
+    seen.add(key);
+    return true;
+  });
+  if(nodes.length<2)return null;
+  return {
+    id:link.id||canvasLinkId(),
+    nodes,
+    color:String(link.color||canvasDrawColor),
+    z:Math.max(1,Math.min(9999,Math.round(Number(link.z)||1)))
+  };
+}
+function nextCanvasItemZ(){
+  const panelMax=Math.max(1,...Object.values(workbenchPanelLayout||{}).map(p=>Number(p?.z)||1));
+  const itemMax=Math.max(1,...canvasItems.map(i=>Number(i.z)||1));
+  return Math.max(panelMax,itemMax)+1;
+}
+function screenToCanvasPoint(clientX,clientY){
+  const rect=$('.app-body')?.getBoundingClientRect();
+  const zoom=clampCanvasZoom(canvasView.zoom);
+  return rect?{x:(clientX-rect.left-canvasView.x)/zoom,y:(clientY-rect.top-canvasView.y)/zoom}:{x:160,y:160};
+}
+function positionCanvasNode(node,item){
+  const zoom=clampCanvasZoom(canvasView.zoom);
+  node.style.left=`${canvasView.x+item.x*zoom}px`;
+  node.style.top=`${canvasView.y+item.y*zoom}px`;
+  node.style.width=`${item.w}px`;
+  node.style.height=`${item.h}px`;
+  node.style.zIndex=String(Number(item.z)||1);
+  node.style.setProperty('--canvas-item-zoom',String(zoom));
+}
+function bringCanvasItemToFront(id){
+  const item=canvasItems.find(i=>i.id===id);if(!item)return;
+  item.z=nextCanvasItemZ();
+  saveCanvasItems();
+  const node=$(`.canvas-free-item[data-canvas-item="${CSS.escape(id)}"]`);
+  if(node)positionCanvasNode(node,item);
+}
+function addCanvasTextBox(point=canvasContextPoint,type='text'){
+  if(!canAddCanvasItemType(type))return;
+  pushWorkbenchHistory();
+  const isNote=type==='note';
+  canvasItems.push(clampCanvasItem({id:canvasItemId(),type:isNote?'note':'text',x:point.x,y:point.y,w:isNote?300:260,h:isNote?180:86,z:nextCanvasItemZ(),text:''}));
+  saveCanvasItems();
+  renderCanvasItems();
+}
+function addCanvasImage(file,point=pendingCanvasImagePoint){
+  if(!file)return;
+  if(!canAddCanvasItemType('image'))return;
+  pushWorkbenchHistory();
+  const reader=new FileReader();
+  reader.onload=()=>{
+    canvasItems.push(clampCanvasItem({id:canvasItemId(),type:'image',x:point.x,y:point.y,w:360,h:220,z:nextCanvasItemZ(),src:String(reader.result||''),name:file.name||'Canvas image'}));
+    saveCanvasItems();
+    renderCanvasItems();
+  };
+  reader.readAsDataURL(file);
+}
+function removeCanvasItem(id){
+  canvasItems=canvasItems.filter(item=>item.id!==id);
+  canvasSelection.delete(canvasRefKey({kind:'item',id}));
+  cleanupCanvasLinks();
+  saveCanvasItems();
+  saveCanvasLinks();
+  renderCanvasItems();
+}
+function renderCanvasItems(){
+  const app=$('.app-body');if(!app)return;
+  if(document.body?.dataset.layout!=='canvas'){
+    cleanupCanvasDomForNonCanvas();
+    return;
+  }
+  const seen=new Set();
+  canvasItems=canvasItems.map(clampCanvasItem).filter(Boolean);
+  canvasItems.forEach(item=>{
+    seen.add(item.id);
+    let node=$(`.canvas-free-item[data-canvas-item="${CSS.escape(item.id)}"]`,app);
+    if(!node){
+      node=document.createElement('div');
+      node.className=`canvas-free-item canvas-free-${item.type}`;
+      node.dataset.canvasItem=item.id;
+      app.appendChild(node);
+    }
+    node.className=`canvas-free-item canvas-free-${item.type}`;
+    node.classList.toggle('canvas-selected',canvasSelection.has(canvasRefKey({kind:'item',id:item.id})));
+    positionCanvasNode(node,item);
+    if(item.type==='text'||item.type==='note'){
+      const label=item.type==='note'?'Note':'Canvas text box';
+      const placeholder=item.type==='note'?'Note...':'Canvas text...';
+      node.innerHTML=`<span class="canvas-item-move" data-tip="Drag to move this ${item.type==='note'?'quick note':'text box'}."></span><textarea class="canvas-textbox-input" placeholder="${esc(placeholder)}">${esc(item.text)}</textarea><button type="button" class="canvas-item-remove" aria-label="Remove ${esc(label)}">${guiStudioLucideIcon('x','workbench-button-icon')}</button><span class="canvas-item-resize"></span>`;
+      const ta=node.querySelector('textarea');
+      ta.addEventListener('focus',()=>{if(!ta.dataset.canvasHistoryArmed){pushWorkbenchHistory();ta.dataset.canvasHistoryArmed='1';}});
+      ta.addEventListener('blur',()=>{delete ta.dataset.canvasHistoryArmed;});
+      ta.addEventListener('input',()=>{item.text=ta.value;saveCanvasItems();});
+    }else{
+      node.innerHTML=`<span class="canvas-item-move" data-tip="Drag to move this image."></span><img class="canvas-image" src="${esc(item.src)}" alt="${esc(item.name||'Canvas image')}"><button type="button" class="canvas-item-remove" aria-label="Remove image">${guiStudioLucideIcon('x','workbench-button-icon')}</button><span class="canvas-item-resize"></span>`;
+    }
+    node.querySelector('.canvas-item-remove')?.addEventListener('click',e=>{e.stopPropagation();pushWorkbenchHistory();removeCanvasItem(item.id);});
+  });
+  $$('.canvas-free-item',app).forEach(el=>{if(!seen.has(el.dataset.canvasItem))el.remove();});
+  renderCanvasLayer();
+}
+function canvasAnchorHtml(kind,id){
+  return ['top','right','bottom','left'].map(anchor=>`<button type="button" class="canvas-anchor canvas-anchor-${anchor}" data-canvas-anchor="${anchor}" data-canvas-kind="${esc(kind)}" data-canvas-ref="${esc(id)}" aria-label="Connect from ${esc(anchor)}"></button>`).join('');
+}
+function ensureCanvasAnchors(node,kind,id){
+  if(!node||node.querySelector(':scope > .canvas-anchor'))return;
+  node.insertAdjacentHTML('beforeend',canvasAnchorHtml(kind,id));
+}
+function canvasNodeForRef(ref){
+  if(!ref)return null;
+  return ref.kind==='panel'
+    ? $(`[data-workbench-panel="${CSS.escape(ref.id)}"]`)
+    : $(`.canvas-free-item[data-canvas-item="${CSS.escape(ref.id)}"]`);
+}
+function canvasNodeCenter(ref){
+  const node=canvasNodeForRef(ref);
+  const app=$('.app-body');
+  if(!node||!app)return null;
+  const rect=node.getBoundingClientRect();
+  const ar=app.getBoundingClientRect();
+  return {x:rect.left-ar.left+rect.width/2,y:rect.top-ar.top+rect.height/2};
+}
+function canvasCurvePath(points){
+  if(points.length<2)return '';
+  return points.slice(1).reduce((d,p,i)=>{
+    const a=points[i];
+    const midX=(a.x+p.x)/2;
+    return `${d} C ${midX} ${a.y}, ${midX} ${p.y}, ${p.x} ${p.y}`;
+  },`M ${points[0].x} ${points[0].y}`);
+}
+function svgPathFromPoints(points){
+  const z=clampCanvasZoom(canvasView.zoom);
+  return points.map((p,i)=>`${i?'L':'M'} ${canvasView.x+p.x*z} ${canvasView.y+p.y*z}`).join(' ');
+}
+function renderCanvasLayer(){
+  if(canvasLayerFrame)return;
+  canvasLayerFrame=requestAnimationFrame(()=>{
+    canvasLayerFrame=0;
+    renderCanvasLayerNow();
+  });
+}
+function renderCanvasLayerNow(){
+  const app=$('.app-body');if(!app)return;
+  if(document.body?.dataset.layout!=='canvas'){
+    cleanupCanvasDomForNonCanvas();
+    return;
+  }
+  let linkSvg=$('#canvasLinkSvgLayer');
+  if(!linkSvg){
+    linkSvg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    linkSvg.id='canvasLinkSvgLayer';
+    linkSvg.classList.add('canvas-svg-layer','canvas-link-svg-layer');
+    app.prepend(linkSvg);
+  }
+  let drawingSvg=$('#canvasDrawingSvgLayer');
+  if(!drawingSvg){
+    drawingSvg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    drawingSvg.id='canvasDrawingSvgLayer';
+    drawingSvg.classList.add('canvas-svg-layer','canvas-drawing-svg-layer');
+    app.appendChild(drawingSvg);
+  }
+  canvasLinks=canvasLinks.map(clampCanvasLink).filter(Boolean);
+  const links=canvasLinks.map(link=>{
+    const points=(link.nodes||[]).map(canvasNodeCenter).filter(Boolean);
+    if(points.length<2)return '';
+    return `<path class="canvas-link-path" d="${canvasCurvePath(points)}"></path>`;
+  }).join('');
+  const drawings=canvasDrawings.map(d=>`<path class="canvas-drawing-path" data-canvas-drawing="${esc(d.id)}" d="${svgPathFromPoints(d.points)}" stroke="${esc(d.color)}" stroke-width="${esc(String(d.width))}"></path>`).join('');
+  linkSvg.innerHTML=links;
+  drawingSvg.innerHTML=drawings;
+  drawingSvg.classList.toggle('is-eraser',canvasTool==='eraser');
+  $$('[data-canvas-drawing]',drawingSvg).forEach(path=>path.addEventListener('pointerdown',e=>{
+    if(canvasTool!=='eraser')return;
+    e.preventDefault();
+    e.stopPropagation();
+    pushWorkbenchHistory();
+    canvasDrawings=canvasDrawings.filter(d=>d.id!==path.dataset.canvasDrawing);
+    saveCanvasDrawings();
+    renderCanvasLayer();
+  }));
+}
+function setCanvasTool(tool){
+  canvasTool=['draw','eraser','hand'].includes(tool)?tool:'hand';
+  document.body?.setAttribute('data-canvas-tool',canvasTool);
+  $$('.canvas-tool-only').forEach(btn=>btn.classList.toggle('active',btn.id===`canvas${canvasTool[0].toUpperCase()+canvasTool.slice(1)}ToolBtn`));
+  $('#canvasDrawOptions')?.classList.toggle('open',canvasTool==='draw');
+  renderCanvasLayer();
+}
+function setCanvasDrawColor(color){
+  canvasDrawColor=String(color||'#38bdf8');
+  $$('.canvas-color-swatch').forEach(btn=>btn.classList.toggle('active',btn.dataset.canvasColor===canvasDrawColor));
+  renderCanvasLayer();
+}
+function setCanvasDrawSize(value){
+  canvasDrawSize=Math.max(1,Math.min(14,Number(value)||3));
+  const input=$('#canvasDrawSize');
+  if(input)input.value=String(canvasDrawSize);
+}
+function beginCanvasDrawing(e){
+  const app=$('.app-body');if(!app)return;
+  const before=snapshotWorkbenchState();
+  let lastPoint=screenToCanvasPoint(e.clientX,e.clientY);
+  const drawing={id:canvasDrawingId(),color:canvasDrawColor,width:canvasDrawSize,points:[lastPoint],z:nextCanvasItemZ()};
+  canvasDrawings.push(drawing);
+  const move=ev=>{
+    const p=screenToCanvasPoint(ev.clientX,ev.clientY);
+    const last=drawing.points[drawing.points.length-1];
+    if(!last||Math.hypot(p.x-last.x,p.y-last.y)>2){
+      drawing.points.push(p);
+      lastPoint=p;
+      renderCanvasLayer();
+    }
+  };
+  const up=()=>{
+    document.removeEventListener('pointermove',move);
+    drawing.points.push(lastPoint);
+    canvasDrawings=canvasDrawings.map(clampCanvasDrawing).filter(Boolean);
+    if(canvasDrawings.some(d=>d.id===drawing.id)){
+      workbenchUndoStack.push(before);
+      if(workbenchUndoStack.length>40)workbenchUndoStack.shift();
+      workbenchRedoStack=[];
+      updateHistoryButtons();
+    }
+    saveCanvasDrawings();
+    renderCanvasLayer();
+  };
+  document.addEventListener('pointermove',move);
+  document.addEventListener('pointerup',up,{once:true});
+}
+function handleCanvasAnchorClick(btn){
+  const ref={id:btn.dataset.canvasRef,kind:btn.dataset.canvasKind,anchor:btn.dataset.canvasAnchor};
+  if(!ref.id)return;
+  if(!canvasLinkDraft){
+    canvasLinkDraft=ref;
+    btn.classList.add('linking');
+    showMsg('Choose another connector dot to attach an arrow link.',true);
+    return;
+  }
+  pushWorkbenchHistory();
+  canvasLinks.push(clampCanvasLink({id:canvasLinkId(),from:canvasLinkDraft,to:ref,arrow:true,color:'theme',z:nextCanvasItemZ()}));
+  canvasLinkDraft=null;
+  $$('.canvas-anchor.linking').forEach(a=>a.classList.remove('linking'));
+  saveCanvasLinks();
+  renderCanvasLayer();
+}
+function canvasSelectableRefs(){
+  const refs=[];
+  workbenchPanelKeys().forEach(key=>{
+    if(!workbenchHiddenPanels?.has(key))refs.push({kind:'panel',id:key});
+  });
+  canvasItems.forEach(item=>refs.push({kind:'item',id:item.id}));
+  return refs;
+}
+function canvasNodeRect(ref){
+  const node=canvasNodeForRef(ref);
+  const app=$('.app-body');
+  if(!node||!app)return null;
+  const r=node.getBoundingClientRect(),a=app.getBoundingClientRect();
+  return {left:r.left-a.left,top:r.top-a.top,right:r.right-a.left,bottom:r.bottom-a.top,width:r.width,height:r.height};
+}
+function rectsTouch(a,b){
+  return a&&b&&a.left<=b.right&&a.right>=b.left&&a.top<=b.bottom&&a.bottom>=b.top;
+}
+function setCanvasSelection(keys=[]){
+  canvasSelection=new Set(keys.filter(Boolean));
+  applyWorkbenchPanelLayout();
+  renderCanvasItems();
+}
+function cleanupCanvasLinks(){
+  const valid=new Set(canvasSelectableRefs().map(canvasRefKey));
+  canvasLinks=canvasLinks.map(link=>{
+    const nodes=(link.nodes||[]).filter(ref=>valid.has(canvasRefKey(ref)));
+    return clampCanvasLink({...link,nodes});
+  }).filter(Boolean);
+}
+function canvasSelectionHasLinks(){
+  if(!canvasSelection.size)return false;
+  return canvasLinks.some(link=>(link.nodes||[]).some(ref=>canvasSelection.has(canvasRefKey(ref))));
+}
+function unlinkCanvasSelection(){
+  const selected=canvasSelection;
+  if(!selected.size)return;
+  pushWorkbenchHistory();
+  canvasLinks=canvasLinks.map(link=>{
+    const nodes=(link.nodes||[]).filter(ref=>!selected.has(canvasRefKey(ref)));
+    return clampCanvasLink({...link,nodes});
+  }).filter(Boolean);
+  saveCanvasLinks();
+  renderCanvasLayer();
+}
+function linkCanvasSelection(){
+  const refs=[...canvasSelection].map(canvasRefFromKey).filter(Boolean);
+  if(refs.length<2)return;
+  pushWorkbenchHistory();
+  const selectedKeys=new Set(refs.map(canvasRefKey));
+  canvasLinks=canvasLinks.filter(link=>!(link.nodes||[]).some(ref=>selectedKeys.has(canvasRefKey(ref))));
+  canvasLinks.push(clampCanvasLink({id:canvasLinkId(),nodes:refs,color:canvasDrawColor,z:nextCanvasItemZ()}));
+  cleanupCanvasLinks();
+  saveCanvasLinks();
+  renderCanvasLayer();
+}
+function removeCanvasSelection(){
+  const selected=[...canvasSelection].map(canvasRefFromKey).filter(Boolean);
+  if(!selected.length)return;
+  pushWorkbenchHistory();
+  selected.forEach(ref=>{
+    if(ref.kind==='panel')workbenchHiddenPanels.add(ref.id);
+    if(ref.kind==='item')canvasItems=canvasItems.filter(item=>item.id!==ref.id);
+  });
+  canvasSelection.clear();
+  cleanupCanvasLinks();
+  saveWorkbenchHiddenPanels();
+  saveCanvasSurfaceState();
+  updateWorkbenchState();
+}
+function closeCanvasSelectionMenu(){
+  $('#canvasSelectionMenu')?.classList.remove('open');
+}
+function openCanvasSelectionMenu(clientX,clientY){
+  const menu=$('#canvasSelectionMenu');if(!menu)return;
+  const linkBtn=$('#canvasSelectionLink');
+  const unlinkBtn=$('#canvasSelectionUnlink');
+  if(linkBtn)linkBtn.style.display=canvasSelection.size>1?'block':'none';
+  if(unlinkBtn)unlinkBtn.style.display=canvasSelectionHasLinks()?'block':'none';
+  const maxX=Math.max(8,window.innerWidth-210);
+  const maxY=Math.max(8,window.innerHeight-150);
+  menu.style.left=`${Math.min(maxX,Math.max(8,clientX))}px`;
+  menu.style.top=`${Math.min(maxY,Math.max(8,clientY))}px`;
+  menu.classList.add('open');
+}
+function defaultWorkbenchLayout(){
+  return {
+    navigator:{x:1,y:1,w:22,h:58,z:2},
+    inspector:{x:25,y:1,w:46,h:58,z:3},
+    checklist:{x:73,y:1,w:26,h:58,z:2},
+    templates:{x:1,y:61,w:22,h:28,z:2},
+    preview:{x:25,y:61,w:46,h:28,z:2},
+    notes:{x:73,y:61,w:26,h:28,z:2},
+    json:{x:73,y:1,w:26,h:58,z:2},
+    sources:{x:1,y:61,w:22,h:28,z:2},
+    projectStats:{x:25,y:61,w:22,h:28,z:2},
+    exportReadiness:{x:49,y:61,w:22,h:28,z:2}
+  };
+}
+function defaultCanvasLayout(){
+  return {
+    navigator:{x:40,y:56,w:260,h:520,z:2},
+    inspector:{x:320,y:56,w:560,h:520,z:3},
+    preview:{x:900,y:56,w:440,h:300,z:2},
+    checklist:{x:900,y:380,w:440,h:240,z:2},
+    templates:{x:40,y:600,w:260,h:220,z:2},
+    notes:{x:320,y:600,w:270,h:220,z:2},
+    json:{x:610,y:600,w:270,h:220,z:2},
+    sources:{x:900,y:625,w:440,h:150,z:2},
+    projectStats:{x:900,y:56,w:300,h:220,z:2},
+    exportReadiness:{x:900,y:300,w:360,h:260,z:2}
+  };
+}
+const STALE_WORKBENCH_LAYOUT_DEFAULTS={
+  navigator:{x:1,y:1,w:24,h:58,z:2},
+  inspector:{x:28,y:12,w:58,h:68,z:3},
+  json:{x:72,y:1,w:26,h:44,z:2},
+  templates:{x:1,y:61,w:24,h:28,z:2},
+  preview:{x:20,y:4,w:54,h:54,z:2},
+  notes:{x:48,y:62,w:28,h:28,z:2},
+  checklist:{x:74,y:1,w:24,h:58,z:2},
+  projectStats:{x:78,y:62,w:20,h:26,z:2},
+  exportReadiness:{x:53,y:61,w:28,h:24,z:2}
+};
+const WORKBENCH_LAYOUT_DEFAULTS_20260528_PREVIEW_TOPLEFT={
+  preview:{x:0,y:1,w:22.52720165922146,h:18.201555962343093,z:13}
+};
+const WORKBENCH_LAYOUT_DEFAULTS_20260529_TOOLBAR_OVERLAP={
+  templates:{x:1,y:61,w:22,h:37,z:2},
+  preview:{x:25,y:61,w:46,h:37,z:2},
+  notes:{x:73,y:61,w:26,h:37,z:2},
+  sources:{x:1,y:61,w:22,h:37,z:2},
+  projectStats:{x:25,y:61,w:22,h:37,z:2},
+  exportReadiness:{x:49,y:61,w:22,h:37,z:2}
+};
+const STALE_CANVAS_LAYOUT_DEFAULTS={
+  navigator:{x:80,y:80,w:360,h:620,z:2},
+  inspector:{x:500,y:80,w:920,h:650,z:3},
+  checklist:{x:1460,y:80,w:420,h:650,z:2},
+  json:{x:1460,y:770,w:420,h:520,z:2},
+  templates:{x:80,y:760,w:360,h:430,z:2},
+  preview:{x:500,y:780,w:840,h:520,z:2},
+  notes:{x:920,y:780,w:420,h:360,z:2},
+  projectStats:{x:1920,y:80,w:320,h:300,z:2},
+  exportReadiness:{x:1920,y:420,w:420,h:360,z:2}
+};
+const CANVAS_LAYOUT_DEFAULTS_20260527_OFFSCREEN={
+  navigator:{x:60,y:70,w:280,h:560,z:2},
+  inspector:{x:370,y:70,w:610,h:560,z:3},
+  preview:{x:1010,y:70,w:500,h:360,z:2},
+  checklist:{x:1010,y:460,w:500,h:330,z:2},
+  templates:{x:60,y:670,w:280,h:320,z:2},
+  notes:{x:370,y:670,w:300,h:280,z:2},
+  json:{x:700,y:670,w:500,h:360,z:2},
+  sources:{x:1220,y:820,w:360,h:300,z:2},
+  projectStats:{x:1220,y:70,w:300,h:240,z:2},
+  exportReadiness:{x:1220,y:330,w:360,h:300,z:2}
+};
+const CANVAS_LAYOUT_DEFAULTS_20260527_SHORT_RESOURCES={
+  navigator:{x:40,y:56,w:260,h:520,z:2},
+  inspector:{x:320,y:56,w:560,h:520,z:3},
+  preview:{x:900,y:56,w:440,h:300,z:2},
+  checklist:{x:900,y:380,w:440,h:240,z:2},
+  templates:{x:40,y:600,w:260,h:220,z:2},
+  notes:{x:320,y:600,w:270,h:220,z:2},
+  json:{x:610,y:600,w:270,h:220,z:2},
+  sources:{x:900,y:645,w:440,h:175,z:2},
+  projectStats:{x:900,y:56,w:300,h:220,z:2},
+  exportReadiness:{x:900,y:300,w:360,h:260,z:2}
+};
+const CANVAS_LAYOUT_DEFAULTS_20260528_PREVIEW_OVERLAP={
+  preview:{x:787.2263363951507,y:455.74803482546025,w:187.83652940309184,h:169.25196517453975,z:4}
+};
+const CANVAS_LAYOUT_DEFAULTS_20260529_TOOLBAR_OVERLAP={
+  sources:{x:900,y:625,w:440,h:240,z:2}
+};
+function floatingPanelAlmostMatches(a,b,tolerance=1){
+  if(!a||!b)return false;
+  return ['x','y','w','h'].every(k=>Math.abs((Number(a[k])||0)-(Number(b[k])||0))<=tolerance);
+}
+function floatingPanelSizeAlmostMatches(a,b,tolerance=4){
+  if(!a||!b)return false;
+  return ['w','h'].every(k=>Math.abs((Number(a[k])||0)-(Number(b[k])||0))<=tolerance);
+}
+function upgradeStaleFloatingPanelDefaults(out,layout){
+  const staleSets=isCanvasLayout(layout)
+    ? [STALE_CANVAS_LAYOUT_DEFAULTS,CANVAS_LAYOUT_DEFAULTS_20260527_OFFSCREEN,CANVAS_LAYOUT_DEFAULTS_20260527_SHORT_RESOURCES,CANVAS_LAYOUT_DEFAULTS_20260528_PREVIEW_OVERLAP,CANVAS_LAYOUT_DEFAULTS_20260529_TOOLBAR_OVERLAP]
+    : [STALE_WORKBENCH_LAYOUT_DEFAULTS,WORKBENCH_LAYOUT_DEFAULTS_20260528_PREVIEW_TOPLEFT,WORKBENCH_LAYOUT_DEFAULTS_20260529_TOOLBAR_OVERLAP];
+  const fresh=defaultFloatingPanelLayout(layout);
+  const isCanvas=isCanvasLayout(layout);
+  let changed=false;
+  staleSets.forEach(stale=>{
+    Object.entries(stale).forEach(([key,oldPanel])=>{
+      if(!out[key]||!fresh[key])return;
+      const exactLegacy=floatingPanelAlmostMatches(out[key],oldPanel,isCanvas?12:2);
+      const oldLegacySize=floatingPanelSizeAlmostMatches(out[key],oldPanel,isCanvas?6:2);
+      if(exactLegacy||oldLegacySize){out[key]={...fresh[key]};changed=true;}
+    });
+  });
+  if(changed){
+    try{localStorage.setItem(floatingPanelStorageKeys(layout).layout,JSON.stringify(out));}catch(_err){}
+  }
+  return out;
+}
+function defaultFloatingPanelLayout(layout=currentFloatingPanelLayout()){
+  return isCanvasLayout(layout)?defaultCanvasLayout():defaultWorkbenchLayout();
+}
+function defaultWorkbenchHiddenPanels(){
+  return new Set(['json','templates','notes','projectStats','exportReadiness']);
+}
+function workbenchPanelLabels(){
+  return {
+    navigator:'Navigator',
+    inspector:'Quest Editor',
+    json:'Live JSON',
+    templates:'Templates',
+    preview:'Questlog Preview',
+    notes:'Note',
+    checklist:'Checklist',
+    sources:'Resources',
+    projectStats:'Project Stats',
+    exportReadiness:'Export Readiness'
+  };
+}
+function workbenchPanelKeys(){
+  const defaults=defaultWorkbenchLayout();
+  const domKeys=$$('[data-workbench-panel]').map(el=>el.dataset.workbenchPanel).filter(Boolean);
+  return [...new Set([...Object.keys(defaults),...domKeys])].filter(k=>k!=='mindmap');
+}
+function loadWorkbenchLayout(layout=currentFloatingPanelLayout()){
+  try{
+    const saved=JSON.parse(localStorage.getItem(floatingPanelStorageKeys(layout).layout)||'{}');
+    const defaults=defaultFloatingPanelLayout(layout);
+    const out={...defaults};
+    Object.entries(saved||{}).forEach(([key,val])=>{
+      if(defaults[key])out[key]=clampFloatingPanel({...defaults[key],...(val||{})},layout);
+    });
+    return upgradeStaleFloatingPanelDefaults(out,layout);
+  }catch(_err){
+    return defaultFloatingPanelLayout(layout);
+  }
+}
+function saveWorkbenchLayout(){
+  localStorage.setItem(floatingPanelStorageKeys().layout,JSON.stringify(workbenchPanelLayout));
+}
+function loadWorkbenchHiddenPanels(layout=currentFloatingPanelLayout()){
+  try{
+    const raw=localStorage.getItem(floatingPanelStorageKeys(layout).hidden);
+    if(!raw)return defaultWorkbenchHiddenPanels();
+    const known=new Set(workbenchPanelKeys());
+    return new Set(JSON.parse(raw).filter(k=>known.has(k)));
+  }catch(_err){
+    return defaultWorkbenchHiddenPanels();
+  }
+}
+function saveWorkbenchHiddenPanels(){
+  localStorage.setItem(floatingPanelStorageKeys().hidden,JSON.stringify([...workbenchHiddenPanels]));
+}
+function loadWorkbenchLockedPanels(layout=currentFloatingPanelLayout()){
+  try{
+    const raw=localStorage.getItem(floatingPanelStorageKeys(layout).locked);
+    if(!raw)return new Set();
+    const known=new Set(workbenchPanelKeys());
+    return new Set(JSON.parse(raw).filter(k=>known.has(k)));
+  }catch(_err){
+    return new Set();
+  }
+}
+function saveWorkbenchLockedPanels(){
+  localStorage.setItem(floatingPanelStorageKeys().locked,JSON.stringify([...(workbenchLockedPanels||new Set())]));
+}
+function migrateWorkbenchPanel(panel){
+  if(panel&&panel.x!==undefined)return panel;
+  if(panel&&panel.col!==undefined){
+    return {
+      x:((Number(panel.col)||1)-1)/12*100,
+      y:((Number(panel.row)||1)-1)/9*100,
+      w:(Number(panel.cs)||2)/12*100,
+      h:(Number(panel.rs)||2)/9*100,
+      z:Number(panel.z)||1
+    };
+  }
+  return panel||{};
+}
+function snapshotWorkbenchState(){
+  return {
+    layout:JSON.parse(JSON.stringify(workbenchPanelLayout||{})),
+    hidden:[...(workbenchHiddenPanels||new Set())],
+    locked:[...(workbenchLockedPanels||new Set())],
+    canvasItems:JSON.parse(JSON.stringify(canvasItems||[])),
+    canvasDrawings:JSON.parse(JSON.stringify(canvasDrawings||[])),
+    canvasLinks:JSON.parse(JSON.stringify(canvasLinks||[]))
+  };
+}
+function restoreWorkbenchState(snapshot){
+  if(!snapshot)return;
+  workbenchPanelLayout=JSON.parse(JSON.stringify(snapshot.layout||defaultFloatingPanelLayout()));
+  workbenchHiddenPanels=new Set(snapshot.hidden||[]);
+  workbenchLockedPanels=new Set(snapshot.locked||[]);
+  if(Array.isArray(snapshot.canvasItems))canvasItems=snapshot.canvasItems.map(clampCanvasItem).filter(Boolean);
+  if(Array.isArray(snapshot.canvasDrawings))canvasDrawings=snapshot.canvasDrawings.map(clampCanvasDrawing).filter(Boolean);
+  if(Array.isArray(snapshot.canvasLinks))canvasLinks=snapshot.canvasLinks.map(clampCanvasLink).filter(Boolean);
+  saveWorkbenchLayout();
+  saveWorkbenchHiddenPanels();
+  saveWorkbenchLockedPanels();
+  saveCanvasSurfaceState();
+  updateWorkbenchState();
+  updateHistoryButtons();
+}
+function pushWorkbenchHistory(snapshot=snapshotWorkbenchState()){
+  workbenchUndoStack.push(snapshot);
+  if(workbenchUndoStack.length>40)workbenchUndoStack.shift();
+  workbenchRedoStack=[];
+  updateHistoryButtons();
+}
+function undoWorkbenchOrProject(){
+  if(typeof guiStudioModalOpen==='function'&&guiStudioModalOpen()){
+    undoGuiStudioChange();
+    return;
+  }
+  if(isFloatingPanelLayout()&&workbenchUndoStack.length){
+    workbenchRedoStack.push(snapshotWorkbenchState());
+    restoreWorkbenchState(workbenchUndoStack.pop());
+    return;
+  }
+  undoProject();
+}
+function redoWorkbenchOrProject(){
+  if(typeof guiStudioModalOpen==='function'&&guiStudioModalOpen()){
+    redoGuiStudioChange();
+    return;
+  }
+  if(isFloatingPanelLayout()&&workbenchRedoStack.length){
+    workbenchUndoStack.push(snapshotWorkbenchState());
+    restoreWorkbenchState(workbenchRedoStack.pop());
+    return;
+  }
+  redoProject();
+}
+function clampWorkbenchPanel(panel){
+  panel=migrateWorkbenchPanel(panel);
+  panel.w=Math.max(16,Math.min(96,Number(panel.w)||24));
+  panel.h=Math.max(16,Math.min(96,Number(panel.h)||28));
+  panel.x=Math.max(0,Math.min(100-panel.w,Number(panel.x)||0));
+  panel.y=Math.max(0,Math.min(100-panel.h,Number(panel.y)||0));
+  panel.z=Math.max(1,Math.min(9999,Math.round(Number(panel.z)||1)));
+  return panel;
+}
+function migrateCanvasPanel(panel){
+  if(!panel)return {};
+  if(panel.col!==undefined)return migrateCanvasPanel(migrateWorkbenchPanel(panel));
+  const p={...panel};
+  const looksPercent=Number(p.w)<=100&&Number(p.h)<=100&&Math.abs(Number(p.x))<=120&&Math.abs(Number(p.y))<=120;
+  if(looksPercent){
+    const rect=$('.app-body')?.getBoundingClientRect();
+    const baseW=Math.max(1000,rect?.width||1533);
+    const baseH=Math.max(700,rect?.height||956);
+    return {
+      x:Number(p.x||0)/100*baseW,
+      y:Number(p.y||0)/100*baseH,
+      w:Number(p.w||24)/100*baseW,
+      h:Number(p.h||28)/100*baseH,
+      z:Number(p.z)||1
+    };
+  }
+  return p;
+}
+function clampCanvasPanel(panel){
+  panel=migrateCanvasPanel(panel);
+  panel.w=Math.max(180,Math.min(2600,Number(panel.w)||360));
+  panel.h=Math.max(160,Math.min(2200,Number(panel.h)||360));
+  panel.x=Math.max(-50000,Math.min(50000,Number(panel.x)||0));
+  panel.y=Math.max(-50000,Math.min(50000,Number(panel.y)||0));
+  panel.z=Math.max(1,Math.min(9999,Math.round(Number(panel.z)||1)));
+  return panel;
+}
+function clampCanvasPanelToViewport(panel){
+  const p=clampCanvasPanel(panel);
+  const rect=$('.app-body')?.getBoundingClientRect();
+  if(!rect)return p;
+  const zoom=clampCanvasZoom(canvasView.zoom);
+  const left=(0-canvasView.x)/zoom;
+  const top=(0-canvasView.y)/zoom;
+  const right=(rect.width-canvasView.x)/zoom;
+  const bottom=(rect.height-canvasView.y)/zoom;
+  const worldW=Math.max(1,right-left);
+  const worldH=Math.max(1,bottom-top);
+  const visibleW=p.w<=worldW?p.w:Math.min(p.w,Math.max(48,140/zoom));
+  const visibleH=p.h<=worldH?p.h:Math.min(p.h,Math.max(34,48/zoom));
+  const minX=left-p.w+visibleW;
+  const maxX=right-visibleW;
+  const minY=top+52/zoom;
+  const maxY=bottom-visibleH;
+  p.x=maxX<minX?(left+right-p.w)/2:Math.max(minX,Math.min(maxX,p.x));
+  p.y=maxY<minY?top:Math.max(minY,Math.min(maxY,p.y));
+  return clampCanvasPanel(p);
+}
+function clampFloatingPanel(panel,layout=currentFloatingPanelLayout()){
+  return isCanvasLayout(layout)?clampCanvasPanel(panel):clampWorkbenchPanel(panel);
+}
+function nextWorkbenchZ(){
+  return Math.max(1,...Object.values(workbenchPanelLayout||{}).map(p=>Number((isCanvasLayout()?migrateCanvasPanel(p):migrateWorkbenchPanel(p)).z)||1))+1;
+}
+function bringWorkbenchPanelToFront(key){
+  if(!key)return;
+  const current=clampFloatingPanel(workbenchPanelLayout[key]||defaultFloatingPanelLayout()[key]||{});
+  const max=nextWorkbenchZ()-1;
+  if(current.z>=max)return;
+  current.z=max+1;
+  workbenchPanelLayout[key]=current;
+  saveWorkbenchLayout();
+  applyWorkbenchPanelLayout();
+}
+function findWorkbenchFreeSpot(key,size){
+  const open=workbenchPanelKeys().filter(k=>!workbenchHiddenPanels?.has(k)).length;
+  const w=Number(size?.w)||24,h=Number(size?.h)||28;
+  if(isCanvasLayout()){
+    return clampCanvasPanel({x:120+(open*46),y:120+(open*38),w:Number(size?.w)||360,h:Number(size?.h)||300,z:nextWorkbenchZ()});
+  }
+  return clampWorkbenchPanel({x:Math.min(76,4+(open*4)%44),y:Math.min(76,4+(open*6)%52),w,h,z:nextWorkbenchZ()});
+}
+function applyWorkbenchPanelLayout(){
+  const isCanvas=document.body?.dataset.layout==='canvas';
+  const appRect=isCanvas?$('.app-body')?.getBoundingClientRect():null;
+  const zoom=isCanvas?clampCanvasZoom(canvasView.zoom):1;
+  $$('[data-workbench-panel]').forEach(panel=>{
+    const key=panel.dataset.workbenchPanel;
+    panel.classList.toggle('workbench-panel-hidden',!!workbenchHiddenPanels?.has(key));
+    panel.classList.toggle('canvas-selected',canvasSelection.has(canvasRefKey({kind:'panel',id:key})));
+    const locked=!!workbenchLockedPanels?.has(key);
+    panel.classList.toggle('workbench-panel-locked',locked);
+    const lockBtn=panel.querySelector('[data-workbench-lock]');
+    if(lockBtn){
+      lockBtn.innerHTML=guiStudioLucideIcon(locked?'lock':'lock-open','workbench-button-icon');
+      lockBtn.setAttribute('aria-pressed',String(locked));
+      lockBtn.dataset.tip=locked?'Unlock this panel so it can move and resize.':'Lock this panel in place.';
+    }
+    let item=clampFloatingPanel(workbenchPanelLayout[key]||defaultFloatingPanelLayout()[key]||{x:0,y:0,w:24,h:28,z:1});
+    workbenchPanelLayout[key]=item;
+    panel.style.setProperty('--wb-x',item.x);
+    panel.style.setProperty('--wb-y',item.y);
+    panel.style.setProperty('--wb-w',item.w);
+    panel.style.setProperty('--wb-h',item.h);
+    panel.style.setProperty('--wb-z',item.z);
+    if(isCanvas&&appRect){
+      panel.style.setProperty('--canvas-left',`${canvasView.x+item.x*zoom}px`);
+      panel.style.setProperty('--canvas-top',`${canvasView.y+item.y*zoom}px`);
+      panel.style.setProperty('--canvas-width',`${item.w}px`);
+      panel.style.setProperty('--canvas-height',`${item.h}px`);
+      panel.querySelectorAll(':scope > .canvas-anchor').forEach(a=>a.remove());
+    }else{
+      panel.style.removeProperty('--canvas-left');
+      panel.style.removeProperty('--canvas-top');
+      panel.style.removeProperty('--canvas-width');
+      panel.style.removeProperty('--canvas-height');
+      panel.querySelectorAll(':scope > .canvas-anchor').forEach(a=>a.remove());
+    }
+  });
+  if(isCanvas)renderCanvasLayer();
+}
+function renderWorkbenchAddPanelMenu(){
+  const menu=$('#workbenchAddPanelMenu');if(!menu)return;
+  const labels=workbenchPanelLabels();
+  const keys=workbenchPanelKeys();
+  const hidden=keys.filter(k=>workbenchHiddenPanels?.has(k));
+  const visibleCount=keys.length-hidden.length;
+  const full=visibleCount>=7;
+  if(!hidden.length){menu.innerHTML='<button type="button" disabled>All panels are open</button>';return;}
+  menu.innerHTML=hidden.map(k=>`<button type="button" data-workbench-add="${esc(k)}" ${full?'disabled title="Close a panel before adding another."':''}>${esc(labels[k]||k)}</button>`).join('');
+  $$('[data-workbench-add]',menu).forEach(btn=>btn.onclick=()=>{
+    if(btn.disabled)return;
+    const key=btn.dataset.workbenchAdd;
+    pushWorkbenchHistory();
+    workbenchHiddenPanels.delete(key);
+    workbenchLockedPanels?.delete(key);
+    workbenchPanelLayout[key]=workbenchPanelLayout[key]||defaultFloatingPanelLayout()[key]||findWorkbenchFreeSpot(key,{w:26,h:28});
+    workbenchPanelLayout[key]=findWorkbenchFreeSpot(key,workbenchPanelLayout[key]);
+    saveWorkbenchHiddenPanels();
+    saveWorkbenchLockedPanels();
+    saveWorkbenchLayout();
+    updateWorkbenchState();
+  });
+}
+function closeCanvasContextMenu(){
+  $('#canvasContextMenu')?.classList.remove('open');
+  $('#canvasContextPanelChoices')?.classList.remove('open');
+}
+function openCanvasContextMenu(clientX,clientY){
+  const menu=$('#canvasContextMenu');if(!menu)return;
+  renderCanvasContextPanelChoices();
+  const maxX=Math.max(8,window.innerWidth-250);
+  const maxY=Math.max(8,window.innerHeight-220);
+  menu.style.left=`${Math.min(maxX,Math.max(8,clientX))}px`;
+  menu.style.top=`${Math.min(maxY,Math.max(8,clientY))}px`;
+  menu.classList.add('open');
+}
+function renderCanvasContextPanelChoices(){
+  const list=$('#canvasContextPanelChoices');if(!list)return;
+  const labels=workbenchPanelLabels();
+  const hidden=workbenchPanelKeys().filter(k=>workbenchHiddenPanels?.has(k));
+  if(!hidden.length){list.innerHTML='<button type="button" disabled>All panels are open</button>';return;}
+  list.innerHTML=hidden.map(k=>`<button type="button" data-canvas-add-panel="${esc(k)}">${esc(labels[k]||k)}</button>`).join('');
+  $$('[data-canvas-add-panel]',list).forEach(btn=>btn.onclick=e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    const key=btn.dataset.canvasAddPanel;
+    pushWorkbenchHistory();
+    workbenchHiddenPanels.delete(key);
+    workbenchLockedPanels?.delete(key);
+    workbenchPanelLayout[key]=clampCanvasPanel({...(workbenchPanelLayout[key]||defaultCanvasLayout()[key]||{}),x:canvasContextPoint.x,y:canvasContextPoint.y,z:nextWorkbenchZ()});
+    saveWorkbenchHiddenPanels();
+    saveWorkbenchLockedPanels();
+    saveWorkbenchLayout();
+    closeCanvasContextMenu();
+    updateWorkbenchState();
+  });
+}
+function exportLayoutSetup(){
+  const payload={
+    version:APP_VERSION,
+    exportedAt:new Date().toISOString(),
+    personalization:loadPersonalization(),
+    themes:{current:cTheme,light:chosenTheme('light'),dark:chosenTheme('dark')},
+    uiSounds:{
+      enabled:uiSoundsEnabled,
+      muted:uiSoundsMuted,
+      typing:uiTypingSoundsEnabled,
+      feedback:uiFeedbackSoundsEnabled,
+      volume:uiSoundVolume
+    },
+    workbench:{layout:loadWorkbenchLayout('workbench'),hidden:[...loadWorkbenchHiddenPanels('workbench')],locked:[...loadWorkbenchLockedPanels('workbench')]},
+    canvas:{layout:loadWorkbenchLayout('canvas'),hidden:[...loadWorkbenchHiddenPanels('canvas')],locked:[...loadWorkbenchLockedPanels('canvas')],view:canvasView,items:canvasItems,drawings:canvasDrawings,links:canvasLinks}
+  };
+  downloadBlob(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),'questlog-layout-settings.json');
+}
+function normalizeImportedLayoutSetup(data){
+  if(!data||typeof data!=='object')throw new Error('Layout setup file is not valid JSON data.');
+  const out={...data};
+  if(out.personalization&&typeof out.personalization==='object'){
+    out.personalization=Object.assign(defaultPersonalization(),out.personalization);
+    out.personalization.layout=normalizePersonalLayoutChoice(out.personalization.layout);
+    if(!Array.isArray(out.personalization.colors))out.personalization.colors=defaultPersonalization().colors;
+  }
+  if(out.themes&&typeof out.themes==='object'){
+    const light=REMOVED_THEME_FALLBACKS[out.themes.light]||out.themes.light;
+    const dark=REMOVED_THEME_FALLBACKS[out.themes.dark]||out.themes.dark;
+    const current=REMOVED_THEME_FALLBACKS[out.themes.current]||out.themes.current;
+    out.themes={
+      light:LIGHT_THEME_IDS.has(light)?light:chosenTheme('light'),
+      dark:DARK_THEME_IDS.has(dark)?dark:chosenTheme('dark'),
+      current:THEME_NAMES[current]?current:null
+    };
+  }
+  return out;
+}
+function applyImportedUiSoundPreferences(uiSounds){
+  if(!uiSounds||typeof uiSounds!=='object')return;
+  uiSoundsEnabled=uiSounds.enabled!==false;
+  uiSoundsMuted=!!uiSounds.muted;
+  uiTypingSoundsEnabled=uiSounds.typing!==false;
+  uiFeedbackSoundsEnabled=uiSounds.feedback!==false;
+  uiSoundVolume=Math.min(2,Math.max(0,Number(uiSounds.volume)));
+  if(!Number.isFinite(uiSoundVolume))uiSoundVolume=.85;
+  localStorage.setItem(UI_SOUND_PREF_KEY,uiSoundsEnabled?'true':'false');
+  localStorage.setItem(UI_SOUND_MUTE_KEY,uiSoundsMuted?'true':'false');
+  localStorage.setItem(UI_TYPING_SOUND_PREF_KEY,uiTypingSoundsEnabled?'true':'false');
+  localStorage.setItem(UI_FEEDBACK_SOUND_PREF_KEY,uiFeedbackSoundsEnabled?'true':'false');
+  localStorage.setItem(UI_SOUND_VOLUME_KEY,String(uiSoundVolume));
+  updateUiSoundControls();
+}
+function reloadFloatingLayoutRuntime(){
+  activeFloatingPanelLayout=currentFloatingPanelLayout();
+  workbenchPanelLayout=loadWorkbenchLayout(activeFloatingPanelLayout);
+  workbenchHiddenPanels=loadWorkbenchHiddenPanels(activeFloatingPanelLayout);
+  workbenchLockedPanels=loadWorkbenchLockedPanels(activeFloatingPanelLayout);
+  loadCanvasView();
+  loadCanvasItems();
+  loadCanvasDrawings();
+  loadCanvasLinks();
+  applyCanvasView();
+  renderCanvasItems();
+  renderCanvasLayer();
+  renderWorkbenchAddPanelMenu();
+  updateWorkbenchState();
+}
+async function importLayoutSetup(file){
+  if(!file)return;
+  try{
+    const data=normalizeImportedLayoutSetup(JSON.parse(await file.text()));
+    if(data.themes){
+      localStorage.setItem(LIGHT_THEME_CHOICE_KEY,data.themes.light);
+      localStorage.setItem(DARK_THEME_CHOICE_KEY,data.themes.dark);
+      if(data.themes.current)applyTheme(data.themes.current);
+    }
+    if(data.personalization)localStorage.setItem(PERSONALIZATION_KEY,JSON.stringify(data.personalization));
+    applyImportedUiSoundPreferences(data.uiSounds);
+    if(data.workbench){
+      if(data.workbench.layout)localStorage.setItem(WORKBENCH_LAYOUT_KEY,JSON.stringify(data.workbench.layout));
+      if(Array.isArray(data.workbench.hidden))localStorage.setItem(WORKBENCH_HIDDEN_KEY,JSON.stringify(data.workbench.hidden));
+      if(Array.isArray(data.workbench.locked))localStorage.setItem(WORKBENCH_LOCKED_KEY,JSON.stringify(data.workbench.locked));
+    }
+    if(data.canvas){
+      if(data.canvas.layout)localStorage.setItem(CANVAS_LAYOUT_KEY,JSON.stringify(data.canvas.layout));
+      if(Array.isArray(data.canvas.hidden))localStorage.setItem(CANVAS_HIDDEN_KEY,JSON.stringify(data.canvas.hidden));
+      if(Array.isArray(data.canvas.locked))localStorage.setItem(CANVAS_LOCKED_KEY,JSON.stringify(data.canvas.locked));
+      if(data.canvas.view)localStorage.setItem(CANVAS_VIEW_KEY,JSON.stringify(data.canvas.view));
+      if(Array.isArray(data.canvas.items))localStorage.setItem(CANVAS_ITEMS_KEY,JSON.stringify(data.canvas.items));
+      if(Array.isArray(data.canvas.drawings))localStorage.setItem(CANVAS_DRAWINGS_KEY,JSON.stringify(data.canvas.drawings));
+      if(Array.isArray(data.canvas.links))localStorage.setItem(CANVAS_LINKS_KEY,JSON.stringify(data.canvas.links));
+    }
+    const importedPrefs=loadPersonalization();
+    applyPersonalization(importedPrefs);
+    personalizationDraft=JSON.parse(JSON.stringify(importedPrefs));
+    restorePersonalDraft(personalizationDraft);
+    reloadFloatingLayoutRuntime();
+    showMsg('Imported layout setup.',true);
+  }catch(err){
+    showMsg(`Could not import layout setup: ${err.message||err}`,false);
+  }
+}
+function renderWorkbenchPanels(){
+  if(!isFloatingPanelLayout())return;
+  const checklist=$('#workbenchChecklistMirror');
+  const source=$('#validationList');
+  if(checklist&&source)checklist.innerHTML=source.innerHTML||'<div class="validation-empty">No checks yet.</div>';
+  const issues=validateAll(false);
+  const stats=$('#workbenchProjectStats');
+  if(stats){
+    const blockers=issues.filter(i=>i.level==='missing'||i.level==='error'||i.level==='warn').length;
+    const unbound=Object.keys(quests).filter(q=>!questBoundCh(q)).length;
+    stats.innerHTML=[
+      ['Quests',Object.keys(quests).length],
+      ['Chapters',Object.keys(chapters).length],
+      ['Checks',blockers],
+      ['Unbound',unbound]
+    ].map(([label,value])=>`<div class="workbench-stat"><span>${esc(label)}</span><strong>${esc(String(value))}</strong></div>`).join('');
+  }
+  const readiness=$('#workbenchExportReadiness');
+  if(readiness){
+    const blockers=issues.filter(i=>i.level==='missing'||i.level==='error'||i.level==='warn');
+    readiness.innerHTML=blockers.length
+      ? blockers.slice(0,6).map(i=>`<div class="validation-issue ${esc(i.level)}"><div class="validation-issue-top"><span class="validation-sev">${esc(i.level)}</span><span class="validation-file">${esc(i.file)}</span><span class="validation-path" title="${esc(i.path||'root')}">${esc(validationPathLabel(i))}</span></div><div class="validation-msg">${esc(i.msg)}</div></div>`).join('')+(blockers.length>6?`<div class="validation-empty">${blockers.length-6} more export checks hidden.</div>`:'')
+      : '<div class="validation-empty">Ready to export. No blocking checks found.</div>';
+  }
+  const preview=$('#workbenchQuestPreviewMount');
+  if(preview){
+    renderQuestPreviewSurface(preview,{inline:true,rerender:renderWorkbenchPanels});
+    if(mode==='quest'&&currentFile&&getCD()){
+      preview.insertAdjacentHTML('afterbegin',`<button type="button" class="gui-studio-launch gui-studio-launch-quest" id="workbenchQuestGuiStudioBtn">${guiStudioLucideIcon('palette','')}<span>GUI Editor</span></button>`);
+      preview.querySelector('#workbenchQuestGuiStudioBtn')?.addEventListener('click',()=>openGuiStudio('quest-menu'));
+    }
+    fitInlineQuestlogPreviews(preview);
+  }
+  renderWorkbenchSourcesPanel();
+  updateWorkbenchPreviewScale();
+  renderWorkbenchTemplatesPanel();
+  renderWorkbenchAddPanelMenu();
+}
+function renderWorkbenchSourcesPanel(){
+  const host=$('#workbenchSourcesPanel');if(!host)return;
+  host.innerHTML=`<div class="workbench-sources-panel">
+    <a class="workbench-source-link" href="https://moddedmc.wiki/en/project/questlog/latest/docs" target="_blank" rel="noreferrer">${guiStudioLucideIcon('book-open-check','workbench-button-icon')}<span><strong>Questlog Wiki</strong><small>Official docs and schema reference.</small></span></a>
+    <a class="workbench-source-link" href="https://github.com/infernalstudios/Questlog" target="_blank" rel="noreferrer">${guiStudioLucideIcon('external-link','workbench-button-icon')}<span><strong>Questlog GitHub</strong><small>Source, examples, and implementation behavior.</small></span></a>
+    <a class="workbench-source-link" href="https://modrinth.com/mod/questlog" target="_blank" rel="noreferrer">${guiStudioLucideIcon('package','workbench-button-icon')}<span><strong>Modrinth Page</strong><small>Release and loader overview.</small></span></a>
+  </div>`;
+}
+function updateWorkbenchPreviewScale(){
+  const host=$('#workbenchQuestPreviewMount');if(!host)return;
+  const rect=host.getBoundingClientRect();
+  const scale=Math.max(.1,Math.min(1.15,Math.min((rect.width-8)/960,(rect.height-8)/540)));
+  host.style.setProperty('--wb-preview-scale',scale.toFixed(3));
+  host.style.setProperty('--ql-inline-quest-scale',scale.toFixed(3));
+  fitInlineQuestlogPreviews(host);
+}
+function renderWorkbenchTemplatesPanel(){
+  const host=$('#workbenchTemplatesPanel');if(!host)return;
+  const rows=allTemplates().slice().sort((a,b)=>(b.customIndex!==undefined)-(a.customIndex!==undefined)||String(a.title).localeCompare(String(b.title)));
+  host.innerHTML=`
+    <div class="workbench-template-actions">
+      <button type="button" class="btn btn-primary btn-sm" id="workbenchStarterPackBtn">Starter pack</button>
+      <button type="button" class="btn btn-sm" id="workbenchTemplateModalBtn">Full menu</button>
+    </div>
+    <div class="workbench-template-list">
+      ${rows.map((t,i)=>`<div class="template-row ${t.customIndex!==undefined?'is-custom':''}"><div class="template-main"><div class="template-name">${esc(t.title)}</div><div class="template-desc">${esc(t.description||'')}</div><div class="template-meta">${t.customIndex!==undefined?'<span class="custom-pill">Custom</span>':''}<span>${esc(t.cat||'Template')}</span><span>${esc((t.objectives||[]).length)} objective${(t.objectives||[]).length===1?'':'s'}</span></div></div><div class="template-row-actions"><button class="btn btn-primary btn-sm" data-workbench-template="${i}">Use</button></div></div>`).join('')||'<div class="template-empty">No templates available.</div>'}
+    </div>`;
+  $('#workbenchStarterPackBtn')?.addEventListener('click',createStarterPack);
+  $('#workbenchTemplateModalBtn')?.addEventListener('click',openTemplateModal);
+  $$('[data-workbench-template]',host).forEach(btn=>btn.onclick=()=>createQuestFromTemplate(rows[Number(btn.dataset.workbenchTemplate)]));
+}
+function ensureFloatingPanelState(){
+  if(!isFloatingPanelLayout())return;
+  const layout=currentFloatingPanelLayout();
+  if(activeFloatingPanelLayout===layout&&workbenchHiddenPanels&&workbenchLockedPanels)return;
+  activeFloatingPanelLayout=layout;
+  workbenchPanelLayout=loadWorkbenchLayout(layout);
+  workbenchHiddenPanels=loadWorkbenchHiddenPanels(layout);
+  workbenchLockedPanels=loadWorkbenchLockedPanels(layout);
+  workbenchUndoStack=[];
+  workbenchRedoStack=[];
+  updateHistoryButtons();
+}
+function updateWorkbenchState(){
+  const body=document.body;if(!body)return;
+  ensureFloatingPanelState();
+  body.classList.toggle('workbench-toolbar-open',isFloatingPanelLayout()&&workbenchToolbarOpen);
+  const toggle=$('#workbenchToolbarToggle');
+  if(toggle){
+    const open=body.classList.contains('workbench-toolbar-open');
+    toggle.setAttribute('aria-expanded',open?'true':'false');
+    toggle.innerHTML=guiStudioLucideIcon(open?'chevron-down':'chevron-up','workbench-button-icon');
+  }
+  updateWorkbenchMuteButton();
+  if(body.dataset.layout==='canvas')applyCanvasView();
+  else renderCanvasItems();
+  applyWorkbenchPanelLayout();
+  renderWorkbenchAddPanelMenu();
+  renderWorkbenchPanels();
+}
+function setupWorkbenchControls(){
+  window.__workbenchControlsReady=true;
+  loadCanvasView();
+  loadCanvasItems();
+  loadCanvasDrawings();
+  loadCanvasLinks();
+  applyCanvasView();
+  activeFloatingPanelLayout=currentFloatingPanelLayout();
+  workbenchPanelLayout=loadWorkbenchLayout(activeFloatingPanelLayout);
+  workbenchHiddenPanels=loadWorkbenchHiddenPanels(activeFloatingPanelLayout);
+  workbenchLockedPanels=loadWorkbenchLockedPanels(activeFloatingPanelLayout);
+  setCanvasTool('hand');
+  refreshWorkbenchToolbarIcons();
+  onClick('#workbenchToolbarToggle',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    workbenchToolbarOpen=!workbenchToolbarOpen;
+    localStorage.setItem(WORKBENCH_TOOLBAR_KEY,workbenchToolbarOpen?'true':'false');
+    updateWorkbenchState();
+  });
+  onClick('#workbenchMuteBtn',e=>{e.preventDefault();$('#muteToggle')?.click();});
+  onClick('#workbenchUndoBtn',e=>{e.preventDefault();undoWorkbenchOrProject();});
+  onClick('#workbenchRedoBtn',e=>{e.preventDefault();redoWorkbenchOrProject();});
+  onClick('#workbenchThemeBtn',e=>{e.preventDefault();$('#themeToggle')?.click();});
+  onClick('#workbenchSettingsBtn',e=>{e.preventDefault();e.stopPropagation();openPersonalizationModal();});
+  onClick('#workbenchPreviewBtn',e=>{e.preventDefault();openQuestlogListPreviewModal();});
+  onClick('#workbenchExportBtn',e=>{e.preventDefault();$('#btnDownloadAll')?.click();});
+  onClick('#canvasThemeBtn',e=>{e.preventDefault();$('#themeToggle')?.click();});
+  onClick('#canvasZoomOutBtn',e=>{e.preventDefault();setCanvasZoom(canvasView.zoom*.9);});
+  onClick('#canvasZoomResetBtn',e=>{e.preventDefault();resetCanvasView();});
+  onClick('#canvasZoomInBtn',e=>{e.preventDefault();setCanvasZoom(canvasView.zoom*1.1);});
+  onClick('#canvasSettingsBtn',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    openPersonalizationModal();
+  });
+  onClick('#canvasDrawToolBtn',e=>{e.preventDefault();setCanvasTool(canvasTool==='draw'?'hand':'draw');});
+  onClick('#canvasEraserToolBtn',e=>{e.preventDefault();setCanvasTool(canvasTool==='eraser'?'hand':'eraser');});
+  onClick('#canvasHandToolBtn',e=>{e.preventDefault();setCanvasTool('hand');});
+  $$('.canvas-color-swatch').forEach(btn=>btn.addEventListener('click',e=>{e.preventDefault();setCanvasDrawColor(btn.dataset.canvasColor);setCanvasTool('draw');}));
+  onEvent('#canvasDrawSize','input',e=>setCanvasDrawSize(e.target.value));
+  onClick('#workbenchAddPanelBtn',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    $('#workbenchAddPanelMenu')?.classList.toggle('open');
+    renderWorkbenchAddPanelMenu();
+  });
+  onClick('#canvasContextAddNote',e=>{
+    e.preventDefault();
+    addCanvasTextBox(canvasContextPoint,'note');
+    closeCanvasContextMenu();
+  });
+  onClick('#canvasContextAddImage',e=>{
+    e.preventDefault();
+    pendingCanvasImagePoint={...canvasContextPoint};
+    $('#canvasImageInput')?.click();
+    closeCanvasContextMenu();
+  });
+  onClick('#canvasContextAddPanel',e=>{
+    e.preventDefault();
+    const list=$('#canvasContextPanelChoices');
+    list?.classList.toggle('open');
+    renderCanvasContextPanelChoices();
+  });
+  onEvent('#canvasImageInput','change',e=>{
+    addCanvasImage(e.target.files?.[0],pendingCanvasImagePoint);
+    e.target.value='';
+  });
+  onClick('#canvasSelectionRemove',e=>{e.preventDefault();removeCanvasSelection();closeCanvasSelectionMenu();});
+  onClick('#canvasSelectionUnlink',e=>{e.preventDefault();unlinkCanvasSelection();closeCanvasSelectionMenu();});
+  onClick('#canvasSelectionLink',e=>{e.preventDefault();linkCanvasSelection();closeCanvasSelectionMenu();});
+  const workbenchOpenPreviewBtn=$('#workbenchOpenPreviewBtn');
+  if(workbenchOpenPreviewBtn)workbenchOpenPreviewBtn.onclick=e=>{e.preventDefault();openQuestlogListPreviewModal();};
+  document.addEventListener('pointerdown',e=>{
+    if(!e.target.closest?.('#canvasContextMenu'))closeCanvasContextMenu();
+    if(!e.target.closest?.('#canvasSelectionMenu'))closeCanvasSelectionMenu();
+  },true);
+  document.addEventListener('click',e=>{
+    if(!e.target.closest?.('.workbench-add-wrap'))$('#workbenchAddPanelMenu')?.classList.remove('open');
+    if(!e.target.closest?.('#canvasContextMenu'))closeCanvasContextMenu();
+    if(!e.target.closest?.('#canvasSelectionMenu'))closeCanvasSelectionMenu();
+    if(!e.target.closest?.('.layout-io-wrap'))$('#layoutImportExportMenu')?.classList.remove('open');
+  });
+  $$('[data-workbench-remove]').forEach(btn=>{
+    btn.onclick=e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      const key=btn.dataset.workbenchRemove;
+      const label=workbenchPanelLabels()[key]||'this panel';
+      openConfirmModal({
+        title:`Remove ${label}?`,
+        copy:'This only hides the panel from the Workbench. You can add it back from Add panel.',
+        button:'Remove panel',
+        onConfirm:()=>{
+          pushWorkbenchHistory();
+          workbenchHiddenPanels.add(key);
+          saveWorkbenchHiddenPanels();
+          updateWorkbenchState();
+        }
+      });
+    };
+  });
+  $$('[data-workbench-lock]').forEach(btn=>{
+    btn.onclick=e=>{
+      e.preventDefault();
+      e.stopPropagation();
+      const key=btn.dataset.workbenchLock;
+      if(!key)return;
+      pushWorkbenchHistory();
+      if(workbenchLockedPanels.has(key))workbenchLockedPanels.delete(key);
+      else workbenchLockedPanels.add(key);
+      saveWorkbenchLockedPanels();
+      updateWorkbenchState();
+    };
+  });
+  const notes=$('#workbenchNotes');
+  if(notes){
+    notes.value=localStorage.getItem(WORKBENCH_NOTES_KEY)||'';
+    notes.addEventListener('input',()=>localStorage.setItem(WORKBENCH_NOTES_KEY,notes.value));
+  }
+  const appRect=()=>{
+    const app=$('.app-body');
+    return app?.getBoundingClientRect();
+  };
+  const snapPanel=(key,panel)=>{
+    const rect=appRect();if(!rect)return {panel:clampFloatingPanel(panel),snapped:false};
+    if(isCanvasLayout()){
+      const zoom=clampCanvasZoom(canvasView.zoom);
+      const threshold=14/zoom;
+      let p=clampCanvasPanel({...panel});
+      let snapped=false;
+      const setX=value=>{if(Math.abs(p.x-value)>.001)snapped=true;p.x=value;};
+      const setY=value=>{if(Math.abs(p.y-value)>.001)snapped=true;p.y=value;};
+      const left=(0-canvasView.x)/zoom;
+      const top=(0-canvasView.y)/zoom;
+      const right=(rect.width-canvasView.x)/zoom;
+      const bottom=(rect.height-canvasView.y)/zoom;
+      if(Math.abs(p.x-left)<=threshold)setX(left);
+      if(Math.abs(p.y-top)<=threshold)setY(top);
+      if(Math.abs((p.x+p.w)-right)<=threshold)setX(right-p.w);
+      if(Math.abs((p.y+p.h)-bottom)<=threshold)setY(bottom-p.h);
+      workbenchPanelKeys().forEach(other=>{
+        if(other===key||workbenchHiddenPanels?.has(other))return;
+        const o=clampCanvasPanel(workbenchPanelLayout[other]||defaultCanvasLayout()[other]);
+        if(Math.abs(p.x-(o.x+o.w))<=threshold)setX(o.x+o.w);
+        if(Math.abs((p.x+p.w)-o.x)<=threshold)setX(o.x-p.w);
+        if(Math.abs(p.x-o.x)<=threshold)setX(o.x);
+        if(Math.abs((p.x+p.w)-(o.x+o.w))<=threshold)setX(o.x+o.w-p.w);
+        if(Math.abs(p.y-(o.y+o.h))<=threshold)setY(o.y+o.h);
+        if(Math.abs((p.y+p.h)-o.y)<=threshold)setY(o.y-p.h);
+        if(Math.abs(p.y-o.y)<=threshold)setY(o.y);
+        if(Math.abs((p.y+p.h)-(o.y+o.h))<=threshold)setY(o.y+o.h-p.h);
+        p=clampCanvasPanel(p);
+      });
+      return {panel:clampCanvasPanel(p),snapped};
+    }
+    const thresholdX=14/Math.max(1,rect.width)*100;
+    const thresholdY=14/Math.max(1,rect.height)*100;
+    let p=clampWorkbenchPanel({...panel});
+    let snapped=false;
+    const setX=value=>{if(Math.abs(p.x-value)>.001)snapped=true;p.x=value;};
+    const setY=value=>{if(Math.abs(p.y-value)>.001)snapped=true;p.y=value;};
+    if(Math.abs(p.x)<=thresholdX)setX(0);
+    if(Math.abs(p.y)<=thresholdY)setY(0);
+    if(Math.abs(100-(p.x+p.w))<=thresholdX)setX(100-p.w);
+    if(Math.abs(100-(p.y+p.h))<=thresholdY)setY(100-p.h);
+    workbenchPanelKeys().forEach(other=>{
+      if(other===key||workbenchHiddenPanels?.has(other))return;
+      const o=clampWorkbenchPanel(workbenchPanelLayout[other]||defaultWorkbenchLayout()[other]);
+      if(Math.abs(p.x-(o.x+o.w))<=thresholdX)setX(o.x+o.w);
+      if(Math.abs((p.x+p.w)-o.x)<=thresholdX)setX(o.x-p.w);
+      if(Math.abs(p.x-o.x)<=thresholdX)setX(o.x);
+      if(Math.abs((p.x+p.w)-(o.x+o.w))<=thresholdX)setX(o.x+o.w-p.w);
+      if(Math.abs(p.y-(o.y+o.h))<=thresholdY)setY(o.y+o.h);
+      if(Math.abs((p.y+p.h)-o.y)<=thresholdY)setY(o.y-p.h);
+      if(Math.abs(p.y-o.y)<=thresholdY)setY(o.y);
+      if(Math.abs((p.y+p.h)-(o.y+o.h))<=thresholdY)setY(o.y+o.h-p.h);
+      p=clampWorkbenchPanel(p);
+    });
+    return {panel:clampWorkbenchPanel(p),snapped};
+  };
+  const isTypingTarget=target=>!!target?.closest?.('input,textarea,select,[contenteditable="true"]');
+  const isCanvasChromeTarget=target=>!!target.closest?.('.workbench-toolbar-shell,.canvas-view-controls,.canvas-corner-controls,.canvas-context-menu,.modal-bg,.ctx-menu,button,select,a');
+  const isCanvasInteractiveTarget=target=>!!target.closest?.('[data-workbench-panel],.canvas-free-item,.workbench-toolbar-shell,.canvas-view-controls,.canvas-corner-controls,.canvas-context-menu,.modal-bg,.ctx-menu,button,input,textarea,select,a');
+  const isCanvasSelectionBlocked=target=>!!target.closest?.('.workbench-panel-head,.workbench-resize-grip,.canvas-item-move,.canvas-item-resize,button,input,textarea,select,a,.workbench-toolbar-shell,.canvas-view-controls,.canvas-corner-controls,.canvas-context-menu,.modal-bg,.ctx-menu');
+  const setCanvasSpace=down=>{
+    canvasSpaceHeld=!!down;
+    $('.app-body')?.classList.toggle('canvas-space-held',canvasSpaceHeld);
+  };
+  document.addEventListener('keydown',e=>{
+    if(document.body?.dataset.layout==='canvas'&&(e.ctrlKey||e.metaKey)&&!isTypingTarget(e.target)){
+      const key=String(e.key||'').toLowerCase();
+      if(key==='z'){
+        e.preventDefault();
+        if(e.shiftKey)redoWorkbenchOrProject();
+        else undoWorkbenchOrProject();
+        return;
+      }
+    }
+    if(document.body?.dataset.layout!=='canvas'||e.code!=='Space'||isTypingTarget(e.target))return;
+    e.preventDefault();
+    if(!canvasSpaceHeld&&['draw','eraser'].includes(canvasTool)){
+      canvasToolBeforeSpace=canvasTool;
+      setCanvasTool('hand');
+    }
+    setCanvasSpace(true);
+  });
+  document.addEventListener('keyup',e=>{
+    if(e.code==='Space'){
+      setCanvasSpace(false);
+      if(canvasToolBeforeSpace){
+        const previous=canvasToolBeforeSpace;
+        canvasToolBeforeSpace=null;
+        setCanvasTool(previous);
+      }
+    }
+  });
+  window.addEventListener('blur',()=>{setCanvasSpace(false);canvasToolBeforeSpace=null;});
+  document.addEventListener('wheel',e=>{
+    if(document.body?.dataset.layout!=='canvas')return;
+    const app=$('.app-body');
+    if(!app?.contains(e.target)||isCanvasInteractiveTarget(e.target))return;
+    e.preventDefault();
+    const rect=app.getBoundingClientRect();
+    setCanvasZoom(canvasView.zoom*(e.deltaY<0?1.1:.9),{x:e.clientX-rect.left,y:e.clientY-rect.top});
+  },{passive:false});
+  document.addEventListener('pointerdown',e=>{
+    if(document.body?.dataset.layout!=='canvas')return;
+    if(e.button!==0)return;
+    const app=$('.app-body');
+    if(!app?.contains(e.target)||isCanvasChromeTarget(e.target))return;
+    if(canvasTool==='draw'){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      beginCanvasDrawing(e);
+      return;
+    }
+    if(canvasTool==='eraser')return;
+    if(!canvasSpaceHeld)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const start={x:e.clientX,y:e.clientY,panX:canvasView.x,panY:canvasView.y};
+    app.classList.add('canvas-panning');
+    const move=ev=>{
+      canvasView.x=start.panX+(ev.clientX-start.x);
+      canvasView.y=start.panY+(ev.clientY-start.y);
+      applyCanvasView();
+    };
+    const up=()=>{
+      document.removeEventListener('pointermove',move);
+      app.classList.remove('canvas-panning');
+      saveCanvasView();
+    };
+    document.addEventListener('pointermove',move);
+    document.addEventListener('pointerup',up,{once:true});
+  });
+  document.addEventListener('contextmenu',e=>{
+    if(document.body?.dataset.layout!=='canvas')return;
+    const app=$('.app-body');
+    const node=e.target.closest?.('.canvas-free-item,[data-workbench-panel]');
+    const ref=node?.classList?.contains('canvas-free-item')
+      ? {kind:'item',id:node.dataset.canvasItem}
+      : node?.dataset?.workbenchPanel?{kind:'panel',id:node.dataset.workbenchPanel}:null;
+    if(ref){
+      const key=canvasRefKey(ref);
+      if(!canvasSelection.has(key))setCanvasSelection([key]);
+      e.preventDefault();
+      e.stopPropagation();
+      openCanvasSelectionMenu(e.clientX,e.clientY);
+      return;
+    }
+    if(!app?.contains(e.target)||isCanvasInteractiveTarget(e.target))return;
+    e.preventDefault();
+    canvasContextPoint=screenToCanvasPoint(e.clientX,e.clientY);
+    openCanvasContextMenu(e.clientX,e.clientY);
+  });
+  document.addEventListener('pointerdown',e=>{
+    if(document.body?.dataset.layout!=='canvas'||canvasTool!=='hand'||canvasSpaceHeld)return;
+    if(e.button!==0)return;
+    const app=$('.app-body');
+    if(!app?.contains(e.target)||isCanvasSelectionBlocked(e.target))return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const ar=app.getBoundingClientRect();
+    const start={x:e.clientX-ar.left,y:e.clientY-ar.top};
+    let box=$('#canvasSelectionBox');
+    if(!box){
+      box=document.createElement('div');
+      box.id='canvasSelectionBox';
+      box.className='canvas-selection-box';
+      app.appendChild(box);
+    }
+    box.style.left=`${start.x}px`;
+    box.style.top=`${start.y}px`;
+    box.style.width='0px';
+    box.style.height='0px';
+    box.classList.add('open');
+    const move=ev=>{
+      const x=ev.clientX-ar.left,y=ev.clientY-ar.top;
+      box.style.left=`${Math.min(start.x,x)}px`;
+      box.style.top=`${Math.min(start.y,y)}px`;
+      box.style.width=`${Math.abs(x-start.x)}px`;
+      box.style.height=`${Math.abs(y-start.y)}px`;
+    };
+    const up=()=>{
+      document.removeEventListener('pointermove',move);
+      const r=box.getBoundingClientRect();
+      const selectRect={left:r.left-ar.left,top:r.top-ar.top,right:r.right-ar.left,bottom:r.bottom-ar.top};
+      const keys=canvasSelectableRefs().filter(ref=>rectsTouch(selectRect,canvasNodeRect(ref))).map(canvasRefKey);
+      setCanvasSelection(keys);
+      box.classList.remove('open');
+    };
+    document.addEventListener('pointermove',move);
+    document.addEventListener('pointerup',up,{once:true});
+  });
+  document.addEventListener('pointerdown',e=>{
+    const itemNode=e.target.closest?.('.canvas-free-item');
+    if(!itemNode||document.body?.dataset.layout!=='canvas')return;
+    if(e.button!==0)return;
+    if(e.target.closest?.('button,input,textarea,select,a')&&!e.target.closest?.('.canvas-item-move,.canvas-item-resize'))return;
+    const item=canvasItems.find(i=>i.id===itemNode.dataset.canvasItem);if(!item)return;
+    e.preventDefault();
+    e.stopPropagation();
+    const before=snapshotWorkbenchState();
+    bringCanvasItemToFront(item.id);
+    const resizing=!!e.target.closest('.canvas-item-resize');
+    const start={...item,pointerX:e.clientX,pointerY:e.clientY};
+    const zoom=clampCanvasZoom(canvasView.zoom);
+    const move=ev=>{
+      const dx=(ev.clientX-start.pointerX)/zoom;
+      const dy=(ev.clientY-start.pointerY)/zoom;
+      if(resizing){
+        item.w=Math.max(120,start.w+dx);
+        item.h=Math.max(64,start.h+dy);
+      }else{
+        item.x=start.x+dx;
+        item.y=start.y+dy;
+      }
+      Object.assign(item,clampCanvasItem(item));
+      positionCanvasNode(itemNode,item);
+    };
+    const up=()=>{
+      document.removeEventListener('pointermove',move);
+      if(JSON.stringify(before)!==JSON.stringify(snapshotWorkbenchState())){
+        workbenchUndoStack.push(before);
+        if(workbenchUndoStack.length>40)workbenchUndoStack.shift();
+        workbenchRedoStack=[];
+        updateHistoryButtons();
+      }
+      saveCanvasItems();
+      renderCanvasItems();
+    };
+    document.addEventListener('pointermove',move);
+    document.addEventListener('pointerup',up,{once:true});
+  });
+  window.addEventListener('resize',()=>{
+    if(document.body?.dataset.layout==='canvas')applyCanvasView();
+  });
+  document.addEventListener('pointerdown',e=>{
+    const panel=e.target.closest?.('[data-workbench-panel]');
+    if(e.button!==0)return;
+    if(panel&&isFloatingPanelLayout())bringWorkbenchPanelToFront(panel.dataset.workbenchPanel);
+    if(e.target.closest?.('.workbench-panel-remove,.workbench-panel-lock,.workbench-add-menu,button,input,textarea,select,a'))return;
+    const grip=e.target.closest?.('.workbench-panel-head,.workbench-resize-grip');
+    if(!grip||!panel||!isFloatingPanelLayout())return;
+    const key=panel.dataset.workbenchPanel;
+    if(workbenchLockedPanels?.has(key))return;
+    e.preventDefault();
+    e.stopPropagation();
+    const app=$('.app-body');
+    const start=clampFloatingPanel({...(workbenchPanelLayout[key]||defaultFloatingPanelLayout()[key])});
+    const resizing=grip.classList.contains('workbench-resize-grip');
+    const startPointer={x:e.clientX,y:e.clientY};
+    const rect=appRect();
+    let latest={...start};
+    let lastMove={x:e.clientX,y:e.clientY,t:performance.now()};
+    let velocity={x:0,y:0};
+    let raf=0;
+    const before=snapshotWorkbenchState();
+    panel.classList.add('is-dragging');
+    app?.classList.add('workbench-dragging');
+    panel.setPointerCapture?.(e.pointerId);
+    const move=ev=>{
+      if(!rect)return;
+      const now=performance.now();
+      const dt=Math.max(8,now-lastMove.t);
+      velocity={x:(ev.clientX-lastMove.x)/dt,y:(ev.clientY-lastMove.y)/dt};
+      lastMove={x:ev.clientX,y:ev.clientY,t:now};
+      const next={...start};
+      const canvas=isCanvasLayout();
+      const zoom=canvas?clampCanvasZoom(canvasView.zoom):1;
+      const dx=canvas?(ev.clientX-startPointer.x)/zoom:(ev.clientX-startPointer.x)/Math.max(1,rect.width)*100;
+      const dy=canvas?(ev.clientY-startPointer.y)/zoom:(ev.clientY-startPointer.y)/Math.max(1,rect.height)*100;
+      if(resizing){
+        next.w=start.w+dx;
+        next.h=start.h+dy;
+        latest=canvas?clampCanvasPanel(next):clampFloatingPanel(next);
+        workbenchPanelLayout[key]=latest;
+        if(!raf)raf=requestAnimationFrame(()=>{raf=0;applyWorkbenchPanelLayout();updateWorkbenchPreviewScale();});
+      }else{
+        latest=canvas?clampCanvasPanel({...next,x:start.x+dx,y:start.y+dy}):clampFloatingPanel({...next,x:start.x+dx,y:start.y+dy});
+        if(canvas){
+          workbenchPanelLayout[key]=latest;
+          if(!raf)raf=requestAnimationFrame(()=>{raf=0;applyWorkbenchPanelLayout();});
+        }else{
+          panel.style.transform=`translate3d(${ev.clientX-startPointer.x}px,${ev.clientY-startPointer.y}px,0) scale(.985)`;
+        }
+      }
+    };
+    const finishPanelChange=()=>{
+      if(JSON.stringify(before)!==JSON.stringify(snapshotWorkbenchState())){
+        workbenchUndoStack.push(before);
+        if(workbenchUndoStack.length>40)workbenchUndoStack.shift();
+        workbenchRedoStack=[];
+      }
+      saveWorkbenchLayout();
+      updateHistoryButtons();
+    };
+    const glidePanel=(startPanel,pxVelocity)=>{
+      const speed=Math.hypot(pxVelocity.x,pxVelocity.y);
+      if(!rect||speed<.08){
+        workbenchPanelLayout[key]=startPanel;
+        applyWorkbenchPanelLayout();
+        updateWorkbenchPreviewScale();
+        panel.classList.remove('is-dragging');
+        finishPanelChange();
+        return;
+      }
+      let current={...startPanel};
+      const canvas=isCanvasLayout();
+      const zoom=canvas?clampCanvasZoom(canvasView.zoom):1;
+      const glideMultiplier=canvas?1.35:2;
+      let vx=canvas?pxVelocity.x*glideMultiplier/zoom:pxVelocity.x*glideMultiplier/Math.max(1,rect.width)*100;
+      let vy=canvas?pxVelocity.y*glideMultiplier/zoom:pxVelocity.y*glideMultiplier/Math.max(1,rect.height)*100;
+      let last=performance.now();
+      const step=now=>{
+        const dt=Math.min(32,now-last);
+        last=now;
+        current=canvas?clampCanvasPanel({...current,x:current.x+vx*dt,y:current.y+vy*dt}):clampFloatingPanel({...current,x:current.x+vx*dt,y:current.y+vy*dt});
+        if(!canvas&&(current.x<=0||current.x+current.w>=100))vx=0;
+        if(!canvas&&(current.y<=0||current.y+current.h>=100))vy=0;
+        vx*=canvas ? .82 : .91;
+        vy*=canvas ? .82 : .91;
+        workbenchPanelLayout[key]=current;
+        applyWorkbenchPanelLayout();
+        updateWorkbenchPreviewScale();
+        if(Math.hypot(vx,vy)>(canvas ? .025 : .008))requestAnimationFrame(step);
+        else{
+          panel.classList.remove('is-dragging');
+          workbenchPanelLayout[key]=canvas?clampCanvasPanel(current):clampFloatingPanel(current);
+          applyWorkbenchPanelLayout();
+          updateWorkbenchPreviewScale();
+          finishPanelChange();
+        }
+      };
+      requestAnimationFrame(step);
+    };
+    const up=()=>{
+      document.removeEventListener('pointermove',move);
+      if(raf)cancelAnimationFrame(raf);
+      panel.style.transform='';
+      panel.releasePointerCapture?.(e.pointerId);
+      app?.classList.remove('workbench-dragging');
+      const snapped=snapPanel(key,latest);
+      workbenchPanelLayout[key]=snapped.panel;
+      applyWorkbenchPanelLayout();
+      updateWorkbenchPreviewScale();
+      if(!resizing&&!snapped.snapped){
+        glidePanel(snapped.panel,velocity);
+        return;
+      }
+      panel.classList.remove('is-dragging');
+      finishPanelChange();
+    };
+    document.addEventListener('pointermove',move);
+    document.addEventListener('pointerup',up,{once:true});
+  });
+  updateWorkbenchState();
+}
+moveLayoutControls();
 setupSettingsMenu();
+setupUiSoundEvents();
+setupUiMotionEvents();
 setupHelpInteractions();
 setupSidebarResize();
+setupFocusedPanelControls();
+setupWorkbenchControls();
+refreshGlobalChromeIcons();
+applyPersonalization(loadPersonalization());
+applyGuiStudioTooltipMetadata();
+renderGuiStudioResourcePackShell();
 
 onClick('#btnNewQuest',()=>{let b='new_quest',n=`${b}.json`,i=1;while(quests[n])n=`${b}_${i++}.json`;quests[n]=defQ();touchFile('quest',n);recordActivity('Created','quest',n);selectFile(n,'quest');});
-onClick('#btnNewChapter',()=>{let b='new_chapter',n=`${b}.json`,i=1;while(chapters[n])n=`${b}_${i++}.json`;chapters[n]=defC();touchFile('chapter',n);recordActivity('Created','chapter',n);selectFile(n,'chapter');});
+onClick('#btnNewChapter',()=>{let b='new_chapter',n=`${b}.json`,i=1;while(chapters[n])n=`${b}_${i++}.json`;const isFirst=!Object.keys(chapters).length;chapters[n]=defC();if(isFirst)chapters[n].default_chapter=true;touchFile('chapter',n);recordActivity('Created','chapter',n);selectFile(n,'chapter');});
 onEvent('#questListSort','change',e=>setListSort(e.target.value));
+onClick('#questListSortButton',e=>{
+  e.preventDefault();
+  e.stopPropagation();
+  const menu=$('#questListSortMenu');
+  const open=!menu?.classList.contains('open');
+  closeSidebarMenus();
+  closeSettingsMenu();
+  closeSortMenu();
+  if(menu&&open){menu.classList.add('open');$('#questListSortButton')?.setAttribute('aria-expanded','true');}
+});
+$$('#questListSortMenu [data-sort-value]').forEach(btn=>btn.addEventListener('click',e=>{
+  e.preventDefault();
+  e.stopPropagation();
+  setListSort(btn.dataset.sortValue);
+  closeSortMenu();
+}));
 onEvent('#questSearch','input',e=>setQuestSearch(e.target.value));
 onClick('#btnPickImport',()=>$('#fileImport')?.click());
 const fileImportEl=$('#fileImport');
 if(fileImportEl)fileImportEl.onchange=async e=>{
-  const files=e.target.files;if(!files?.length)return;const arr=Array.from(files);let first=null,ok=0;
-  for(const file of arr){
-    try{
-      if(file.name.toLowerCase().endsWith('.zip')){ok+=await importZipFile(file);if(!first&&currentFile)first={file:currentFile,kind:mode};continue;}
-      const text=await file.text();const data=JSON.parse(text);const res=classifyImportedJson(file.name,data);ok++;if(!first)first=res;
-    }catch(err){showMsg(`${file.name}: ${err.message||String(err)}`,false);}
-  }
-  renderFileList();if(first)selectFile(first.file,first.kind);else renderMain();renderValidation();recordActivity('Imported','project','',`${ok} files`);scheduleAutosave();if(ok)showMsg(`Imported ${ok} file${ok===1?'':'s'}.`,true);e.target.value='';
+  await handleImportFiles(e.target.files,'Imported');
+  e.target.value='';
 };
+setupDropImport();
 onClick('#btnTemplates',openTemplateModal);
 onClick('#templateCloseBtn',closeTemplateModal);
 onClick('#templateCreatePack',createStarterPack);
@@ -1943,6 +17091,1296 @@ onClick('#btnChangelog',openChangelogModal);
 onClick('#changelogCloseBtn',closeChangelogModal);
 onEvent('#changelogVersion','change',e=>renderChangelog(e.target.value));
 onClick('#changelogModal',e=>{if(e.target===$('#changelogModal'))closeChangelogModal();});
+$('#guiStudioBackBtn')?.addEventListener('click',closeGuiStudio);
+onClick('#guiStudioFrameBackBtn',closeGuiStudio);
+onClick('#guiStudioModal',e=>{if(e.target===$('#guiStudioModal'))closeGuiStudio();});
+onClick('#guiStudioOthersBtn',openGuiStudioOthersMenu);
+onClick('#guiStudioOthersMenu',e=>{if(e.target===$('#guiStudioOthersMenu'))closeGuiStudioOthersMenu();});
+onClick('#guiStudioOthersCloseBtn',closeGuiStudioOthersMenu);
+onEvent('#guiStudioOthersSearch','input',renderGuiStudioOtherPieceMenu);
+$$('[data-gui-mode]').forEach(btn=>btn.addEventListener('click',()=>withGuiStudioHistory(()=>setGuiStudioMode(btn.dataset.guiMode))));
+$$('[data-gui-piece]').forEach(btn=>btn.addEventListener('click',()=>withGuiStudioHistory(()=>setGuiStudioPiece(btn.dataset.guiPiece))));
+$$('.gui-studio-sketch-tools>button').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    closeGuiStudioToolOptions();
+    guiStudioActiveTool=btn.getAttribute('aria-label')||btn.title||'Brush';
+    if(guiStudioActiveTool==='Clone Tool')guiStudioActiveTool='Move Tool';
+    $$('.gui-studio-sketch-tools>button').forEach(tool=>tool.classList.toggle('active',tool===btn));
+    hideGuiStudioBrushCursor();
+    renderGuiStudioOptionsBar();
+  });
+  btn.addEventListener('contextmenu',e=>openGuiStudioToolOptions(btn,e));
+});
+$('#guiStudioPixelCanvas')?.addEventListener('dragstart',e=>e.preventDefault());
+$('.gui-studio-sketch-tools')?.addEventListener('dragstart',e=>e.preventDefault());
+onClick('#guiStudioToolOptionsMenu',e=>{
+  const option=e.target.closest('[data-tool-option]');
+  if(!option)return;
+  closeGuiStudioToolOptions();
+  guiStudioActiveTool=option.dataset.toolOption||guiStudioActiveTool;
+  renderGuiStudioOptionsBar();
+  showMsg(`${guiStudioActiveTool} selected for the GUI Studio canvas.`,true);
+});
+onClick('#guiStudioColorSwapBtn',()=>withGuiStudioHistory(()=>{
+  const next=guiStudioDraft.primary;
+  guiStudioDraft.primary=guiStudioDraft.secondary;
+  guiStudioDraft.secondary=next;
+  renderGuiStudioPalette();
+}));
+['#guiStudioPrimaryColor','#guiStudioSecondaryColor'].forEach(sel=>{
+  const el=$(sel);if(!el)return;
+  el.addEventListener('focus',captureGuiStudioFieldBefore);
+  el.addEventListener('pointerdown',captureGuiStudioFieldBefore);
+  el.addEventListener('input',()=>{
+    guiStudioDraft.primary=normalizeHexColor($('#guiStudioPrimaryColor')?.value,guiStudioDraft.primary);
+    guiStudioDraft.secondary=normalizeHexColor($('#guiStudioSecondaryColor')?.value,guiStudioDraft.secondary);
+    guiStudioDraft.palettePick=null;
+    guiStudioDraft.selectedPaletteIndex=-1;
+    guiStudioDraft.secondaryPriority=sel==='#guiStudioSecondaryColor';
+    renderGuiStudioPalette();
+  });
+  el.addEventListener('change',recordGuiStudioFieldAfter);
+});
+$$('.gui-studio-tool-colors label').forEach(label=>{
+  const input=label.querySelector('input[type="color"]');
+  const which=input?.id==='guiStudioSecondaryColor'?'secondary':'primary';
+  label.addEventListener('pointerdown',e=>{
+    if(e.button===0){
+      e.preventDefault();
+      e.stopPropagation();
+      setGuiStudioActiveSwapperColor(which);
+    }else if(e.button===2){
+      e.preventDefault();
+      e.stopPropagation();
+      openGuiStudioSwapperPicker(which);
+    }
+  },true);
+  label.addEventListener('click',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+  },true);
+  label.addEventListener('contextmenu',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+  });
+});
+$('#guiStudioColorPriorityBtn')?.addEventListener('click',()=>withGuiStudioHistory(()=>{
+  guiStudioDraft.secondaryPriority=!guiStudioDraft.secondaryPriority;
+  renderGuiStudioPalette();
+  showMsg(`${guiStudioDraft.secondaryPriority?'Secondary':'Primary'} color now has brush priority. Right-click uses the other color.`,true);
+}));
+onClick('#guiStudioToolPaletteBtn',()=>{
+  const pop=$('#guiStudioPalettePopover');
+  if(!pop)return;
+  guiStudioPaletteEditTarget=null;
+  renderGuiStudioPalette();
+  pop.classList.toggle('open');
+});
+onClick('#guiStudioPaletteDoneBtn',e=>{
+  e?.stopPropagation?.();
+  guiStudioPaletteEditTarget=null;
+  $('#guiStudioPalettePopover')?.classList.remove('open');
+  renderGuiStudioPalette();
+});
+onClick('#guiStudioPaletteAddPaletteBtn',e=>withGuiStudioHistory(()=>{
+  e?.stopPropagation?.();
+  const palettes=ensureGuiStudioPaletteLibrary();
+  if(palettes.length>=GUI_STUDIO_PALETTE_MAX_ROWS)return;
+  palettes.push(createGuiStudioPaletteRow(palettes.length,[null]));
+  guiStudioPaletteEditTarget=null;
+  commitGuiStudioPaletteLibrary(true);
+}));
+function applyGuiStudioPalettePickerColor(){
+  const target=guiStudioPaletteEditTarget;
+  if(!target)return false;
+  const palettes=ensureGuiStudioPaletteLibrary();
+  const row=palettes[Number(target.paletteIndex)];
+  if(!row)return false;
+  const index=Number(target.colorIndex);
+  if(!Number.isInteger(index)||index<0||index>=row.colors.length)return false;
+  const color=normalizeHexColor($('#guiStudioPaletteColorInput')?.value,guiStudioDraft.primary||'#ffffff');
+  row.colors[index]=color;
+  guiStudioDraft.palettePick=color;
+  guiStudioDraft.selectedPaletteIndex=guiStudioPaletteColors(palettes).indexOf(color);
+  commitGuiStudioPaletteLibrary(true);
+  return true;
+}
+function openGuiStudioPalettePicker(paletteIndex,colorIndex){
+  const palettes=ensureGuiStudioPaletteLibrary();
+  const row=palettes[Number(paletteIndex)];
+  if(!row)return;
+  const index=Number(colorIndex);
+  if(!Number.isInteger(index)||index<0||index>=row.colors.length)return;
+  guiStudioPaletteEditTarget={paletteIndex:Number(paletteIndex),colorIndex:index};
+  const picker=$('#guiStudioPaletteColorInput');
+  if(!picker)return;
+  picker.value=normalizeHexColor(row.colors[index]||guiStudioDraft.primary||'#ffffff','#ffffff');
+  try{
+    if(typeof picker.showPicker==='function')picker.showPicker();
+    else picker.click();
+  }catch(_err){
+    picker.click();
+  }
+}
+$('#guiStudioPaletteColorInput')?.addEventListener('input',()=>applyGuiStudioPalettePickerColor());
+$('#guiStudioPaletteColorInput')?.addEventListener('change',()=>{
+  if(applyGuiStudioPalettePickerColor())guiStudioPaletteEditTarget=null;
+});
+onClick('#guiStudioPalettePopover',e=>{
+  e.stopPropagation();
+  const addColor=e.target.closest('[data-palette-add-color]');
+  if(addColor){
+    let nextTarget=null;
+    withGuiStudioHistory(()=>{
+      const index=Number(addColor.dataset.paletteAddColor);
+      const palettes=ensureGuiStudioPaletteLibrary();
+      const row=palettes[index];
+      if(row&&row.colors.length<GUI_STUDIO_PALETTE_MAX_COLORS){
+        row.colors.push(null);
+        nextTarget={paletteIndex:index,colorIndex:row.colors.length-1};
+        commitGuiStudioPaletteLibrary(true);
+      }
+    });
+    if(nextTarget)openGuiStudioPalettePicker(nextTarget.paletteIndex,nextTarget.colorIndex);
+    return;
+  }
+  const colorBtn=e.target.closest('[data-palette-color]');
+  if(colorBtn){
+    const [paletteIndex,colorIndex]=String(colorBtn.dataset.paletteColor).split(':').map(Number);
+    const row=ensureGuiStudioPaletteLibrary()[paletteIndex];
+    const color=normalizeHexColor(row?.colors?.[colorIndex],null);
+    if(color){
+      guiStudioDraft.palettePick=color;
+      guiStudioDraft.selectedPaletteIndex=guiStudioPaletteColors().indexOf(color);
+      renderGuiStudioPalette();
+      showMsg('Palette color selected for painting. Primary and secondary swatches are unchanged.',true);
+    }else{
+      openGuiStudioPalettePicker(paletteIndex,colorIndex);
+    }
+    return;
+  }
+  const del=e.target.closest('[data-palette-delete]');
+  if(del){
+    withGuiStudioHistory(()=>{
+      const index=Number(del.dataset.paletteDelete);
+      const palettes=ensureGuiStudioPaletteLibrary();
+      if(palettes.length<=1)palettes[0]=createGuiStudioPaletteRow(0,[null]);
+      else palettes.splice(index,1);
+      guiStudioPaletteEditTarget=null;
+      commitGuiStudioPaletteLibrary(true);
+    });
+    return;
+  }
+});
+$('#guiStudioPalettePopover')?.addEventListener('contextmenu',e=>{
+  const colorBtn=e.target.closest('[data-palette-color]');
+  if(!colorBtn)return;
+  e.preventDefault();
+  e.stopPropagation();
+  const [paletteIndex,colorIndex]=String(colorBtn.dataset.paletteColor).split(':').map(Number);
+  openGuiStudioPalettePicker(paletteIndex,colorIndex);
+});
+$('#guiStudioPalettePopover')?.addEventListener('input',e=>{
+  const name=e.target.closest('[data-palette-name]');
+  if(!name)return;
+  const index=Number(name.dataset.paletteName);
+  const palettes=ensureGuiStudioPaletteLibrary();
+  if(!palettes[index])return;
+  palettes[index].name=String(name.value||`Palette ${index+1}`).slice(0,40);
+  saveGuiStudioPaletteLibrary();
+});
+onClick('.gui-studio-sketch-import',()=>$('#guiStudioImageInput')?.click());
+$('#guiStudioImageInput')?.addEventListener('change',async e=>{
+  const files=[...(e.target.files||[])].slice(0,GUI_STUDIO_IMPORT_BATCH_LIMIT);
+  for(const file of files)await importGuiStudioImageFile(file);
+  e.target.value='';
+});
+$('#guiStudioPixelWorkspace')?.addEventListener('dragover',e=>{
+  const types=[...(e.dataTransfer?.types||[])];
+  if(types.includes('application/x-gui-studio-import')||[...(e.dataTransfer?.items||[])].some(item=>GUI_STUDIO_SUPPORTED_IMPORT_TYPES.has(item.type))){
+    e.preventDefault();
+    e.dataTransfer.dropEffect='copy';
+  }
+});
+$('#guiStudioPixelWorkspace')?.addEventListener('drop',async e=>{
+  const importId=e.dataTransfer?.getData('application/x-gui-studio-import');
+  if(importId){
+    e.preventDefault();
+    const item=importId.startsWith('default:')
+      ? {name:`${(GUI_STUDIO_PIECES[selectedGuiStudioPiece()]||GUI_STUDIO_PIECES['Quest Main']).texture} default`,dataUrl:createGuiStudioPiecePreview(selectedGuiStudioPiece())}
+      : (guiStudioDraft.imports||[]).find(imported=>imported.id===importId);
+    if(!item?.dataUrl)return;
+    const before=getGuiStudioState();
+    await placeGuiStudioImageDataUrlAsLayer(item.dataUrl,item.name,guiStudioCanvasPoint(e));
+    renderGuiStudioDraft();
+    recordGuiStudioChange(before);
+    showMsg(`${item.name} placed as a new image layer.`,true);
+    return;
+  }
+  const files=[...(e.dataTransfer?.files||[])].filter(file=>GUI_STUDIO_SUPPORTED_IMPORT_TYPES.has(file.type)).slice(0,GUI_STUDIO_IMPORT_BATCH_LIMIT);
+  if(!files.length)return;
+  e.preventDefault();
+  for(const file of files)await importGuiStudioImageFile(file);
+});
+$('.gui-studio-sketch-imports')?.addEventListener('dragstart',e=>{
+  const fig=e.target.closest('[data-import-id]');
+  if(!fig||!e.target.closest('[data-import-place]'))return;
+  e.dataTransfer?.setData('application/x-gui-studio-import',fig.dataset.importId);
+  e.dataTransfer.effectAllowed='copy';
+});
+onClick('.gui-studio-sketch-imports',async e=>{
+  const del=e.target.closest('[data-import-delete]');
+  if(del){
+    withGuiStudioHistory(()=>{
+      guiStudioDraft.imports=(guiStudioDraft.imports||[]).filter(item=>item.id!==del.dataset.importDelete);
+      renderGuiStudioImports();
+    });
+    return;
+  }
+  const fig=e.target.closest('[data-import-id]');
+  if(!fig||!e.target.closest('[data-import-place]'))return;
+  const item=fig.dataset.importId.startsWith('default:')
+    ? {name:`${(GUI_STUDIO_PIECES[selectedGuiStudioPiece()]||GUI_STUDIO_PIECES['Quest Main']).texture} default`,dataUrl:createGuiStudioPiecePreview(selectedGuiStudioPiece())}
+    : (guiStudioDraft.imports||[]).find(imported=>imported.id===fig.dataset.importId);
+  if(!item?.dataUrl)return;
+  const before=getGuiStudioState();
+  await placeGuiStudioImageDataUrlAsLayer(item.dataUrl,item.name,null);
+  renderGuiStudioDraft();
+  recordGuiStudioChange(before);
+  showMsg(`${item.name} placed centered in the active zone.`,true);
+});
+$('#guiStudioPixelWorkspace')?.addEventListener('contextmenu',e=>e.preventDefault());
+$('#guiStudioPixelWorkspace')?.addEventListener('wheel',e=>{
+  if(!guiStudioModalOpen())return;
+  e.preventDefault();
+  const step=e.deltaY>0 ? .9 : 1.1;
+  setGuiStudioFrameZoom(guiStudioFrameZoom*step);
+},{passive:false});
+$('#guiStudioPixelWorkspace')?.addEventListener('pointerdown',e=>{
+  if(e.target?.id==='guiStudioPixelCanvas')return;
+  const tool=guiStudioCurrentCanvasTool();
+  if(tool!=='Hand Tool'&&e.button!==1)return;
+  const before=getGuiStudioState();
+  guiStudioPointer={before,start:null,shapeEnd:null,points:[],hand:true,moveSelection:false,lastPoint:null,lastX:e.clientX,lastY:e.clientY};
+  e.currentTarget.setPointerCapture?.(e.pointerId);
+  e.currentTarget.dataset.panning='true';
+});
+$('#guiStudioPixelWorkspace')?.addEventListener('pointermove',e=>{
+  if(!guiStudioPointer?.hand)return;
+  guiStudioDraft.canvasPan=guiStudioDraft.canvasPan||{x:0,y:0};
+  guiStudioDraft.canvasPan.x+=(e.clientX-guiStudioPointer.lastX);
+  guiStudioDraft.canvasPan.y+=(e.clientY-guiStudioPointer.lastY);
+  renderGuiStudioCanvasPan();
+  renderGuiStudioAffectedZone();
+  guiStudioPointer.lastX=e.clientX;
+  guiStudioPointer.lastY=e.clientY;
+});
+$('#guiStudioPixelWorkspace')?.addEventListener('pointerup',()=>{
+  if(!guiStudioPointer?.hand)return;
+  const before=guiStudioPointer.before;
+  guiStudioMaybeCompactLayerStorage();
+  guiStudioPointer=null;
+  $('#guiStudioPixelWorkspace')?.removeAttribute('data-panning');
+  recordGuiStudioChange(before);
+  renderGuiStudioPieceThumbs({forceRefresh:true});
+  renderGuiStudioImports({forceRefresh:true});
+});
+$('#guiStudioPixelWorkspace')?.addEventListener('pointercancel',()=>{
+  if(guiStudioPointer?.hand)recordGuiStudioChange(guiStudioPointer.before);
+  guiStudioPointer=null;
+  $('#guiStudioPixelWorkspace')?.removeAttribute('data-panning');
+});
+$('.gui-studio-palette-swatches')?.addEventListener('click',e=>{
+  const swatch=e.target.closest('[data-palette-slot]');
+  if(!swatch)return;
+  const i=Number(swatch.dataset.paletteSlot);
+  const color=normalizeHexColor(guiStudioDraft.palette[i],null);
+  if(color){
+    guiStudioDraft.selectedPaletteIndex=i;
+    guiStudioDraft.palettePick=color;
+  }
+  renderGuiStudioPalette();
+});
+$('.gui-studio-palette-swatches')?.addEventListener('contextmenu',e=>e.preventDefault());
+onClick('#guiStudioOptionsBar',e=>{
+  const command=e.target.closest('[data-tool-command]')?.dataset.toolCommand;
+  if(command){
+    withGuiStudioHistory(()=>{
+      if(command==='clear-selection')guiStudioDraft.selection=null;
+      if(command==='center-pan')guiStudioDraft.canvasPan={x:0,y:0};
+      if(command==='fit-zoom')setGuiStudioFrameZoom(1);
+      renderGuiStudioDraft();
+    });
+    return;
+  }
+});
+$('#guiStudioOptionsBar')?.addEventListener('focusin',e=>{
+  if(e.target?.dataset?.toolOption&&!guiStudioToolOptionBefore)guiStudioToolOptionBefore=getGuiStudioState();
+});
+$('#guiStudioOptionsBar')?.addEventListener('pointerdown',e=>{
+  if(e.target?.dataset?.toolOption&&!guiStudioToolOptionBefore)guiStudioToolOptionBefore=getGuiStudioState();
+});
+$('#guiStudioOptionsBar')?.addEventListener('input',e=>{
+  const key=e.target?.dataset?.toolOption;
+  if(!key)return;
+  const opts=ensureGuiStudioToolOptions();
+  const value=readGuiStudioToolOptionInput(e.target,key);
+  if(value===undefined)return;
+  if((e.target.type==='number'||e.target.type==='range')&&String(e.target.value)!==String(value))e.target.value=String(value);
+  if(key==='zoneWidth'||key==='zoneHeight'){
+    const data=guiStudioPieceData();
+    data.zone=sanitizeGuiStudioPieceZone(data.zone,GUI_STUDIO_PIECES[selectedGuiStudioPiece()]||GUI_STUDIO_PIECES['Quest Main']);
+    e.target.value=String(key==='zoneWidth'?data.zone.w:data.zone.h);
+  }else{
+    opts[key]=value;
+    saveGuiStudioToolOptions();
+  }
+  if(['zoneWidth','zoneHeight','checkerSize'].includes(key)){
+    renderGuiStudioActiveZone();
+    renderGuiStudioPixelCanvas();
+  }
+});
+$('#guiStudioOptionsBar')?.addEventListener('change',e=>{
+  const key=e.target?.dataset?.toolOption;
+  if(!key)return;
+  const before=guiStudioToolOptionBefore||getGuiStudioState();
+  const value=readGuiStudioToolOptionInput(e.target,key);
+  if(value===undefined){
+    renderGuiStudioOptionsBar();
+    guiStudioToolOptionBefore=null;
+    return;
+  }
+  if((e.target.type==='number'||e.target.type==='range')&&String(e.target.value)!==String(value))e.target.value=String(value);
+  if(key==='zoneWidth'||key==='zoneHeight'){
+    const data=guiStudioPieceData();
+    data.zone=sanitizeGuiStudioPieceZone(data.zone,GUI_STUDIO_PIECES[selectedGuiStudioPiece()]||GUI_STUDIO_PIECES['Quest Main']);
+    e.target.value=String(key==='zoneWidth'?data.zone.w:data.zone.h);
+  }else{
+    ensureGuiStudioToolOptions()[key]=value;
+    saveGuiStudioToolOptions();
+  }
+  if(['zoneWidth','zoneHeight','checkerSize'].includes(key))renderGuiStudioDraft();
+  if(!['zoneWidth','zoneHeight'].includes(key))recordGuiStudioChange(before);
+  guiStudioToolOptionBefore=null;
+});
+onClick('#guiStudioLayerList',e=>{
+  const eye=e.target.closest('[data-layer-eye]');
+  if(eye){
+    e.preventDefault();
+    e.stopPropagation();
+    applyGuiStudioLayerAction('toggle-visibility',eye.dataset.layerEye);
+    return;
+  }
+  const row=e.target.closest('[data-layer-id]');
+  if(row)setGuiStudioLayerSelection(row.dataset.layerId,{multi:e.ctrlKey||e.metaKey});
+});
+$('#guiStudioLayerList')?.addEventListener('keydown',e=>{
+  const row=e.target.closest('[data-layer-id]');
+  if(!row||!['Enter',' '].includes(e.key))return;
+  e.preventDefault();
+  setGuiStudioLayerSelection(row.dataset.layerId,{multi:e.ctrlKey||e.metaKey});
+});
+$('#guiStudioLayerList')?.addEventListener('dblclick',e=>{
+  const name=e.target.closest('[data-layer-name]');
+  if(!name)return;
+  e.preventDefault();
+  e.stopPropagation();
+  beginGuiStudioLayerRename(name.dataset.layerName);
+});
+$('#guiStudioLayerList')?.addEventListener('dragstart',e=>{
+  const row=e.target.closest('[data-layer-id]');
+  if(!row)return;
+  const layer=guiStudioLayerById(row.dataset.layerId);
+  if(layer?.locked||row.dataset.locked==='true'||row.getAttribute('draggable')==='false'){
+    e.preventDefault();
+    e.stopPropagation();
+    row.classList.remove('is-dragging','is-drop-target');
+    return;
+  }
+  e.dataTransfer?.setData('application/x-gui-studio-layer',row.dataset.layerId);
+  e.dataTransfer.effectAllowed='move';
+  row.classList.add('is-dragging');
+});
+$('#guiStudioLayerList')?.addEventListener('dragend',e=>{
+  e.target.closest?.('[data-layer-id]')?.classList.remove('is-dragging');
+  $$('#guiStudioLayerList [data-layer-id]').forEach(row=>row.classList.remove('is-drop-target'));
+});
+$('#guiStudioLayerList')?.addEventListener('dragover',e=>{
+  const row=e.target.closest('[data-layer-id]');
+  const types=[...(e.dataTransfer?.types||[])];
+  if(!row||!types.includes('application/x-gui-studio-layer'))return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect='move';
+  $$('#guiStudioLayerList [data-layer-id]').forEach(item=>item.classList.toggle('is-drop-target',item===row));
+});
+$('#guiStudioLayerList')?.addEventListener('drop',e=>{
+  const row=e.target.closest('[data-layer-id]');
+  const dragId=e.dataTransfer?.getData('application/x-gui-studio-layer');
+  if(!row||!dragId)return;
+  if(guiStudioLayerById(dragId)?.locked){
+    e.preventDefault();
+    return;
+  }
+  e.preventDefault();
+  $$('#guiStudioLayerList [data-layer-id]').forEach(item=>item.classList.remove('is-drop-target','is-dragging'));
+  withGuiStudioHistory(()=>{
+    reorderGuiStudioLayer(dragId,row.dataset.layerId);
+    renderGuiStudioDraft();
+  });
+});
+let guiStudioLayerPointerDrag=null;
+function clearGuiStudioLayerPointerReorderState(){
+  $$('#guiStudioLayerList [data-layer-id]').forEach(row=>row.classList.remove('is-dragging','is-drop-target'));
+}
+$('#guiStudioLayerList')?.addEventListener('pointerdown',e=>{
+  if(e.button!==0)return;
+  if(e.target.closest('button,input,textarea,select,a,[contenteditable="true"]'))return;
+  const row=e.target.closest('[data-layer-id]');
+  if(!row)return;
+  const layer=guiStudioLayerById(row.dataset.layerId);
+  if(layer?.locked||row.dataset.locked==='true'||row.getAttribute('draggable')==='false')return;
+  guiStudioLayerPointerDrag={
+    id:row.dataset.layerId,
+    startX:e.clientX,
+    startY:e.clientY,
+    targetId:row.dataset.layerId,
+    moved:false
+  };
+  row.setPointerCapture?.(e.pointerId);
+});
+document.addEventListener('pointermove',e=>{
+  const drag=guiStudioLayerPointerDrag;
+  if(!drag)return;
+  const dx=Math.abs(e.clientX-drag.startX);
+  const dy=Math.abs(e.clientY-drag.startY);
+  if(!drag.moved&&dx<5&&dy<5)return;
+  e.preventDefault();
+  drag.moved=true;
+  const row=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('#guiStudioLayerList [data-layer-id]');
+  drag.targetId=row?.dataset.layerId||drag.targetId;
+  clearGuiStudioLayerPointerReorderState();
+  $$('#guiStudioLayerList [data-layer-id]').find(item=>item.dataset.layerId===drag.id)?.classList.add('is-dragging');
+  if(row)row.classList.add('is-drop-target');
+});
+document.addEventListener('pointerup',e=>{
+  const drag=guiStudioLayerPointerDrag;
+  if(!drag)return;
+  guiStudioLayerPointerDrag=null;
+  clearGuiStudioLayerPointerReorderState();
+  if(!drag.moved||!drag.targetId||drag.targetId===drag.id)return;
+  e.preventDefault();
+  withGuiStudioHistory(()=>{
+    reorderGuiStudioLayer(drag.id,drag.targetId);
+    renderGuiStudioDraft();
+  });
+});
+$('#guiStudioLayerList')?.addEventListener('contextmenu',e=>{
+  const row=e.target.closest('[data-layer-id]');
+  if(row){
+    if(!guiStudioMultiSelectedLayerIds.has(row.dataset.layerId)){
+      setGuiStudioLayerSelection(row.dataset.layerId,{multi:false});
+    }
+    openGuiStudioLayerMenu(row.dataset.layerId,e);
+  }
+});
+onClick('#guiStudioLayerMenu',e=>{
+  const item=e.target.closest('[data-layer-menu-action]');
+  if(!item||item.classList.contains('disabled'))return;
+  applyGuiStudioLayerAction(item.dataset.layerMenuAction);
+});
+$('#guiStudioLayerMenu')?.addEventListener('input',e=>{
+  const layer=guiStudioLayerById(guiStudioLayerMenuLayerId);
+  if(!layer)return;
+  if(!guiStudioLayerFieldBefore)guiStudioLayerFieldBefore=getGuiStudioState();
+  if(e.target.matches('[data-layer-menu-blend]'))layer.blend=e.target.value;
+  if(e.target.matches('[data-layer-menu-opacity]'))layer.opacity=clampGuiNumber(Number(e.target.value)/100,0,1,1);
+  invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+  renderGuiStudioDraft();
+});
+$('#guiStudioLayerMenu')?.addEventListener('change',e=>{
+  if(e.target.matches('[data-layer-menu-blend],[data-layer-menu-opacity]')&&guiStudioLayerFieldBefore){
+    recordGuiStudioChange(guiStudioLayerFieldBefore);
+    guiStudioLayerFieldBefore=null;
+  }
+});
+['#guiStudioLayerBlendMode','#guiStudioLayerOpacity'].forEach(sel=>{
+  const el=$(sel);if(!el)return;
+  el.addEventListener('focus',()=>{if(!guiStudioLayerFieldBefore)guiStudioLayerFieldBefore=getGuiStudioState();});
+  el.addEventListener('pointerdown',()=>{if(!guiStudioLayerFieldBefore)guiStudioLayerFieldBefore=getGuiStudioState();});
+  el.addEventListener('input',()=>{
+    const layer=guiStudioActiveLayer();
+    if(!guiStudioLayerFieldBefore)guiStudioLayerFieldBefore=getGuiStudioState();
+    if(sel==='#guiStudioLayerBlendMode')layer.blend=el.value;
+    else layer.opacity=clampGuiNumber(Number(el.value)/100,0,1,1);
+    invalidateGuiStudioPiecePreview(selectedGuiStudioPiece());
+    renderGuiStudioDraft();
+  });
+  el.addEventListener('change',()=>{
+    if(guiStudioLayerFieldBefore)recordGuiStudioChange(guiStudioLayerFieldBefore);
+    guiStudioLayerFieldBefore=null;
+  });
+});
+onClick('#guiStudioLayerTools',e=>{
+  const action=e.target.closest('[data-layer-action]')?.dataset.layerAction;
+  if(!action)return;
+  if(action==='new')withGuiStudioHistory(()=>{
+    const data=guiStudioPieceData();
+    const layer=createGuiStudioLayer(`Paint Layer ${data.layers.length+1}`,{});
+    data.layers.push(layer);
+    data.activeLayerId=layer.id;
+    renderGuiStudioDraft();
+  });
+  else if(action==='reset-default')openGuiStudioResetConfirm(selectedGuiStudioPiece());
+  else if(action==='toggle-grid')withGuiStudioHistory(()=>{
+    const opts=ensureGuiStudioToolOptions();
+    opts.showGrid=!opts.showGrid;
+    saveGuiStudioToolOptions();
+    renderGuiStudioDraft();
+  });
+  else applyGuiStudioLayerAction(action,guiStudioPieceData().activeLayerId);
+});
+onClick('#guiStudioTextDoneBtn',()=>closeGuiStudioTextOverlay(true));
+$('#guiStudioTextInput')?.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();closeGuiStudioTextOverlay(true);}
+  if(e.key==='Escape'){e.preventDefault();closeGuiStudioTextOverlay(false);}
+});
+$('#guiStudioPixelCanvas')?.addEventListener('contextmenu',e=>e.preventDefault());
+$('#guiStudioPixelCanvas')?.addEventListener('pointerdown',e=>{
+  e.stopPropagation();
+  const point=guiStudioCanvasPoint(e);
+  const tool=guiStudioCurrentCanvasTool();
+  updateGuiStudioBrushCursor(e,point);
+  if(!point&&tool!=='Hand Tool'&&!(GUI_STUDIO_MOVE_TOOLS.has(tool)&&!guiStudioSelectionForPiece()))return;
+  const before=getGuiStudioState();
+  const workspace=$('#guiStudioPixelWorkspace');
+  if(tool==='Zoom Tool'&&point){
+    setGuiStudioFrameZoom(guiStudioFrameZoom+(e.button===2?-.25:.25));
+    return;
+  }
+  if(tool==='Rotate Tool'&&point){
+    rotateGuiStudioSelection();
+    renderGuiStudioDraft();
+    recordGuiStudioChange(before);
+    return;
+  }
+  if(GUI_STUDIO_MOVE_TOOLS.has(tool)&&!guiStudioSelectionForPiece()&&point){
+    const opts=ensureGuiStudioToolOptions();
+    const active=guiStudioActiveLayer();
+    const activeHit=active?.visible!==false&&!active?.locked&&!!guiStudioLayerColorAt(active,point.x,point.y);
+    const hit=opts.autoSelect?guiStudioLayerAtPoint(point):(activeHit?active:null);
+    if(hit){
+      setGuiStudioActiveLayer(hit.id);
+      const layerBounds=guiStudioLayerPixelBounds(hit);
+      guiStudioPointer={before:getGuiStudioState(),piece:selectedGuiStudioPiece(),start:point,shapeEnd:null,points:[point],hand:false,moveSelection:false,moveLayer:true,movePreviewActive:true,layerId:hit.id,layerBounds,previewDx:0,previewDy:0,previewDirty:layerBounds,lastPoint:point,lastX:e.clientX,lastY:e.clientY};
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      renderGuiStudioDraft();
+      return;
+    }
+    return;
+  }
+  if(point&&!guiStudioPointInActiveZone(point)&&tool!=='Hand Tool')return;
+  if(tool==='Polygonal Lasso'&&point){
+    const zonePoint=guiStudioClampPointToActiveZone(point);
+    if(guiStudioPointer?.polygonal){
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      const first=guiStudioPointer.points?.[0];
+      if((first&&guiStudioPointer.points.length>=3&&guiStudioPointDistance(first,zonePoint)<=8)||e.detail>=2){
+        setGuiStudioSelectionFromPointer(guiStudioPointer,first||zonePoint);
+        const beforePoly=guiStudioPointer.before;
+        guiStudioPointer=null;
+        renderGuiStudioDraft();
+        recordGuiStudioChange(beforePoly);
+      }else{
+        guiStudioAddLassoPoint(zonePoint,tool);
+        guiStudioPointer.shapeEnd=zonePoint;
+        renderGuiStudioPixelCanvas({refreshChrome:true,refreshUi:false});
+      }
+      return;
+    }
+    guiStudioPointer={before,start:zonePoint,shapeEnd:zonePoint,points:[zonePoint],polygonal:true,lastX:e.clientX,lastY:e.clientY};
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    renderGuiStudioPixelCanvas({refreshChrome:true,refreshUi:false});
+    return;
+  }
+  guiStudioPointer={before,start:point,shapeEnd:null,points:point?[point]:[],hand:tool==='Hand Tool',moveSelection:(GUI_STUDIO_MOVE_TOOLS.has(tool)&&!!guiStudioSelectionForPiece()),lastPoint:null,lastX:e.clientX,lastY:e.clientY};
+  e.currentTarget.setPointerCapture?.(e.pointerId);
+  if(guiStudioPointer.hand&&workspace){workspace.dataset.panning='true';return;}
+  if(GUI_STUDIO_SELECTION_TOOLS.has(tool)){
+    if(tool==='Magic Wand'||tool==='Color Wand'){
+      setGuiStudioSelectionFromPointer(guiStudioPointer,point);
+      renderGuiStudioDraft();
+    }
+    return;
+  }
+  applyGuiStudioCanvasTool(point,e);
+});
+$('#guiStudioPixelCanvas')?.addEventListener('pointermove',e=>{
+  e.stopPropagation();
+  updateGuiStudioBrushCursor(e);
+  if(!guiStudioPointer)return;
+  const tool=guiStudioCurrentCanvasTool();
+  const workspace=$('#guiStudioPixelWorkspace');
+  if(guiStudioPointer.hand&&workspace){
+    guiStudioDraft.canvasPan=guiStudioDraft.canvasPan||{x:0,y:0};
+    guiStudioDraft.canvasPan.x+=(e.clientX-guiStudioPointer.lastX);
+    guiStudioDraft.canvasPan.y+=(e.clientY-guiStudioPointer.lastY);
+    renderGuiStudioCanvasPan();
+    renderGuiStudioAffectedZone();
+    guiStudioPointer.lastX=e.clientX;
+    guiStudioPointer.lastY=e.clientY;
+    return;
+  }
+  const point=guiStudioCanvasPoint(e);
+  if(guiStudioPointer.moveLayer&&point){
+    const layer=guiStudioLayerById(guiStudioPointer.layerId);
+    const requestedDx=point.x-guiStudioPointer.start.x;
+    const requestedDy=point.y-guiStudioPointer.start.y;
+    const clamped=layer?clampGuiStudioLayerDelta(layer,requestedDx,requestedDy):{dx:0,dy:0};
+    const previous=guiStudioOffsetBounds(guiStudioPointer.layerBounds,guiStudioPointer.previewDx||0,guiStudioPointer.previewDy||0);
+    const next=guiStudioOffsetBounds(guiStudioPointer.layerBounds,clamped.dx,clamped.dy);
+    const rawDirty=guiStudioBoundsUnion(guiStudioPointer.layerBounds,previous,next,guiStudioPointer.previewDirty);
+    const dirty=rawDirty?{
+      x:Math.max(0,rawDirty.x-4),
+      y:Math.max(0,rawDirty.y-4),
+      w:Math.min(GUI_STUDIO_CANVAS_W,rawDirty.x+rawDirty.w+8)-Math.max(0,rawDirty.x-4),
+      h:Math.min(GUI_STUDIO_CANVAS_H,rawDirty.y+rawDirty.h+8)-Math.max(0,rawDirty.y-4)
+    }:null;
+    guiStudioPointer.previewDx=clamped.dx;
+    guiStudioPointer.previewDy=clamped.dy;
+    guiStudioPointer.previewDirty=next;
+    guiStudioPointer.lastPoint=point;
+    guiStudioFollowClientPoint(e);
+    if(dirty){
+      guiStudioCanvasDirtyBounds=null;
+      renderGuiStudioPixelCanvas({refreshChrome:false,refreshUi:false,dirtyBounds:dirty});
+    }
+    return;
+  }
+  if(!guiStudioClientInWorkspace(e))return;
+  if(guiStudioPointer.moveSelection&&point){
+    const dx=point.x-(guiStudioPointer.lastPoint?.x||guiStudioPointer.start.x);
+    const dy=point.y-(guiStudioPointer.lastPoint?.y||guiStudioPointer.start.y);
+    moveGuiStudioSelection(dx,dy);
+    guiStudioPointer.lastPoint=point;
+    guiStudioFollowClientPoint(e);
+    guiStudioCanvasDirtyBounds=null;
+    renderGuiStudioPixelCanvas({refreshChrome:true,refreshUi:false});
+    return;
+  }
+  if(GUI_STUDIO_SELECTION_TOOLS.has(tool)){
+    if(point){
+      const zonePoint=guiStudioClampPointToActiveZone(point);
+      guiStudioPointer.shapeEnd=zonePoint;
+      if(tool==='Lasso Select')guiStudioAddLassoPoint(zonePoint,tool);
+      renderGuiStudioPixelCanvas({refreshChrome:true,refreshUi:false});
+    }
+    return;
+  }
+  if(GUI_STUDIO_DRAW_TOOLS.has(tool)||GUI_STUDIO_ERASE_TOOLS.has(tool)){
+    applyGuiStudioCanvasTool(point,e);
+  }else if(GUI_STUDIO_RETOUCH_TOOLS.has(tool)){
+    applyGuiStudioCanvasTool(point,e);
+  }else if(GUI_STUDIO_SHAPE_TOOLS.has(tool)||tool==='Ruler'){
+    guiStudioPointer.shapeEnd=guiStudioClampPointToActiveZone(point);
+    renderGuiStudioPixelCanvas({refreshChrome:true,refreshUi:false});
+  }
+});
+$('#guiStudioPixelCanvas')?.addEventListener('pointerup',e=>{
+  e.stopPropagation();
+  if(!guiStudioPointer)return;
+  const tool=guiStudioCurrentCanvasTool();
+  if(GUI_STUDIO_SELECTION_TOOLS.has(tool)){
+    if(guiStudioPointer.polygonal){
+      renderGuiStudioPixelCanvas({refreshChrome:true,refreshUi:false});
+      return;
+    }
+    setGuiStudioSelectionFromPointer(guiStudioPointer,guiStudioPointer.shapeEnd||guiStudioClampPointToActiveZone(guiStudioCanvasPoint(e)));
+    renderGuiStudioDraft();
+  }else if(tool==='Ruler'){
+    const end=guiStudioPointer.shapeEnd||guiStudioClampPointToActiveZone(guiStudioCanvasPoint(e))||guiStudioPointer.start;
+    showMsg(`Ruler: ${Math.abs(end.x-guiStudioPointer.start.x)+1} x ${Math.abs(end.y-guiStudioPointer.start.y)+1} px`,true);
+  }else if(GUI_STUDIO_SHAPE_TOOLS.has(tool)){
+    const shapeLayer=addGuiStudioLayer(`${tool} Shape`,{}, {kind:'shape'});
+    drawGuiStudioShape(guiStudioPointer.start,guiStudioPointer.shapeEnd||guiStudioClampPointToActiveZone(guiStudioCanvasPoint(e)));
+    guiStudioMaybeCompactLayerStorage(selectedGuiStudioPiece(),shapeLayer);
+    guiStudioDraft.selection=null;
+    renderGuiStudioDraft();
+  }
+  if(guiStudioPointer?.moveLayer){
+    const dx=Number(guiStudioPointer.previewDx)||0;
+    const dy=Number(guiStudioPointer.previewDy)||0;
+    guiStudioPointer.movePreviewActive=false;
+    if(dx||dy)moveGuiStudioLayer(guiStudioPointer.layerId,dx,dy,{live:false});
+  }
+  if(guiStudioPointer?.moveLayer||guiStudioPointer?.moveSelection){
+    recalcGuiStudioPieceBounds();
+  }
+  const before=guiStudioPointer.before;
+  guiStudioPointer=null;
+  $('#guiStudioPixelWorkspace')?.removeAttribute('data-panning');
+  updateGuiStudioBrushCursor(e);
+  renderGuiStudioPixelCanvas({refreshChrome:true});
+  recordGuiStudioChange(before);
+  updateGuiStudioApplySummary();
+  renderGuiStudioResourcePackShell();
+  applyGuiStudioTooltipMetadata();
+  renderGuiStudioPieceThumbs({forceRefresh:true});
+  renderGuiStudioImports({forceRefresh:true});
+});
+$('#guiStudioPixelCanvas')?.addEventListener('pointercancel',()=>{
+  hideGuiStudioBrushCursor();
+  if(guiStudioPointer)recordGuiStudioChange(guiStudioPointer.before);
+  guiStudioPointer=null;
+  $('#guiStudioPixelWorkspace')?.removeAttribute('data-panning');
+  renderGuiStudioPixelCanvas({refreshChrome:true});
+});
+$('#guiStudioPixelCanvas')?.addEventListener('pointerleave',e=>{
+  if(!guiStudioPointer)hideGuiStudioBrushCursor();
+});
+function captureGuiStudioFieldBefore(e){
+  if(!e.currentTarget._guiStudioBefore)e.currentTarget._guiStudioBefore=getGuiStudioState();
+}
+function recordGuiStudioFieldAfter(e){
+  const before=e.currentTarget._guiStudioBefore;
+  e.currentTarget._guiStudioBefore=null;
+  if(before)recordGuiStudioChange(before);
+}
+['#guiStudioLabelTitle','#guiStudioLabelDetails','#guiStudioLabelBack','#guiStudioLabelReward'].forEach(sel=>{
+  const el=$(sel);if(!el)return;
+  el.addEventListener('focus',captureGuiStudioFieldBefore);
+  el.addEventListener('pointerdown',captureGuiStudioFieldBefore);
+  el.addEventListener('input',()=>{
+    guiStudioDraft.labels.title=$('#guiStudioLabelTitle')?.value||guiStudioDraft.labels.title;
+    guiStudioDraft.labels.details=$('#guiStudioLabelDetails')?.value||guiStudioDraft.labels.details;
+    guiStudioDraft.labels.back=$('#guiStudioLabelBack')?.value||guiStudioDraft.labels.back;
+    guiStudioDraft.labels.reward=$('#guiStudioLabelReward')?.value||guiStudioDraft.labels.reward;
+    renderGuiStudioLayout();
+  });
+  el.addEventListener('change',recordGuiStudioFieldAfter);
+});
+$$('[data-gui-studio-color]').forEach(el=>{
+  el.addEventListener('focus',captureGuiStudioFieldBefore);
+  el.addEventListener('pointerdown',captureGuiStudioFieldBefore);
+  el.addEventListener('input',()=>{
+    const key=guiStudioColorKeyFromInput(el);
+    if(!key)return;
+    guiStudioDraft.colors[key]=normalizeHexColor(el.value,GUI_STUDIO_COLOR_DEFAULTS[key]);
+    if(key==='hover')guiStudioDraft.primary=guiStudioDraft.colors.hover;
+    syncGuiStudioColorControlsFromDraft();
+    renderGuiStudioDraft();
+  });
+  el.addEventListener('change',recordGuiStudioFieldAfter);
+});
+$$('[data-gui-color-reset]').forEach(btn=>btn.addEventListener('click',()=>withGuiStudioHistory(()=>{
+  const key=String(btn.dataset.guiColorReset||'');
+  if(!Object.prototype.hasOwnProperty.call(GUI_STUDIO_COLOR_DEFAULTS,key))return;
+  guiStudioDraft.colors[key]=GUI_STUDIO_COLOR_DEFAULTS[key];
+  if(key==='hover')guiStudioDraft.primary=guiStudioDraft.colors.hover;
+  syncGuiStudioColorControlsFromDraft();
+  renderGuiStudioDraft();
+})));
+['#guiStudioLayoutMainX','#guiStudioLayoutMainY','#guiStudioLayoutMainW','#guiStudioLayoutMainH'].forEach(sel=>{
+  const el=$(sel);if(!el)return;
+  const begin=e=>{el.dataset.layoutTransformEditing='true';captureGuiStudioFieldBefore(e);};
+  const commit=()=>{
+    updateGuiStudioSelectedLayoutElementFromControls();
+    delete el.dataset.layoutTransformEditing;
+    syncGuiStudioControlsFromDraft();
+  };
+  el.addEventListener('focus',begin);
+  el.addEventListener('pointerdown',begin);
+  el.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){
+      e.preventDefault();
+      commit();
+      recordGuiStudioFieldAfter({currentTarget:el});
+      el.blur();
+    }else if(e.key==='Escape'){
+      e.preventDefault();
+      delete el.dataset.layoutTransformEditing;
+      syncGuiStudioControlsFromDraft();
+      el.blur();
+    }
+  });
+  el.addEventListener('change',e=>{
+    commit();
+    recordGuiStudioFieldAfter(e);
+  });
+  el.addEventListener('blur',()=>{delete el.dataset.layoutTransformEditing;syncGuiStudioControlsFromDraft();});
+});
+$$('.gui-studio-anchor-grid button').forEach(btn=>btn.addEventListener('click',()=>withGuiStudioHistory(()=>{
+  const key=selectedGuiStudioLayoutElement();
+  setGuiStudioLayoutElementAnchor(key,btn.dataset.layoutAnchor||'top-left');
+  renderGuiStudioLayout();
+  syncGuiStudioControlsFromDraft();
+})));
+['#guiStudioLayoutScaleField'].forEach(sel=>{
+  const el=$(sel);if(!el)return;
+  el.addEventListener('focus',captureGuiStudioFieldBefore);
+  el.addEventListener('pointerdown',captureGuiStudioFieldBefore);
+  el.addEventListener('input',()=>{
+    const key=selectedGuiStudioLayoutElement();
+    const box=guiStudioLayoutElementBox(key);
+    setGuiStudioLayoutElementBox(key,{
+      ...box,
+      scale:$('#guiStudioLayoutScaleField')?.value
+    });
+    renderGuiStudioLayout();
+  });
+  el.addEventListener('change',recordGuiStudioFieldAfter);
+});
+['#guiStudioBadgeVisible','#guiStudioBadgeX','#guiStudioBadgeY','#guiStudioBadgeScale','#guiStudioBadgeU','#guiStudioBadgeV','#guiStudioBadgeW','#guiStudioBadgeH'].forEach(sel=>{
+  const el=$(sel);if(!el)return;
+  el.addEventListener('focus',captureGuiStudioFieldBefore);
+  el.addEventListener('pointerdown',captureGuiStudioFieldBefore);
+  el.addEventListener('input',()=>{
+    guiStudioDraft.badge.visible=!!$('#guiStudioBadgeVisible')?.checked;
+    guiStudioDraft.badge.x=clampGuiNumber($('#guiStudioBadgeX')?.value,-128,384,-8);
+    guiStudioDraft.badge.y=clampGuiNumber($('#guiStudioBadgeY')?.value,-128,216,-8);
+    guiStudioDraft.badge.scale=clampGuiNumber($('#guiStudioBadgeScale')?.value,.25,4,1);
+    guiStudioDraft.badge.u=clampGuiNumber($('#guiStudioBadgeU')?.value,0,512,0);
+    guiStudioDraft.badge.v=clampGuiNumber($('#guiStudioBadgeV')?.value,0,512,0);
+    guiStudioDraft.badge.w=clampGuiNumber($('#guiStudioBadgeW')?.value,1,256,18);
+    guiStudioDraft.badge.h=clampGuiNumber($('#guiStudioBadgeH')?.value,1,256,18);
+    renderGuiStudioLayout();
+  });
+  el.addEventListener('change',recordGuiStudioFieldAfter);
+});
+document.addEventListener('click',e=>{
+  if(!e.target.closest?.('#guiStudioToolOptionsMenu,.gui-studio-sketch-tools button'))closeGuiStudioToolOptions();
+  if(!e.target.closest?.('#guiStudioLayerMenu,#guiStudioLayerList'))closeGuiStudioLayerMenu();
+  if(!e.target.closest?.('#guiStudioPalettePopover,#guiStudioToolPaletteBtn'))$('#guiStudioPalettePopover')?.classList.remove('open');
+});
+document.addEventListener('keydown',e=>{
+  if(!guiStudioModalOpen())return;
+  const key=String(e.key||'').toLowerCase();
+  if(e.key==='Escape'&&!$('#guiStudioOthersMenu')?.hidden){
+    e.preventDefault();
+    e.stopPropagation();
+    closeGuiStudioOthersMenu();
+    return;
+  }
+  if(e.key==='Escape'&&!$('#guiStudioResetConfirm')?.hidden){
+    e.preventDefault();
+    e.stopPropagation();
+    closeGuiStudioResetConfirm();
+    return;
+  }
+  if(e.key==='Escape'&&!$('#guiStudioLayoutResetAllConfirm')?.hidden){
+    e.preventDefault();
+    e.stopPropagation();
+    closeGuiStudioLayoutResetAllConfirm();
+    return;
+  }
+  if((e.ctrlKey||e.metaKey)&&key==='z'&&!guiStudioIsTypingTarget(e.target)){
+    e.preventDefault();
+    e.stopPropagation();
+    if(e.shiftKey)redoGuiStudioChange();
+    else undoGuiStudioChange();
+    return;
+  }
+  if((e.ctrlKey||e.metaKey)&&['c','x','v'].includes(key)&&!guiStudioIsTypingTarget(e.target)){
+    e.preventDefault();
+    e.stopPropagation();
+    if(key==='v'){
+      withGuiStudioHistory(()=>{
+        if(guiStudioPasteClipboard()){
+          renderGuiStudioDraft();
+          showMsg('Selection pasted as a new layer.',true);
+        }else showMsg('Nothing copied from the GUI selection yet.',false);
+      });
+      return;
+    }
+    const copied=guiStudioCopySelectionToClipboard();
+    if(key==='x'&&copied){
+      withGuiStudioHistory(()=>{
+        guiStudioDeleteSelectionFromActiveLayer();
+        renderGuiStudioDraft();
+        showMsg('Selection cut. Paste creates a new layer.',true);
+      });
+    }else{
+      showMsg(copied?'Selection copied.':'Make a selection before copying.',copied);
+    }
+    return;
+  }
+  if((e.key==='Delete'||e.key==='Backspace')&&!guiStudioIsTypingTarget(e.target)){
+    if(guiStudioRemoveLastLassoAnchor()){
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if(guiStudioSelectionForPiece()){
+      e.preventDefault();
+      e.stopPropagation();
+      withGuiStudioHistory(()=>{
+        guiStudioDeleteSelectionFromActiveLayer();
+        renderGuiStudioDraft();
+        showMsg('Selection cleared from the active layer.',true);
+      });
+      return;
+    }
+    const data=guiStudioPieceData();
+    const active=guiStudioActiveLayer();
+    if(active&&data.layers.length>1&&active.id!=='base'){
+      e.preventDefault();
+      e.stopPropagation();
+      withGuiStudioHistory(()=>{
+        deleteGuiStudioLayer(active.id);
+        renderGuiStudioDraft();
+      });
+      return;
+    }
+  }
+  if(e.code!=='Space'||guiStudioIsTypingTarget(e.target))return;
+  e.preventDefault();
+  if(!guiStudioSpaceHandActive){
+    guiStudioToolBeforeSpace=guiStudioActiveTool;
+    guiStudioSpaceHandActive=true;
+    $('#guiStudioModal')?.classList.add('gui-studio-space-hand');
+    $$('.gui-studio-sketch-tools>button').forEach(tool=>tool.classList.toggle('space-active',tool.getAttribute('aria-label')==='Hand Tool'));
+  }
+},{capture:true});
+document.addEventListener('keyup',e=>{
+  if(e.code!=='Space')return;
+  guiStudioSpaceHandActive=false;
+  guiStudioToolBeforeSpace=null;
+  $('#guiStudioModal')?.classList.remove('gui-studio-space-hand');
+  $$('.gui-studio-sketch-tools>button').forEach(tool=>tool.classList.remove('space-active'));
+},{capture:true});
+window.addEventListener('blur',()=>{
+  guiStudioSpaceHandActive=false;
+  guiStudioToolBeforeSpace=null;
+  $('#guiStudioModal')?.classList.remove('gui-studio-space-hand');
+  $$('.gui-studio-sketch-tools>button').forEach(tool=>tool.classList.remove('space-active'));
+});
+$$('.gui-studio-layout-choice').forEach(btn=>btn.addEventListener('click',()=>withGuiStudioHistory(()=>{
+  setGuiStudioLayoutPreviewState(btn.dataset.layoutState||btn.textContent.trim().toLowerCase().split(/\s+/)[0]||'quest',{mode:'layout'});
+  renderGuiStudioLayout();
+})));
+$$('.gui-studio-layout-scale button').forEach(btn=>btn.addEventListener('click',()=>withGuiStudioHistory(()=>{
+  guiStudioDraft.layoutScale=String(btn.dataset.layoutScale||btn.textContent).replace(/x$/,'')||'2';
+  renderGuiStudioLayout();
+})));
+$$('.gui-studio-layout-bg').forEach(sel=>sel.addEventListener('change',()=>withGuiStudioHistory(()=>{
+  guiStudioDraft.layoutBackground=sel.value||GUI_STUDIO_LAYOUT_SCENES[0]?.value||'screenshot:Country Flags.webp';
+  renderGuiStudioLayout();
+})));
+$$('.gui-studio-guide-safe,.gui-studio-guide-snap,.gui-studio-guide-grid,#guiStudioLayoutSnapStep').forEach(input=>input.addEventListener('change',()=>withGuiStudioHistory(()=>{
+  guiStudioDraft.layoutGuides={
+    safeZone:!!$('.gui-studio-guide-safe')?.checked,
+    snap:!!$('.gui-studio-guide-snap')?.checked,
+    grid:!!$('.gui-studio-guide-grid')?.checked,
+    snapStep:clampGuiNumber($('#guiStudioLayoutSnapStep')?.value,2,32,8)
+  };
+  renderGuiStudioLayout();
+})));
+$$('[data-gui-layout-action]').forEach(btn=>btn.addEventListener('click',()=>{
+  const action=btn.dataset.guiLayoutAction;
+  if(action==='reset-all-layers'){
+    openGuiStudioLayoutResetAllConfirm();
+    return;
+  }
+  withGuiStudioHistory(()=>{
+  const selected=selectedGuiStudioLayoutElement();
+  const selectedBox=guiStudioLayoutRenderBox(selected);
+  const runtimeLocked=guiStudioLayoutElementPassiveRuntime(selected);
+  if(action==='reset-selected'){
+    setGuiStudioLayoutElementBox(selected,GUI_STUDIO_LAYOUT_ELEMENT_DEFAULTS[selected]||{x:0,y:0,w:0,h:0,anchor:'top-left'},{snap:false,safeZone:true,allowRuntimeLocked:true});
+  }else if(action==='duplicate-selected'){
+    showMsg('QuestDetails source layers stay unique. Duplicate imported custom overlay layers instead.',false);
+  }else if(action==='toggle-selected-lock'){
+    if(runtimeLocked){showMsg('That QuestDetails layer is locked by the mod runtime. Move the panel instead.',false);return;}
+    const box=guiStudioLayoutElementBox(selected);
+    setGuiStudioLayoutElementBox(selected,{...box,locked:!box.locked},{snap:false,safeZone:false});
+  }else if(action==='delete-selected'){
+    if(GUI_STUDIO_LAYOUT_ELEMENT_META[selected]?.custom&&guiStudioDraft.layout.images?.[selected]){
+      delete guiStudioDraft.layout.images[selected];
+      guiStudioDraft.layout.elements.selected='description';
+      showMsg('Custom layout image removed from this draft.',true);
+    }else{
+      showMsg(runtimeLocked?'That QuestDetails layer is created by Questlog runtime and cannot be deleted or moved.':'QuestDetails source layers cannot be deleted. Hide or lock the layer instead.',false);
+    }
+  }else if(action==='center-main'||action==='center-selected'){
+      if(runtimeLocked){showMsg('That QuestDetails layer follows its panel in game. Move the panel instead.',false);return;}
+      setGuiStudioLayoutElementBox(selected,{...guiStudioLayoutElementBox(selected),x:Math.round((GUI_STUDIO_LAYOUT_SCREEN_W-selectedBox.w)/2),y:Math.round((GUI_STUDIO_LAYOUT_SCREEN_H-selectedBox.h)/2),anchor:'top-left'});
+  }else if(action==='align-left'){
+    if(runtimeLocked){showMsg('That QuestDetails layer follows its panel in game. Move the panel instead.',false);return;}
+    setGuiStudioLayoutElementBox(selected,{...guiStudioLayoutElementBox(selected),x:0,anchor:'top-left'});
+  }else if(action==='align-center-x'){
+      if(runtimeLocked){showMsg('That QuestDetails layer follows its panel in game. Move the panel instead.',false);return;}
+      setGuiStudioLayoutElementBox(selected,{...guiStudioLayoutElementBox(selected),x:Math.round((GUI_STUDIO_LAYOUT_SCREEN_W-selectedBox.w)/2),anchor:'top-left'});
+  }else if(action==='align-right'){
+      if(runtimeLocked){showMsg('That QuestDetails layer follows its panel in game. Move the panel instead.',false);return;}
+      setGuiStudioLayoutElementBox(selected,{...guiStudioLayoutElementBox(selected),x:Math.round(GUI_STUDIO_LAYOUT_SCREEN_W-selectedBox.w),anchor:'top-left'});
+  }else if(action==='align-top'){
+    if(runtimeLocked){showMsg('That QuestDetails layer follows its panel in game. Move the panel instead.',false);return;}
+    setGuiStudioLayoutElementBox(selected,{...guiStudioLayoutElementBox(selected),y:0,anchor:'top-left'});
+  }else if(action==='align-middle-y'){
+      if(runtimeLocked){showMsg('That QuestDetails layer follows its panel in game. Move the panel instead.',false);return;}
+      setGuiStudioLayoutElementBox(selected,{...guiStudioLayoutElementBox(selected),y:Math.round((GUI_STUDIO_LAYOUT_SCREEN_H-selectedBox.h)/2),anchor:'top-left'});
+  }else if(action==='align-bottom'){
+      if(runtimeLocked){showMsg('That QuestDetails layer follows its panel in game. Move the panel instead.',false);return;}
+      setGuiStudioLayoutElementBox(selected,{...guiStudioLayoutElementBox(selected),y:Math.round(GUI_STUDIO_LAYOUT_SCREEN_H-selectedBox.h),anchor:'top-left'});
+  }
+  renderGuiStudioLayout();
+  syncGuiStudioControlsFromDraft();
+  });
+}));
+$$('[data-layout-select]').forEach(btn=>btn.addEventListener('click',e=>{
+  const key=btn.dataset.layoutSelect;
+  if(!GUI_STUDIO_LAYOUT_ELEMENT_META[key])return;
+  if(guiStudioLayoutElementPassiveRuntime(key))return;
+  const control=e.target?.closest?.('.eye,.lock');
+  if(control&&btn.contains(control)){
+    e.preventDefault();
+    e.stopPropagation();
+    withGuiStudioHistory(()=>{
+      const box=guiStudioLayoutElementBox(key);
+      setGuiStudioLayoutElementBox(key,{
+        ...box,
+        visible:control.classList.contains('eye')?box.visible===false:true,
+        locked:control.classList.contains('lock')?!box.locked:box.locked
+      },{snap:false,safeZone:false});
+      selectGuiStudioLayoutElement(key);
+    });
+    return;
+  }
+  selectGuiStudioLayoutElement(key);
+}));
+onEvent('#guiStudioLayoutLayerSearch','input',e=>{
+  syncGuiStudioLayoutLayerSearchVisibility();
+});
+onClick('#guiStudioLayoutAddImageBtn',()=>$('#guiStudioLayoutImageInput')?.click());
+onEvent('#guiStudioLayoutImageInput','change',e=>{
+  const file=e.target.files?.[0];
+  if(!file)return;
+  if(!/^image\/(png|jpe?g|webp|gif)$/i.test(file.type||'')){
+    showMsg('Use a PNG, JPEG, WebP, or GIF image for Layout custom images.',false);
+    e.target.value='';
+    return;
+  }
+  const slot=selectNextGuiStudioLayoutImageSlot();
+  const before=getGuiStudioState();
+  const reader=new FileReader();
+  reader.onload=()=>{
+    ensureGuiStudioLayoutState();
+    guiStudioDraft.layout.images[slot]={name:file.name||GUI_STUDIO_LAYOUT_ELEMENT_META[slot].label,dataUrl:String(reader.result||'')};
+    setGuiStudioLayoutElementBox(slot,{...guiStudioLayoutElementBox(slot),visible:true,locked:false});
+    guiStudioDraft.layout.elements.selected=slot;
+    renderGuiStudioLayout();
+    syncGuiStudioControlsFromDraft();
+    recordGuiStudioChange(before);
+    showMsg(`Imported ${file.name||'custom image'} into Layout.`,true);
+  };
+  reader.onerror=()=>{
+    showMsg('Could not import that image into Layout.',false);
+  };
+  reader.readAsDataURL(file);
+  e.target.value='';
+});
+let guiStudioLayoutLayerDragKey=null;
+let guiStudioLayoutLayerPointerDrag=null;
+function reorderGuiStudioLayoutLayer(from,to){
+  if(!from||!to||from===to)return false;
+  ensureGuiStudioLayoutState();
+  if(guiStudioLayoutElementBox(from).locked||guiStudioLayoutElementPassiveRuntime(from)||guiStudioLayoutElementPassiveRuntime(to))return false;
+  const current=(guiStudioDraft.layout.elements.order||GUI_STUDIO_LAYOUT_LAYER_ORDER).slice();
+  const fromIndex=current.indexOf(from);
+  const toIndex=current.indexOf(to);
+  if(fromIndex<0||toIndex<0)return false;
+  const order=current.filter(key=>key!==from);
+  const targetIndex=order.indexOf(to);
+  if(targetIndex<0)return false;
+  order.splice(fromIndex<toIndex?targetIndex+1:targetIndex,0,from);
+  guiStudioDraft.layout.elements.order=order;
+  guiStudioDraft.layout.elements.selected=from;
+  return true;
+}
+function clearGuiStudioLayoutLayerPointerState(){
+  $$('.gui-studio-layout-layer-row').forEach(row=>row.classList.remove('is-dragging','is-drop-target'));
+}
+$$('.gui-studio-layout-layer-row').forEach(row=>{
+  row.addEventListener('dragstart',e=>{
+    const key=row.dataset.layoutSelect;
+    if(guiStudioLayoutElementBox(key).locked||guiStudioLayoutElementPassiveRuntime(key)){
+      guiStudioLayoutLayerDragKey=null;
+      e.preventDefault();
+      return;
+    }
+    guiStudioLayoutLayerDragKey=key;
+    e.dataTransfer?.setData?.('text/plain',guiStudioLayoutLayerDragKey);
+  });
+  row.addEventListener('dragover',e=>{
+    if(guiStudioLayoutLayerDragKey)e.preventDefault();
+  });
+  row.addEventListener('drop',e=>withGuiStudioHistory(()=>{
+    e.preventDefault();
+    const from=guiStudioLayoutLayerDragKey||e.dataTransfer?.getData?.('text/plain');
+    const to=row.dataset.layoutSelect;
+    if(!from||!to||from===to)return;
+    ensureGuiStudioLayoutState();
+    if(guiStudioLayoutElementBox(from).locked||guiStudioLayoutElementPassiveRuntime(from)){
+      guiStudioLayoutLayerDragKey=null;
+      return;
+    }
+    reorderGuiStudioLayoutLayer(from,to);
+    guiStudioLayoutLayerDragKey=null;
+    renderGuiStudioLayout();
+    syncGuiStudioControlsFromDraft();
+  }));
+  row.addEventListener('dragend',()=>{guiStudioLayoutLayerDragKey=null;});
+});
+document.addEventListener('pointerdown',e=>{
+  if(e.button!==0)return;
+  if(e.target.closest?.('.eye,.lock,button input,input,textarea,select,a,[contenteditable="true"]'))return;
+  const row=e.target.closest?.('.gui-studio-layout-layer-row');
+  if(!row||row.hidden)return;
+  const key=row.dataset.layoutSelect;
+  if(!key||guiStudioLayoutElementBox(key).locked||guiStudioLayoutElementPassiveRuntime(key))return;
+  guiStudioLayoutLayerPointerDrag={
+    key,
+    startX:e.clientX,
+    startY:e.clientY,
+    targetKey:key,
+    moved:false
+  };
+  row.setPointerCapture?.(e.pointerId);
+});
+document.addEventListener('pointermove',e=>{
+  const drag=guiStudioLayoutLayerPointerDrag;
+  if(!drag)return;
+  const dx=Math.abs(e.clientX-drag.startX);
+  const dy=Math.abs(e.clientY-drag.startY);
+  if(!drag.moved&&dx<5&&dy<5)return;
+  e.preventDefault();
+  drag.moved=true;
+  const row=document.elementFromPoint(e.clientX,e.clientY)?.closest?.('.gui-studio-layout-layer-row');
+  if(row&&!row.hidden)drag.targetKey=row.dataset.layoutSelect||drag.targetKey;
+  clearGuiStudioLayoutLayerPointerState();
+  $$('.gui-studio-layout-layer-row').find(item=>item.dataset.layoutSelect===drag.key)?.classList.add('is-dragging');
+  if(row&&!row.hidden)row.classList.add('is-drop-target');
+});
+document.addEventListener('pointerup',e=>{
+  const drag=guiStudioLayoutLayerPointerDrag;
+  if(!drag)return;
+  guiStudioLayoutLayerPointerDrag=null;
+  clearGuiStudioLayoutLayerPointerState();
+  if(!drag.moved||!drag.targetKey||drag.targetKey===drag.key)return;
+  e.preventDefault();
+  withGuiStudioHistory(()=>{
+    if(reorderGuiStudioLayoutLayer(drag.key,drag.targetKey)){
+      renderGuiStudioLayout();
+      syncGuiStudioControlsFromDraft();
+    }
+  });
+});
+let guiStudioLayoutDrag=null;
+const GUI_STUDIO_LAYOUT_DRAG_THRESHOLD=5;
+$('.gui-studio-layout-preview-art')?.addEventListener('pointerdown',e=>{
+  if(!guiStudioModalOpen()||($('#guiStudioModal')?.dataset.mode||'create')!=='layout')return;
+  const target=e.target.closest?.('[data-layout-element]');
+  if(!target||!target.closest('.gui-studio-layout-screen'))return;
+  const key=target.dataset.layoutElement;
+  if(!GUI_STUDIO_LAYOUT_ELEMENT_META[key])return;
+  if(guiStudioLayoutElementPassiveRuntime(key))return;
+  if(guiStudioLayoutElementBox(key).locked)return;
+  e.preventDefault();
+  e.stopPropagation();
+  selectGuiStudioLayoutElement(key);
+  const dragSpace=$('.gui-studio-layout-canvas');
+  const rect=dragSpace?.getBoundingClientRect?.();
+  if(!rect)return;
+  const parent=guiStudioLayoutElementParentSize(key);
+  guiStudioLayoutDrag={
+    key,
+    before:getGuiStudioState(),
+    startX:e.clientX,
+    startY:e.clientY,
+    startBox:guiStudioLayoutDisplayBox(key),
+    startStoredBox:guiStudioLayoutElementBox(key),
+    scaleX:parent.w/Math.max(1,rect.width),
+    scaleY:parent.h/Math.max(1,rect.height),
+    moved:false
+  };
+  target.setPointerCapture?.(e.pointerId);
+  $('.gui-studio-layout-canvas')?.classList.add('is-dragging');
+});
+document.addEventListener('pointermove',e=>{
+  if(!guiStudioLayoutDrag)return;
+  e.preventDefault();
+  const drag=guiStudioLayoutDrag;
+  const dx=(e.clientX-drag.startX)*drag.scaleX;
+  const dy=(e.clientY-drag.startY)*drag.scaleY;
+  if(Math.abs(dx)<GUI_STUDIO_LAYOUT_DRAG_THRESHOLD&&Math.abs(dy)<GUI_STUDIO_LAYOUT_DRAG_THRESHOLD)return;
+  drag.moved=true;
+  const displayNext={x:Math.round(drag.startBox.x+dx),y:Math.round(drag.startBox.y+dy)};
+  const next=guiStudioLayoutBoxFromDisplayDrag(drag.key,displayNext,drag.startStoredBox||guiStudioLayoutElementBox(drag.key));
+  setGuiStudioLayoutElementBox(drag.key,next,{snap:false,snapSize:false});
+  renderGuiStudioLayout();
+  syncGuiStudioControlsFromDraft();
+});
+document.addEventListener('pointerup',()=>{
+  if(!guiStudioLayoutDrag)return;
+  const drag=guiStudioLayoutDrag;
+  guiStudioLayoutDrag=null;
+  $('.gui-studio-layout-canvas')?.classList.remove('is-dragging');
+  if(drag.moved)recordGuiStudioChange(drag.before);
+});
+$$('[data-gui-texture-piece]').forEach(btn=>btn.addEventListener('click',()=>withGuiStudioHistory(()=>{
+  const piece=btn.dataset.guiTexturePiece;
+  if(piece&&GUI_STUDIO_PIECES[piece]){
+    setGuiStudioPiece(piece);
+    setGuiStudioMode('create');
+    showMsg(`${piece} selected in Create.`,true);
+  }
+})));
+$('#guiStudioApplyBtn')?.addEventListener('click',openGuiStudioApplyConfirm);
+$('#guiStudioExportPackBtn')?.addEventListener('click',openGuiStudioProjectExportPreview);
+onClick('#guiStudioOpenExportMenuBtn',openGuiStudioProjectExportPreview);
+$('#guiStudioGearBtn')?.addEventListener('click',()=>showMsg('GUI Studio settings are handled in the main Settings panel for now.',false));
+$('#guiStudioFrameGearBtn')?.addEventListener('click',()=>showMsg('GUI Studio settings are handled in the main Settings panel for now.',false));
+$('#guiStudioLayoutNextBtn')?.addEventListener('click',()=>withGuiStudioHistory(()=>setGuiStudioMode('layout')));
+onClick('#guiStudioTopNextBtn',()=>{
+  const mode=$('#guiStudioModal')?.dataset.mode||'create';
+  if(mode==='export'){openGuiStudioApplyConfirm();return;}
+  withGuiStudioHistory(()=>setGuiStudioMode(GUI_STUDIO_NEXT_MODE[mode]||'layout'));
+});
+onClick('#guiStudioUndoBtn',undoGuiStudioChange);
+onClick('#guiStudioRedoBtn',redoGuiStudioChange);
+onClick('#guiStudioResetConfirmBtn',confirmGuiStudioResetDefault);
+onClick('#guiStudioResetCancelBtn',closeGuiStudioResetConfirm);
+onClick('#guiStudioLayoutResetAllConfirmBtn',confirmGuiStudioLayoutResetAll);
+onClick('#guiStudioLayoutResetAllCancelBtn',closeGuiStudioLayoutResetAllConfirm);
+onClick('#guiStudioExportApplyBtn',openGuiStudioApplyConfirm);
+onClick('#guiStudioApplyConfirmBtn',confirmGuiStudioDraftApply);
+onClick('#guiStudioApplyCancelBtn',closeGuiStudioApplyConfirm);
+$('#guiStudioApplyScope')?.addEventListener('change',()=>{
+  renderGuiStudioApplyQuestList();
+  updateGuiStudioApplySummary();
+});
+$('#guiStudioApplyQuestList')?.addEventListener('change',e=>{
+  if(e.target?.matches?.('input[type="checkbox"]'))updateGuiStudioApplySummary();
+});
+onClick('#guiStudioPackTree',e=>{
+  const toggle=e.target.closest?.('[data-pack-toggle]');
+  if(!toggle)return;
+  e.preventDefault();
+  const key=toggle.dataset.packToggle;
+  guiStudioPackTreeOpen[key]=!guiStudioPackTreeIsOpen(key,!String(key).startsWith('texture:'));
+  renderGuiStudioResourcePackShell();
+  applyGuiStudioTooltipMetadata();
+});
+onClick('#guiStudioExportQuestBtn',openGuiStudioProjectExportPreview);
+$('#guiStudioExportPreviewStatesBtn')?.addEventListener('click',()=>withGuiStudioHistory(()=>setGuiStudioMode('layout')));
+$$('.gui-studio-final-state').forEach(btn=>btn.addEventListener('click',()=>withGuiStudioHistory(()=>{
+  setGuiStudioLayoutPreviewState(btn.dataset.finalState||'quest',{mode:'final'});
+  renderGuiStudioLayout();
+  syncGuiStudioControlsFromDraft();
+})));
+onClick('#guiStudioZoomOutBtn',()=>setGuiStudioFrameZoom(guiStudioFrameZoom-.25));
+onClick('#guiStudioZoomInBtn',()=>setGuiStudioFrameZoom(guiStudioFrameZoom+.25));
+onClick('#guiStudioCanvasFitBtn',()=>withGuiStudioHistory(fitGuiStudioFramePreview));
+window.addEventListener('resize',renderGuiStudioAffectedZone);
 onClick('#btnTutorial',startTutorial);
 onClick('#tutorialYesBtn',startTutorial);
 onClick('#tutorialNoBtn',()=>{markTutorialSeen();closeTutorialPrompt();});
@@ -1951,10 +18389,137 @@ onClick('#tutorialQuitBtn',e=>{e.stopPropagation();endTutorial(true);});
 onClick('#tutorialBackBtn',e=>{e.stopPropagation();tutorialIndex=Math.max(0,tutorialIndex-1);renderTutorial();});
 onClick('#tutorialNextBtn',e=>{e.stopPropagation();if(tutorialIndex>=TUTORIAL_STEPS.length-1)endTutorial(true);else{tutorialIndex++;renderTutorial();}});
 onClick('#tutorialPrompt',e=>{if(e.target===$('#tutorialPrompt')){markTutorialSeen();closeTutorialPrompt();}});
+onClick('#btnQuestlogListPreview',openQuestlogListPreviewModal);
+onClick('#questListGuiStudioLogoBtn',e=>{e.preventDefault();openGuiStudio('quest-list');});
 $('#compactJson')?.addEventListener('change',()=>{refreshJson();recordActivity('Changed export JSON style','project','',$('#compactJson')?.checked?'Minified':'Pretty');scheduleAutosave();});
-if($('#viewRaw'))$('#viewRaw').onchange=()=>{rawMode=!!$('#viewRaw')?.checked;recordActivity(rawMode?'Enabled raw JSON':'Disabled raw JSON','project','');renderMain();};
+if($('#viewRaw'))$('#viewRaw').onchange=()=>{rawMode=!!$('#viewRaw')?.checked;recordActivity(rawMode?'Enabled raw JSON':'Disabled raw JSON','project','');if(rawMode)setRightPanelMode('json');renderMain();};
+$$('.right-panel-tab').forEach(btn=>btn.addEventListener('click',()=>setRightPanelMode(btn.dataset.rightMode)));
+onClick('#btnCopyJson',copyLiveJson);
 $('#autosaveToggle')?.addEventListener('change',e=>setAutosaveEnabled(e.target.checked));
 $('#tooltipsToggle')?.addEventListener('change',e=>setTooltipsEnabled(e.target.checked));
+$('#uiSoundsToggle')?.addEventListener('change',e=>setUiSoundsEnabled(e.target.checked));
+$('#uiTypingSoundsToggle')?.addEventListener('change',e=>setUiTypingSoundsEnabled(e.target.checked));
+$('#uiFeedbackSoundsToggle')?.addEventListener('change',e=>setUiFeedbackSoundsEnabled(e.target.checked));
+$('#uiSoundVolume')?.addEventListener('input',e=>setUiSoundVolume(e.target.value));
+onEvent('#modSuggestionTarget','change',e=>{
+  modSuggestionTarget=e.target.value||'1.21.1';
+  localStorage.setItem(MOD_SUGGESTION_VERSION_KEY,modSuggestionTarget);
+  refreshKnownIds();
+  renderModSupportControls();
+});
+onEvent('#modSupportSearch','input',e=>{
+  modSupportSearch=e.target.value||'';
+  renderModSupportControls();
+});
+onEvent('#modSupportSort','change',e=>{
+  modSupportSort=['available','name','category','data'].includes(e.target.value)?e.target.value:'available';
+  localStorage.setItem(MOD_SUGGESTION_SORT_KEY,modSupportSort);
+  renderModSupportControls();
+});
+onClick('#modSupportSortButton',e=>{
+  e.preventDefault();
+  e.stopPropagation();
+  const menu=$('#modSupportSortMenu');
+  const button=$('#modSupportSortButton');
+  const open=!menu?.classList.contains('open');
+  closeModSupportSortMenu();
+  if(menu&&open){
+    menu.classList.add('open');
+    button?.setAttribute('aria-expanded','true');
+  }
+});
+$$('#modSupportSortMenu [data-mod-sort-value]').forEach(btn=>btn.addEventListener('click',e=>{
+  e.preventDefault();
+  e.stopPropagation();
+  const value=btn.dataset.modSortValue;
+  modSupportSort=['available','name','category','data'].includes(value)?value:'available';
+  localStorage.setItem(MOD_SUGGESTION_SORT_KEY,modSupportSort);
+  closeModSupportSortMenu();
+  renderModSupportControls();
+}));
+onClick('#modSupportSelectAllBtn',()=>{
+  filteredModPacks().forEach(pack=>{
+    if(modPackSupportsTarget(pack)&&modPackDataCount(pack)>0)enabledModSuggestions.add(pack.id);
+  });
+  saveEnabledModSuggestions();
+  refreshKnownIds();
+  renderModSupportControls();
+});
+onClick('#modSupportClearAllBtn',()=>{
+  filteredModPacks().forEach(pack=>{
+    if(modPackSupportsTarget(pack)&&modPackDataCount(pack)>0)enabledModSuggestions.delete(pack.id);
+  });
+  saveEnabledModSuggestions();
+  refreshKnownIds();
+  renderModSupportControls();
+});
+document.addEventListener('change',e=>{
+  const box=e.target?.closest?.('.mod-pack-toggle');
+  if(!box)return;
+  if(box.checked)enabledModSuggestions.add(box.value);else enabledModSuggestions.delete(box.value);
+  saveEnabledModSuggestions();
+  refreshKnownIds();
+  renderModSupportControls();
+});
+onClick('#themeToggle',toggleWebsiteTheme);
+onClick('#christyTrustyPrefsBtn',e=>{e.preventDefault();applyChristyTrustyPreferences();});
+if($('#btnPersonalization'))onClick('#btnPersonalization',openPersonalizationModal);
+onEvent('#personalLightThemePreset','change',e=>{
+  localStorage.setItem(LIGHT_THEME_CHOICE_KEY,e.target.value);
+  if(LIGHT_THEME_IDS.has(cTheme))applyTheme(e.target.value);
+});
+onEvent('#personalDarkThemePreset','change',e=>{
+  localStorage.setItem(DARK_THEME_CHOICE_KEY,e.target.value);
+  if(!LIGHT_THEME_IDS.has(cTheme))applyTheme(e.target.value);
+});
+onClick('#personalizationCloseBtn',()=>closePersonalizationModal(false));
+onClick('#personalizationCancelBtn',()=>closePersonalizationModal(false));
+onClick('#personalizationApplyBtn',()=>closePersonalizationModal(true));
+onClick('#personalizationModal',e=>{if(e.target===$('#personalizationModal'))closePersonalizationModal(false);});
+onClick('#questlogListPreviewModal',e=>{if(!questlogListClickInsideSurface(e))closeQuestlogListPreviewModal();});
+onEvent('#personalFontSelect','change',e=>{if(personalizationDraft){personalizationDraft.font=e.target.value;previewPersonalization();}});
+onEvent('#surfaceTextureToggle','change',e=>{
+  if(!personalizationDraft)return;
+  personalizationDraft.surfaceTexture=!!e.target.checked;
+  updatePersonalSurfaceControls();
+  previewPersonalization();
+});
+onEvent('#surfaceTextureIntensity','input',e=>{
+  if(!personalizationDraft)return;
+  personalizationDraft.surfaceTextureIntensity=Math.max(0,Math.min(60,Number(e.target.value)||0));
+  updatePersonalSurfaceControls();
+  previewPersonalization();
+});
+onEvent('#motionEffectsToggle','change',e=>{
+  if(!personalizationDraft)return;
+  personalizationDraft.motionEffects=!!e.target.checked;
+  updatePersonalMotionControls();
+  previewPersonalization();
+  if(personalizationDraft.motionEffects)previewSettingsMotion();
+});
+$$('.layout-choice').forEach(btn=>btn.addEventListener('click',()=>setPersonalLayoutChoice(btn.dataset.layoutChoice)));
+onClick('#layoutImportExportBtn',e=>{
+  e.preventDefault();
+  e.stopPropagation();
+  $('#layoutImportExportMenu')?.classList.toggle('open');
+});
+onClick('#layoutExportBtn',e=>{
+  e.preventDefault();
+  exportLayoutSetup();
+  $('#layoutImportExportMenu')?.classList.remove('open');
+});
+onClick('#layoutImportBtn',e=>{
+  e.preventDefault();
+  $('#layoutImportInput')?.click();
+});
+onEvent('#layoutImportInput','change',async e=>{
+  await importLayoutSetup(e.target.files?.[0]);
+  e.target.value='';
+  $('#layoutImportExportMenu')?.classList.remove('open');
+});
+$('#personalUndoBtn')?.addEventListener('click',undoPersonalDraft);
+$('#personalRedoBtn')?.addEventListener('click',redoPersonalDraft);
+onClick('#muteToggle',()=>setUiSoundsMuted(!uiSoundsMuted));
 onClick('#btnManualSaveHead',manualSaveNow);
 $('#defaultNs')?.addEventListener('input',()=>{renderFileList();renderValidation();refreshJson();scheduleAutosave();});
 $('#defaultNs')?.addEventListener('change',()=>recordActivity('Changed namespace','project','',$('#defaultNs')?.value.trim()||'questlog'));
@@ -1963,21 +18528,21 @@ const applyLJ=debounce(()=>{if(!currentFile||!getCD())return;try{const p=JSON.pa
 lj.addEventListener('focusin',()=>{jsonFocused=true;});
 lj.addEventListener('focusout',()=>{jsonFocused=false;refreshJson();});
 lj.addEventListener('input',()=>{if(!currentFile)return;applyLJ();});
-onClick('#btnDownload',()=>{if(!currentFile)return;if(mode==='chapter'&&$('#cf_name'))$('#cf_name').oninput?.();else syncQ();const data=getCD();if(!data)return;let out;if(mode==='quest')out=buildQOut(data);else{out=JSON.parse(JSON.stringify(data));trimCh(out);}downloadBlob(new Blob([stringifyJson(out)],{type:'application/json'}),currentFile);recordActivity('Exported selected',mode,currentFile);showMsg('Downloaded.',true);});
-onClick('#btnDownloadAll',openExportPreviewModal);
+onClick('#btnDownload',()=>{if(!currentFile)return;if(mode==='chapter'&&$('#cf_name'))$('#cf_name').oninput?.();else syncQ();const data=getCD();if(!data)return;let out;if(mode==='quest')out=buildQuestExportObject(currentFile,data);else{out=JSON.parse(JSON.stringify(data));trimCh(out);}downloadBlob(new Blob([stringifyJson(out)],{type:'application/json'}),currentFile);recordActivity('Exported selected',mode,currentFile);showMsg('Downloaded.',true);});
+onClick('#btnDownloadAll',e=>{e?.preventDefault?.();e?.stopPropagation?.();openExportPreviewModal();});
 onClick('#exportPreviewCloseBtn',closeExportPreviewModal);
-onClick('#exportPreviewCancelBtn',closeExportPreviewModal);
 onClick('#exportPreviewModal',e=>{if(e.target===$('#exportPreviewModal'))closeExportPreviewModal();});
-onClick('#exportPreviewZipBtn',async()=>{
-  await exportProjectZip();
-  closeExportPreviewModal();
-});
+onClick('#exportPreviewZipBtn',handleExportPreviewZipClick);
+bindExportPreviewControls();
+document.addEventListener('input',e=>{if(e.target?.closest?.('#exportPreviewModal'))return;queueRefreshOpenExportPreview();},true);
+document.addEventListener('change',e=>{if(e.target?.closest?.('#exportPreviewModal'))return;queueRefreshOpenExportPreview();},true);
+onClick('#questPreviewModal',e=>{if(e.target===$('#questPreviewModal'))closeQuestPreviewModal();});
 function shouldRecordHistory(e){
   if(historyRestoring)return false;
   const t=e.target;if(!t||!t.closest)return false;
   const ignored=[
-    '#btnUndo','#btnRedo','#btnDownload','#btnDownloadAll','#btnValidate',
-    '#themeToggle','#btnPickImport','#btnAddMenu','#btnImportExportMenu',
+    '#btnUndo','#btnRedo','#btnDownload','#btnDownloadAll',
+    '#themeToggle','#muteToggle','#btnPickImport','#btnAddMenu','#btnImportExportMenu',
     '#ctxEditName','#templateCloseBtn',
     '#renameCancelBtn','#resetCancelBtn','#resetBackBtn'
   ].join(',');
@@ -1986,7 +18551,7 @@ function shouldRecordHistory(e){
   if(e.type==='click'){
     const mutatingClicks=[
       '#btnNewQuest','#btnNewChapter','#addReq','#addObj','#addFail','#addRew',
-      '.small-rm','.rew-remove','#renameConfirmBtn',
+      '.small-rm','.rew-remove','.progress-compact-remove','.progress-save-btn','#renameConfirmBtn',
       '#ctxDuplicate','#ctxMakeTemplate','#ctxUnlink','#ctxDelete','#resetDeleteBtn','.template-create','.template-delete',
       '#templateCreatePack','[data-fmt-template]','[data-fmt-code]','.mc-ac-row'
     ].join(',');
@@ -1997,27 +18562,35 @@ function shouldRecordHistory(e){
 function maybeRecordHistory(e){if(shouldRecordHistory(e))pushHistorySnapshot();}
 function maybeRecordFocusHistory(e){
   const t=e.target;
-  if(['questListSort','questSearch'].includes(t?.id))return;
+  if(['questListSort','questSearch','questlogPreviewSearchInput'].includes(t?.id))return;
   if(!historyRestoring&&t?.closest?.('input,textarea,select'))pushHistorySnapshot();
 }
 document.body.addEventListener('focusin',maybeRecordFocusHistory,true);
 document.body.addEventListener('input',maybeRecordHistory,true);
 document.body.addEventListener('change',maybeRecordHistory,true);
 document.body.addEventListener('click',maybeRecordHistory,true);
-$('#btnUndo')?.addEventListener('click',undoProject);
-$('#btnRedo')?.addEventListener('click',redoProject);
-function onFC(e){if(e&&(e.target===lj||e.target.closest?.('#liveJson')||['viewRaw','questListSort','questSearch'].includes(e.target.id)))return;if(rawMode)return;if(mode==='quest'){syncQ();recordEditActivity();dRefresh();}else if($('#cf_name')){$('#cf_name').oninput?.();recordEditActivity();}}
+document.addEventListener('selectstart',e=>{
+  if(e.target.closest?.('[data-quest-drag="true"]'))return;
+  if(!guiStudioIsTypingTarget(e.target))e.preventDefault();
+},{capture:true});
+document.addEventListener('dragstart',e=>{
+  const allowed=e.target.closest?.('[data-quest-drag="true"],[draggable="true"],input,textarea,select,[contenteditable="true"]');
+  if(allowed&&!allowed.closest?.('[data-locked="true"],[draggable="false"]'))return;
+  e.preventDefault();
+},{capture:true});
+$('#btnUndo')?.addEventListener('click',undoWorkbenchOrProject);
+$('#btnRedo')?.addEventListener('click',redoWorkbenchOrProject);
+function onFC(e){if(e&&(e.target===lj||e.target.closest?.('#liveJson,.ql-list-stage,#questlogListPreviewModal')||['viewRaw','questListSort','questSearch','questlogPreviewSearchInput'].includes(e.target.id)))return;if(rawMode)return;if(mode==='quest'){syncQ();recordEditActivity();dRefresh();dPreview();}else if($('#cf_name')){$('#cf_name').oninput?.();recordEditActivity();dPreview();}}
 document.body.addEventListener('input',onFC);document.body.addEventListener('change',onFC);
 document.body.addEventListener('input',scheduleAutosave);document.body.addEventListener('change',scheduleAutosave);document.body.addEventListener('click',()=>setTimeout(scheduleAutosave,0));
-onClick('#btnValidate',()=>{if(mode==='quest')syncQ();else if($('#cf_name'))$('#cf_name').oninput?.();renderValidation();recordActivity('Validated','project','',$('#validateProject')?.checked!==false?'Project-wide':'Selected file');showMsg('Validation refreshed.',true);});
 onEvent('#validateProject','change',()=>{renderValidation();recordActivity('Changed validation scope','project','',$('#validateProject')?.checked!==false?'Project-wide':'Selected file');});
 onClick('#btnBulkDeleteOpen',openBulkDeleteModal);
 onClick('#bulkDeleteCloseBtn',closeBulkDeleteModal);
 onClick('#bulkDeleteModal',e=>{if(e.target===$('#bulkDeleteModal'))closeBulkDeleteModal();});
-onClick('#namespacePreviewBtn',renderNamespacePreview);
-onClick('#namespaceApplyBtn',applyNamespaceMigration);
-onEvent('#namespaceMigrateFrom','input',renderNamespacePreview);
-onEvent('#namespaceMigrateTo','input',renderNamespacePreview);
+$('#namespacePreviewBtn')?.addEventListener('click',renderNamespacePreview);
+$('#namespaceApplyBtn')?.addEventListener('click',applyNamespaceMigration);
+$('#namespaceMigrateFrom')?.addEventListener('input',renderNamespacePreview);
+$('#namespaceMigrateTo')?.addEventListener('input',renderNamespacePreview);
 onClick('#bulkSelectNoneBtn',()=>{$$('#bulkDeleteList input[type="checkbox"]').forEach(i=>i.checked=false);updateBulkDeleteCount();});
 onClick('#bulkDeleteBtn',bulkDeleteSelected);
 onClick('#btnResetProgress',()=>{closeSettingsMenu();openResetModal();});
@@ -2065,8 +18638,8 @@ function showRenameModal(name,kind){
     setRenameModalError('');
     const nn=nv+'.json';
     if(nn===name){closeRenameModal();return;}
-    if(kind==='quest'){if(quests[nn]&&nn!==name){setRenameModalError('Name taken.');return;}quests[nn]=quests[name];delete quests[name];moveFileMeta('quest',name,nn);if(currentFile===name)currentFile=nn;}
-    else{if(chapters[nn]&&nn!==name){setRenameModalError('Name taken.');return;}chapters[nn]=chapters[name];delete chapters[name];moveFileMeta('chapter',name,nn);if(currentFile===name)currentFile=nn;}
+    if(kind==='quest'){if(quests[nn]&&nn!==name){setRenameModalError('Name taken.');return;}renameProjectFile('quest',name,nn);}
+    else{if(chapters[nn]&&nn!==name){setRenameModalError('Name taken.');return;}renameProjectFile('chapter',name,nn);}
     recordActivity('Renamed',kind,nn,name);
     closeRenameModal();renderFileList();if(currentFile===nn)renderMain();
   };
@@ -2097,7 +18670,7 @@ onClick('#ctxDelete',()=>{
     onConfirm:()=>{
       pushHistorySnapshot();
       if(kind==='quest'){delete quests[name];delete fileMeta[metaKey('quest',name)];}
-      else{delete chapters[name];delete fileMeta[metaKey('chapter',name)];}
+      else{const wasDefault=!!chapters[name]?.default_chapter;delete chapters[name];delete fileMeta[metaKey('chapter',name)];if(wasDefault)normalizeDefaultChapter();}
       if(currentFile===name&&mode===kind)currentFile=null;
       recordActivity('Deleted',kind,name);
       renderFileList();renderMain();renderValidation();scheduleAutosave();
@@ -2106,16 +18679,92 @@ onClick('#ctxDelete',()=>{
 });
 // Close context menu on any click outside
 document.addEventListener('click',hideCtxMenu);
-document.addEventListener('contextmenu',e=>{if(!e.target.closest('#fileList'))hideCtxMenu();});
+document.addEventListener('contextmenu',e=>{
+  if(!e.target.closest('#fileList'))hideCtxMenu();
+  if(!e.defaultPrevented)e.preventDefault();
+});
 onClick('#renameModal',e=>{if(e.target===$('#renameModal'))closeRenameModal();});
 
+function writeExportAtlasSelfTestResult(status,payload={}){
+  let el=document.getElementById('exportAtlasSelfTestResult');
+  if(!el){
+    el=document.createElement('script');
+    el.type='application/json';
+    el.id='exportAtlasSelfTestResult';
+    document.body.appendChild(el);
+  }
+  const data={status,at:new Date().toISOString(),...payload};
+  el.textContent=JSON.stringify(data);
+  document.documentElement.dataset.exportAtlasSelfTest=status;
+}
+function maybeRunExportAtlasSelfTestFromUrl(){
+  let params=null;
+  try{params=new URLSearchParams(window.location.search);}catch(_err){}
+  const runAtlas=params?.has('exportAtlasSelfTest');
+  const runLayout=params?.has('exportLayoutSelfTest');
+  const runAutosave=params?.has('guiStudioAutosaveSelfTest');
+  const runScoped=params?.has('guiStudioScopedDraftSelfTest');
+  const runQuestListLayout=params?.has('questListLayoutExportSelfTest');
+  const runProjectImport=params?.has('projectImportRoundTripSelfTest');
+  const runExportDownloadSmoke=params?.has('exportDownloadSmokeSelfTest');
+  const runChapterRenamePreview=params?.has('chapterRenamePreviewSelfTest');
+  const runQuestListPreviewFlow=params?.has('questListPreviewFlowSelfTest');
+  const runQuestPreviewButtons=params?.has('questPreviewButtonSelfTest');
+  const runIdSpaceHelper=params?.has('idSpaceHelperSelfTest');
+  const runIdSuggestions=params?.has('idSuggestionsSelfTest');
+  const runTemplateRefresh=params?.has('templateRefreshSelfTest');
+  const runDynamicLighting=params?.has('dynamicLightingSelfTest');
+  const runMinecraftPlaceholders=params?.has('minecraftPlaceholderSelfTest');
+  const runProgressEditor=params?.has('progressEditorSelfTest');
+  const runThemePalette=params?.has('themePaletteSelfTest');
+  const runSoundDiscoverability=params?.has('soundDiscoverabilitySelfTest');
+  const runAnimationVisibility=params?.has('animationVisibilitySelfTest');
+  const runSurfaceTexture=params?.has('surfaceTextureSelfTest');
+  const runModSupportControls=params?.has('modSupportControlsSelfTest');
+  const runGuiStudioCreateSmoke=params?.has('guiStudioCreateSmokeSelfTest');
+  const runGuiStudioPerformance=params?.has('guiStudioPerformanceSelfTest');
+  const runWorkbenchCanvasRelease=params?.has('workbenchCanvasReleaseSelfTest');
+  if(!runAtlas&&!runLayout&&!runAutosave&&!runScoped&&!runQuestListLayout&&!runProjectImport&&!runExportDownloadSmoke&&!runWorkbenchCanvasRelease&&!runChapterRenamePreview&&!runQuestListPreviewFlow&&!runQuestPreviewButtons&&!runGuiStudioCreateSmoke&&!runGuiStudioPerformance&&!runIdSpaceHelper&&!runIdSuggestions&&!runTemplateRefresh&&!runDynamicLighting&&!runMinecraftPlaceholders&&!runProgressEditor&&!runThemePalette&&!runSoundDiscoverability&&!runAnimationVisibility&&!runSurfaceTexture&&!runModSupportControls)return;
+  const testName=runModSupportControls?'mod-support-controls':runSurfaceTexture?'surface-texture':runAnimationVisibility?'animation-visibility':runSoundDiscoverability?'sound-discoverability':runThemePalette?'theme-palette':runProgressEditor?'progress-editor':runMinecraftPlaceholders?'minecraft-placeholders':runDynamicLighting?'dynamic-lighting':runTemplateRefresh?'template-refresh':runIdSuggestions?'id-suggestions':runIdSpaceHelper?'id-space-helper':runGuiStudioPerformance?'gui-studio-performance':runGuiStudioCreateSmoke?'gui-studio-create-smoke':runQuestPreviewButtons?'quest-preview-buttons':runQuestListPreviewFlow?'questlist-preview-flow':runChapterRenamePreview?'chapter-rename-preview':runWorkbenchCanvasRelease?'workbench-canvas-release':runExportDownloadSmoke?'export-download-smoke':runProjectImport?'project-import-roundtrip':runQuestListLayout?'questlist-layout-export':runScoped?'scoped-drafts':runAutosave?'autosave':runLayout?'layout':'atlas';
+  writeExportAtlasSelfTestResult('running',{test:testName});
+  setTimeout(async()=>{
+    try{
+      const result=runModSupportControls?await questlogRunModSupportControlsSelfTest():runSurfaceTexture?await questlogRunSurfaceTextureSelfTest():runAnimationVisibility?await questlogRunAnimationVisibilitySelfTest():runSoundDiscoverability?await questlogRunSoundDiscoverabilitySelfTest():runThemePalette?await questlogRunThemePaletteSelfTest():runProgressEditor?await questlogRunProgressEditorSelfTest():runMinecraftPlaceholders?await questlogRunMinecraftPlaceholderSelfTest():runDynamicLighting?await questlogRunDynamicLightingSelfTest():runTemplateRefresh?await questlogRunTemplateRefreshSelfTest():runIdSuggestions?await questlogRunIdSuggestionsSelfTest():runIdSpaceHelper?await questlogRunIdSpaceHelperSelfTest():runGuiStudioPerformance?await questlogRunGuiStudioPerformanceSelfTest():runGuiStudioCreateSmoke?await questlogRunGuiStudioCreateSmokeSelfTest():runQuestPreviewButtons?await questlogRunQuestPreviewButtonSelfTest():runQuestListPreviewFlow?await questlogRunQuestListPreviewFlowSelfTest():runChapterRenamePreview?await questlogRunChapterRenamePreviewSelfTest():runWorkbenchCanvasRelease?await questlogRunWorkbenchCanvasReleaseSelfTest():runExportDownloadSmoke?await questlogRunExportDownloadSmokeSelfTest():runProjectImport?await questlogRunProjectImportRoundTripSelfTest():runQuestListLayout?await questlogRunQuestListLayoutExportSelfTest():runScoped?await questlogRunGuiStudioScopedDraftSelfTest():runAutosave?await questlogRunGuiStudioAutosaveSelfTest():runLayout?await questlogRunExportLayoutSelfTest():await questlogRunExportAtlasSelfTest();
+      writeExportAtlasSelfTestResult(result.ok?'passed':'failed',{test:testName,result});
+    }catch(err){
+      writeExportAtlasSelfTestResult('error',{test:testName,message:err?.message||String(err),stack:err?.stack||''});
+      console.error('[export self-test]',err);
+    }
+  },0);
+}
+
 // ── Init ──────────────────────────────────────────────────────────
+function scheduleGuiStudioRestorePreviewRefresh(){
+  if(typeof requestAnimationFrame!=='function')return;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    if(typeof guiStudioRefreshAppliedPreviewsForCurrentSelection==='function'){
+      guiStudioRefreshAppliedPreviewsForCurrentSelection();
+    }
+    if(currentFile)renderMain();
+    renderInlineQuestPreview();
+    renderInlineChapterListPreview();
+    renderOpenQuestPreviewModal();
+    renderOpenQuestlogListPreviewModal(questlogListActiveChapter);
+    refreshOpenExportPreview();
+  }));
+}
+preloadGuiStudioTextFonts();
 const restored=loadAutosave();
 initSchemaSourceBadge();
 renderFileList();
 if(restored&&currentFile){renderMain();}
 else{$('#btnNewQuest')?.click();}
 renderValidation();
+renderExportPreview();
+bindExportPreviewControls();
+if(restored)scheduleGuiStudioRestorePreviewRefresh();
+maybeRunExportAtlasSelfTestFromUrl();
+initReactiveAmbientLight();
 saveAutosaveNow('init');
 updateHistoryButtons();
 setTimeout(()=>openTutorialPrompt(false),500);
