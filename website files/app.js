@@ -3047,6 +3047,30 @@ function updateExportReadinessOverrideControl(){
 function issueLabel(level){
   return {error:'Fix',missing:'Needs review',warn:'Warning',ok:'Ready'}[level]||level;
 }
+function exportReadiness(counts,paths){
+  if(!paths.quests.length||!paths.chapters.length||counts.error||counts.missing){
+    return {
+      level:'blocked',
+      title:'Not ready yet',
+      copy:'Fix missing data and serious errors before uploading this ZIP to a modpack.'
+    };
+  }
+  if(counts.warn){
+    return {
+      level:'review',
+      title:'Ready after review',
+      copy:'The ZIP can be made, but check the warnings first so the pack does not ship confusing quest behavior.'
+    };
+  }
+  return {
+    level:'ready',
+    title:'Ready to export',
+    copy:'No missing data, errors, or warnings were found in the current project check.'
+  };
+}
+function issueLabel(level){
+  return {error:'Fix',missing:'Needs review',warn:'Warning',ok:'Ready'}[level]||level;
+}
 function renderExportPreview(){
   syncCurrentForExport();
   const body=$('#exportPreviewBody');if(!body)return;
