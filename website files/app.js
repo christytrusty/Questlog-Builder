@@ -559,7 +559,7 @@ const EQUIP_SLOTS=["head","chest","legs","feet","mainhand","offhand","body"];
 const OBJ_TYPES=["questlog:stat","questlog:block_mine","questlog:block_place","questlog:entity_breed","questlog:entity_death","questlog:entity_kill","questlog:entity_tame","questlog:item_craft","questlog:item_drop","questlog:item_equip","questlog:item_obtain","questlog:item_use","questlog:visit_biome","questlog:visit_dimension","questlog:visit_position","questlog:trample","questlog:enchant","questlog:effect_added","questlog:visit_structure","questlog:or","questlog:not","questlog:block_interact","questlog:entity_approach","questlog:quest_complete","questlog:read","questlog:advancement","questlog:unobtainable"];
 const REW_TYPES=["questlog:item","questlog:command","questlog:experience","questlog:loot_table"];
 const NO_AMOUNT_OBJECTIVES=new Set(["questlog:or","questlog:not","questlog:read","questlog:unobtainable","questlog:quest_complete"]);
-const APP_VERSION='3.0';
+const APP_VERSION='3.01';
 window.QUESTLOG_APP_VERSION=APP_VERSION;
 document.documentElement.dataset.questlogAppVersion=APP_VERSION;
 document.documentElement.dataset.questlogStorage=storageMode;
@@ -2264,6 +2264,17 @@ function renderTemplateModal(){const list=$('#templateList'),cat=$('#templateCat
 }
 const CHANGELOGS=[
   {
+    version:'3.01',
+    title:'Version 3.01',
+    status:'Silent support link update',
+    sections:[
+      {title:'Added',items:[
+        'Help & Support now includes a Ko-fi support button for ChristyTrusty.',
+        'The tutorial now ends by highlighting the Ko-fi support button.'
+      ]}
+    ]
+  },
+  {
     version:'3.0',
     title:'Version 3.0',
     status:'Major GUI editor and release workflow update',
@@ -2455,7 +2466,8 @@ const TUTORIAL_STEPS=[
   {target:'.history-actions',title:'Undo and redo',text:'Undo and redo sit beside the editor tabs and include normal editor changes. GUI Studio also keeps its own undo/redo while the Studio is open.',pad:5},
   {target:'#settingsMenu',openSettings:true,preferenceTab:'preferences',title:'Settings and appearance',text:'Settings contains themes, fonts, layout choices, editor controls, sound groups, export metadata, and the live appearance preview.',pad:5},
   {target:'#settingsModMount',openSettings:true,preferenceTab:'mod',title:'Mod support',text:'Mod Support controls which generated ID packs can appear in suggestions for items, blocks, biomes, and sounds.',pad:5},
-  {target:'#questListGuiStudioLogoBtn',title:'QuestList GUI editor and resources',text:'The Questlog logo opens the global QuestList GUI Editor. It uses the same Create, Layout, and Final idea as the Quest Menu GUI Editor, but QuestList textures and layout are global. Help and Support also keeps Questlog docs, source examples, the changelog, and this tutorial replay.',pad:5}
+  {target:'#questListGuiStudioLogoBtn',title:'QuestList GUI editor and resources',text:'The Questlog logo opens the global QuestList GUI Editor. It uses the same Create, Layout, and Final idea as the Quest Menu GUI Editor, but QuestList textures and layout are global. Help and Support also keeps Questlog docs, source examples, the changelog, and this tutorial replay.',pad:5,wikiLink:true},
+  {target:'.support-coffee-link',openSettings:true,preferenceTab:'help',title:'Support ChristyTrusty',text:'If you\'d like to support me, then send a tip my way!',pad:2,spotlightInset:{bottom:8}}
 ];
 let tutorialIndex=0,tutorialResizeBound=false;
 function markTutorialSeen(){try{localStorage.setItem(TUTORIAL_SEEN_KEY,'true');}catch{}}
@@ -2500,9 +2512,14 @@ function placeTutorial(){
     r={left:window.innerWidth/2-120,top:window.innerHeight/2-80,width:240,height:160,right:window.innerWidth/2+120,bottom:window.innerHeight/2+80};
   }
   const pad=Number.isFinite(step?.pad)?step.pad:4;
-  const left=Math.max(6,Math.round(r.left-pad)),top=Math.max(6,Math.round(r.top-pad));
-  const width=Math.min(window.innerWidth-left-6,Math.round(r.width+pad*2));
-  const height=Math.min(window.innerHeight-top-6,Math.round(r.height+pad*2));
+  const inset=step?.spotlightInset||{};
+  const insetLeft=Number.isFinite(inset.left)?inset.left:0;
+  const insetTop=Number.isFinite(inset.top)?inset.top:0;
+  const insetRight=Number.isFinite(inset.right)?inset.right:0;
+  const insetBottom=Number.isFinite(inset.bottom)?inset.bottom:0;
+  const left=Math.max(6,Math.round(r.left-pad+insetLeft)),top=Math.max(6,Math.round(r.top-pad+insetTop));
+  const width=Math.min(window.innerWidth-left-6,Math.max(4,Math.round(r.width+pad*2-insetLeft-insetRight)));
+  const height=Math.min(window.innerHeight-top-6,Math.max(4,Math.round(r.height+pad*2-insetTop-insetBottom)));
   Object.assign(spot.style,{left:left+'px',top:top+'px',width:width+'px',height:height+'px'});
   const popW=Math.min(360,window.innerWidth-26),gap=14;
   const popH=pop.offsetHeight||220;
@@ -2530,7 +2547,7 @@ function renderTutorial(){
   const step=TUTORIAL_STEPS[tutorialIndex];if(!step)return endTutorial(false);
   prepareTutorialStep(step);
   $('#tutorialTitle').textContent=step.title;
-  $('#tutorialText').innerHTML=`${esc(step.text)}${tutorialIndex===TUTORIAL_STEPS.length-1?' <a href="https://moddedmc.wiki/en/project/questlog/latest/docs" target="_blank" rel="noreferrer">Open Questlog wiki</a>.':''}`;
+  $('#tutorialText').innerHTML=`${esc(step.text)}${step.wikiLink?' <a href="https://moddedmc.wiki/en/project/questlog/latest/docs" target="_blank" rel="noreferrer">Open Questlog wiki</a>.':''}`;
   $('#tutorialProgress').textContent=`${tutorialIndex+1} / ${TUTORIAL_STEPS.length}`;
   const back=$('#tutorialBackBtn'),next=$('#tutorialNextBtn');
   if(back)back.disabled=tutorialIndex===0;
@@ -3043,30 +3060,6 @@ function updateExportReadinessOverrideControl(){
   btn.setAttribute('aria-pressed',exportReadinessOverrideEnabled?'true':'false');
   btn.classList.toggle('active',exportReadinessOverrideEnabled);
   btn.innerHTML=`${guiStudioLucideIcon(exportReadinessOverrideEnabled?'unlock':'lock','settings-toggle-icon-svg')}<span>Export readiness override</span><strong>${exportReadinessOverrideEnabled?'On':'Off'}</strong>`;
-}
-function issueLabel(level){
-  return {error:'Fix',missing:'Needs review',warn:'Warning',ok:'Ready'}[level]||level;
-}
-function exportReadiness(counts,paths){
-  if(!paths.quests.length||!paths.chapters.length||counts.error||counts.missing){
-    return {
-      level:'blocked',
-      title:'Not ready yet',
-      copy:'Fix missing data and serious errors before uploading this ZIP to a modpack.'
-    };
-  }
-  if(counts.warn){
-    return {
-      level:'review',
-      title:'Ready after review',
-      copy:'The ZIP can be made, but check the warnings first so the pack does not ship confusing quest behavior.'
-    };
-  }
-  return {
-    level:'ready',
-    title:'Ready to export',
-    copy:'No missing data, errors, or warnings were found in the current project check.'
-  };
 }
 function issueLabel(level){
   return {error:'Fix',missing:'Needs review',warn:'Warning',ok:'Ready'}[level]||level;

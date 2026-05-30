@@ -4,7 +4,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Questlog JSON Editor</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23131210'/%3E%3Crect x='7' y='7' width='7' height='7' rx='1' fill='%23d4924a'/%3E%3Crect x='18' y='7' width='7' height='7' rx='1' fill='%23d4924a'/%3E%3Crect x='7' y='18' width='7' height='7' rx='1' fill='%23d4924a'/%3E%3Crect x='18' y='18' width='7' height='7' rx='1' fill='%23e6e2d6'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="style.css?v=3.0-chapter-search-nudge-2">
+  <link rel="stylesheet" href="style.css?v=3.01-kofi-1">
 <style>
     @font-face{font-family:'Minecraft Normal';src:url("MinecraftDefault-Regular.ttf") format("truetype");font-weight:400;font-style:normal;font-display:swap;}
     @font-face{font-family:'Minecraft Normal';src:url("MinecraftDefault-Bold.ttf") format("truetype");font-weight:700;font-style:normal;font-display:swap;}
@@ -11424,6 +11424,7 @@ body[data-layout="classic"] .inline-quest-preview,
               <div class="settings-action-grid">
                 <button type="button" class="btn" id="btnTutorial" data-tip="Start the guided Questlog Editor tutorial.">Tutorial</button>
                 <button type="button" class="btn" id="btnChangelog" data-tip="Open the full changelog with a version selector.">Changelog</button>
+                <a class="btn support-coffee-link" href="https://ko-fi.com/christytrusty" target="_blank" rel="noopener noreferrer" data-tip="Support ChristyTrusty on Ko-fi.">I'd Love A Nice Coffee! ☕</a>
                 <button type="button" class="btn settings-toggle-action" id="exportReadinessOverrideToggle" aria-pressed="false" data-tip="Allow the project ZIP download button even when export readiness checks are blocking.">Export readiness override</button>
               </div>
               <details class="settings-sources">
@@ -12688,15 +12689,15 @@ body[data-layout="classic"] .inline-quest-preview,
 <script src="mod-id-packs/abyss_ii.js?v=3.0-mod-support-final-manual-source-1"></script>
 <script src="minecraft-texture-index.js?v=3.0-minecraft-textures-1"></script>
 <script src="minecraft-entity-texture-index.js?v=3.0-entity-textures-1"></script>
-<script src="app.js?v=3.0-chapter-search-nudge-2"></script>
+<script src="app.js?v=3.01-kofi-tutorial-3"></script>
 <script>
-  window.QUESTLOG_HTML_VERSION='3.0';
+  window.QUESTLOG_HTML_VERSION='3.01';
   setTimeout(function(){
-    if(window.QUESTLOG_APP_VERSION==='3.0'||document.documentElement.dataset.questlogAppVersion==='3.0')return;
+    if(window.QUESTLOG_APP_VERSION==='3.01'||document.documentElement.dataset.questlogAppVersion==='3.01')return;
     var warn=document.createElement('div');
     warn.id='versionMismatchWarning';
     warn.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(10,8,6,.92);color:#f3d7a4;display:flex;align-items:center;justify-content:center;padding:24px;font:14px system-ui,sans-serif;';
-    warn.innerHTML='<div style="max-width:560px;border:1px solid #d4924a;background:#1b1a16;padding:18px;border-radius:5px;line-height:1.5"><strong style="display:block;color:#fff;margin-bottom:8px">Questlog Editor files are mixed.</strong>The page loaded v3.0 HTML, but the app script is missing or still an older cached version. Re-upload every file from the website files folder, then hard refresh this page.</div>';
+    warn.innerHTML='<div style="max-width:560px;border:1px solid #d4924a;background:#1b1a16;padding:18px;border-radius:5px;line-height:1.5"><strong style="display:block;color:#fff;margin-bottom:8px">Questlog Editor files are mixed.</strong>The page loaded v3.01 HTML, but the app script is missing or still an older cached version. Re-upload every file from the website files folder, then hard refresh this page.</div>';
     document.body.appendChild(warn);
   },800);
 </script>

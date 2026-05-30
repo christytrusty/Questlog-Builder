@@ -1137,6 +1137,8 @@ body.preferences-open{overflow:hidden;}
 #preferencesHelp .settings-toggle-action strong{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);}
 #preferencesHelp .settings-toggle-action.active{border-color:color-mix(in srgb,var(--ac) 72%,var(--bd2))!important;background:linear-gradient(180deg,color-mix(in srgb,var(--ac) 22%,var(--sf2)),color-mix(in srgb,var(--ac) 12%,var(--bg)))!important;}
 #preferencesHelp .settings-toggle-action.active strong{color:var(--ac);}
+.support-coffee-link{display:inline-flex!important;align-items:center!important;justify-content:center!important;text-align:center!important;text-decoration:none!important;font-weight:900!important;}
+.support-coffee-link:hover{color:var(--ac)!important;border-color:color-mix(in srgb,var(--ac) 55%,var(--bd2))!important;}
 .settings-toggle-icon-svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;color:var(--ac);}
 #preferencesHelp .settings-sources{max-width:560px;margin-top:18px!important;}
 #preferencesHelp .settings-sources summary{min-height:52px!important;font-size:14px!important;}
