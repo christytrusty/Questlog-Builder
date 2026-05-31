@@ -565,6 +565,7 @@ document.documentElement.dataset.questlogAppVersion=APP_VERSION;
 document.documentElement.dataset.questlogStorage=storageMode;
 const RIGHT_PANEL_MODE_KEY='ql.rightPanelMode';
 const CHAPTER_COLLAPSE_KEY='ql.sidebarCollapsedChapters';
+const PROGRESS_OPEN_CARDS_KEY='ql.progressOpenCards.v1';
 const PANEL_DEF=["display","progress","layout","labels","badge"];
 const PANEL_FIELDS={display:["title","sort_order","chapter","translatable","include_in_main","hidden","description","description_completed","description_failed","icon","completed_sound","triggered_sound","toast_on_unlock","toast_on_complete","show_popup_on_unlock"],progress:["requirements","objectives","failures","rewards"],layout:["background_texture","right_panel_texture","peripheral_texture","overlay","overlay_width","overlay_height","overlay_x_offset","overlay_y_offset","left_panel_width","right_panel_width","panel_height","left_panel_x_offset","left_panel_y_offset","right_panel_x_offset","right_panel_y_offset"],labels:["back_button_text","collect_button_text","uncollected_text","collected_text","text_color","completed_text_color","hovered_text_color","title_color","progress_text_color"],badge:["badge"]};
 const ADV_KEYS=["layout","labels","badge"];
@@ -596,6 +597,7 @@ const questPreviewCompletedFiles=new Set();
 const questPreviewFailedFiles=new Set();
 let isDragging=false,draggedQuest=null,questSidebarPointerDrag=null,suppressNextQuestClick=false;
 let collapsedChapters=loadCollapsedChapters();
+let progressOpenCards=loadProgressOpenCards();
 let panelOrder=loadOrder();
 let activeAdvKey=null; // which advanced section is currently shown
 let toastSeq=0;
@@ -1098,6 +1100,7 @@ function setPersonalLayoutChoice(value){
   if(!personalizationDraft)return;
   const next=normalizePersonalLayoutChoice(value);
   if(normalizePersonalLayoutChoice(personalizationDraft.layout)===next)return;
+  collapseProgressCardsForCurrentFile();
   pushPersonalHistory();
   personalizationDraft.layout=next;
   updatePersonalLayoutButtons();
@@ -6016,7 +6019,8 @@ async function questlogRunProgressEditorSelfTest(){
     fileMeta:JSON.parse(JSON.stringify(fileMeta||{})),
     currentFile,
     mode,
-    activeTab:localStorage.getItem('ql.activeTab')
+    activeTab:localStorage.getItem('ql.activeTab'),
+    progressOpenRaw:localStorage.getItem(PROGRESS_OPEN_CARDS_KEY)
   };
   let result=null;
   const sectionCount=kind=>(document.querySelector(`.progress-section-${kind} .progress-section-count`)?.textContent||'').trim();
@@ -6053,6 +6057,23 @@ async function questlogRunProgressEditorSelfTest(){
       fail:sectionCount('fail'),
       rew:sectionCount('rew')
     };
+    ['#reqList','#objList','#failList','#rewList'].forEach(sel=>document.querySelector(`${sel} .progress-edit-btn`)?.click());
+    const openStateBeforeTabLeave=['#reqList > .obj-card','#objList > .obj-card','#failList > .obj-card','#rewList > .rew-card'].every(sel=>!document.querySelector(sel)?.classList.contains('is-collapsed'));
+    const firstObjectiveItem=document.querySelector('#objList .obj-item');
+    if(firstObjectiveItem){
+      firstObjectiveItem.value='minecraft:stone';
+      firstObjectiveItem.dispatchEvent(new Event('input',{bubbles:true}));
+      firstObjectiveItem.dispatchEvent(new Event('focusout',{bubbles:true}));
+      await new Promise(resolve=>setTimeout(resolve,80));
+    }
+    const openStateAfterFieldBlur=!document.querySelector('#objList > .obj-card')?.classList.contains('is-collapsed');
+    setTab('display');
+    renderMain();
+    setTab('layout');
+    renderMain();
+    setTab('progress');
+    renderMain();
+    const collapsedStateAfterTabReturn=['#reqList > .obj-card','#objList > .obj-card','#failList > .obj-card','#rewList > .rew-card'].every(sel=>document.querySelector(sel)?.classList.contains('is-collapsed'));
     const sectionIcons=[...document.querySelectorAll('.progress-section-icon')].map(el=>({
       text:(el.textContent||'').trim(),
       svg:!!el.querySelector('svg'),
@@ -6108,6 +6129,8 @@ async function questlogRunProgressEditorSelfTest(){
       objectiveCountAfterDelete:counts.obj==='1 objective',
       failureCountAfterDelete:counts.fail==='1 failure',
       rewardCountAfterDelete:counts.rew==='1 reward',
+      progressCardsStayOpenDuringFieldBlur:openStateBeforeTabLeave&&openStateAfterFieldBlur,
+      progressCardsCollapseAfterLeavingProgress:collapsedStateAfterTabReturn,
       sectionIconsUseSvg:sectionIcons.length===4&&sectionIcons.every(i=>i.svg&&!i.text&&(i.before==='none'||i.before==='normal'||i.before==='""')),
       fallbackIconsUseSvg:fallbackIcons.length===2&&fallbackIcons.every(i=>i.svg&&!i.text),
       blurEntityIdRerendersTexture:hasTexture(blurIcon,'skeleton.png')&&(blurIcon.className||'').includes('entity-face-model')&&!(blurIcon.className||'').includes('entity-three-ready'),
@@ -6130,6 +6153,9 @@ async function questlogRunProgressEditorSelfTest(){
     mode=before.mode;
     if(before.activeTab===null)localStorage.removeItem('ql.activeTab');
     else localStorage.setItem('ql.activeTab',before.activeTab);
+    if(before.progressOpenRaw===null)localStorage.removeItem(PROGRESS_OPEN_CARDS_KEY);
+    else localStorage.setItem(PROGRESS_OPEN_CARDS_KEY,before.progressOpenRaw);
+    progressOpenCards=loadProgressOpenCards();
     renderFileList();
     renderMain();
     refreshOpenExportPreview();
@@ -7561,6 +7587,7 @@ const GUI_STUDIO_TARGETS={
   }
 };
 function openGuiStudio(target='quest-menu'){
+  collapseProgressCardsForCurrentFile();
   const modal=$('#guiStudioModal');if(!modal)return;
   const info=GUI_STUDIO_TARGETS[target]||GUI_STUDIO_TARGETS['quest-menu'];
   guiStudioLoadScopedDraftForTarget(target,currentFile);
@@ -13931,7 +13958,12 @@ function buildTabs(){
   placeFormTabs(active);renderInlineQuestPreview();
 }
 
-function setTab(k){localStorage.setItem('ql.activeTab',k);if(ADV_KEYS.includes(k))activeAdvKey=k;else activeAdvKey=null;}
+function setTab(k){
+  const prev=localStorage.getItem('ql.activeTab')||'display';
+  if(prev==='progress'&&k!=='progress')collapseProgressCardsForCurrentFile();
+  localStorage.setItem('ql.activeTab',k);
+  if(ADV_KEYS.includes(k))activeAdvKey=k;else activeAdvKey=null;
+}
 function restoreFormTabsToAnchor(){
   const row=$('.form-tabs-row'),anchor=$('#formTabsAnchor');
   if(row&&anchor?.parentElement&&row.previousElementSibling!==anchor)anchor.parentElement.insertBefore(row,anchor.nextSibling);
@@ -13947,6 +13979,7 @@ function movePK(k,dir){const o=normOrder(panelOrder);const i=o.indexOf(k);const 
 
 // ── Render main ───────────────────────────────────────────────────
 function renderMain(){
+  captureProgressOpenCardsFromDom();
   rawMode=!!$('#viewRaw')?.checked;
   const label=$('#jsonPanelLabel');if(label)label.textContent=rawMode?'JSON editor':'Live JSON';
   if(!currentFile||!getCD()){
@@ -14273,7 +14306,63 @@ function renderOF(o){
   return`${cn}${e}${ci}`;
 }
 
-function wrapOC(o,i,isNot,kind='obj'){return`<div class="obj-card is-collapsed" data-i="${i}">${progressCompactRow(o,i,kind,false)}<div class="card-head progress-edit-head"><span class="card-title">${progressCardLabel(kind,isNot,i)}</span><div class="card-actions">${oSel(o.type||'questlog:item_obtain')}</div></div><div class="obj-fields">${renderOF(o)}</div></div>`;}
+function loadProgressOpenCards(){
+  try{
+    const raw=localStorage.getItem(PROGRESS_OPEN_CARDS_KEY);
+    const arr=raw?JSON.parse(raw):[];
+    return new Set(Array.isArray(arr)?arr.filter(v=>typeof v==='string') : []);
+  }catch(_err){return new Set();}
+}
+function saveProgressOpenCards(){
+  try{localStorage.setItem(PROGRESS_OPEN_CARDS_KEY,JSON.stringify([...progressOpenCards].slice(-400)));}
+  catch(_err){}
+}
+function progressOpenKey(kind,i){return`${currentFile||''}:${kind}:${i}`;}
+function isProgressCardOpen(kind,i){return progressOpenCards.has(progressOpenKey(kind,i));}
+function setProgressCardOpen(kind,i,open){
+  const key=progressOpenKey(kind,i);
+  if(open)progressOpenCards.add(key);
+  else progressOpenCards.delete(key);
+  saveProgressOpenCards();
+}
+function captureProgressOpenCardsFromDom(){
+  if(!currentFile)return;
+  document.querySelectorAll('#reqList > .obj-card,#objList > .obj-card,#failList > .obj-card').forEach(card=>{
+    const root=card.closest('[data-list-key]');
+    const kind=root?.dataset.listKey||'obj';
+    setProgressCardOpen(kind,+card.dataset.i,!card.classList.contains('is-collapsed'));
+  });
+  document.querySelectorAll('#rewList > .rew-card').forEach(card=>{
+    setProgressCardOpen('rew',+card.dataset.ri,!card.classList.contains('is-collapsed'));
+  });
+}
+function rememberProgressCardOpenFromControl(el){
+  const card=el?.closest?.('.obj-card,.rew-card');
+  if(!card)return;
+  if(card.classList.contains('rew-card'))setProgressCardOpen('rew',+card.dataset.ri,!card.classList.contains('is-collapsed'));
+  else{
+    const root=card.closest('[data-list-key]');
+    setProgressCardOpen(root?.dataset.listKey||'obj',+card.dataset.i,!card.classList.contains('is-collapsed'));
+  }
+}
+function collapseProgressCardsForCurrentFile(){
+  if(!currentFile)return;
+  const prefix=`${currentFile}:`;
+  progressOpenCards=new Set([...progressOpenCards].filter(key=>!key.startsWith(prefix)));
+  saveProgressOpenCards();
+  document.querySelectorAll('#reqList > .obj-card,#objList > .obj-card,#failList > .obj-card,#rewList > .rew-card').forEach(card=>{
+    card.classList.add('is-collapsed');
+  });
+}
+function toggleProgressCardOpen(card,kind,i){
+  const open=card.classList.contains('is-collapsed');
+  card.classList.toggle('is-collapsed',!open);
+  setProgressCardOpen(kind,i,open);
+}
+function wrapOC(o,i,isNot,kind='obj'){
+  const collapsed=isProgressCardOpen(kind,i)?'':' is-collapsed';
+  return`<div class="obj-card${collapsed}" data-i="${i}">${progressCompactRow(o,i,kind,false)}<div class="card-head progress-edit-head"><span class="card-title">${progressCardLabel(kind,isNot,i)}</span><div class="card-actions">${oSel(o.type||'questlog:item_obtain')}</div></div><div class="obj-fields">${renderOF(o)}</div></div>`;
+}
 
 function renderOL(c,arr,k){c.innerHTML=arr.map((o,i)=>wrapOC(o,i,false,k)).join('');c.dataset.listKey=k;bindOC(c);}
 
@@ -14282,15 +14371,16 @@ function bindOC(root){
     root.dataset.progressBlurBound='1';
     root.addEventListener('focusout',e=>{
       if(e.target?.matches?.('.obj-block,.obj-entity,.obj-item,.obj-bitem,.obj-icon')){
+        rememberProgressCardOpenFromControl(e.target);
         setTimeout(()=>{syncQ();renderMain();},0);
       }
     });
   }
   root.querySelectorAll('.obj-card').forEach(card=>{
-    const ts=card.querySelector(':scope > .card-head .obj-type');if(ts)ts.onchange=()=>{syncQ();renderMain();};
+    const ts=card.querySelector(':scope > .card-head .obj-type');if(ts)ts.onchange=()=>{rememberProgressCardOpenFromControl(ts);syncQ();renderMain();};
     const rm=card.querySelector(':scope > .card-head .small-rm');if(rm&&!rm.classList.contains('hidden'))rm.onclick=()=>{card.remove();syncQ();renderMain();};
     const cr=card.querySelector(':scope > .progress-compact-row .progress-compact-remove');if(cr)cr.onclick=()=>{card.remove();syncQ();renderMain();};
-    const edit=card.querySelector(':scope > .progress-compact-row .progress-edit-btn');if(edit)edit.onclick=()=>{card.classList.remove('is-collapsed');};
+    const edit=card.querySelector(':scope > .progress-compact-row .progress-edit-btn');if(edit)edit.onclick=()=>{toggleProgressCardOpen(card,root.dataset.listKey||'obj',+card.dataset.i);};
     const save=card.querySelector(':scope > .card-head .progress-save-btn');if(save)save.onclick=()=>{syncQ();renderMain();};
   });
   root.querySelectorAll('.add-or-child').forEach(btn=>{
@@ -14337,7 +14427,8 @@ function renderRC(r,i){
   else if(t==='questlog:command')body=`<div class="field"><label>Command</label><input type="text" class="rw-cmd" value="${esc(r.command||'')}" /></div><div class="field"><label>Permission level</label><input type="number" class="rw-plvl" value="${r.permission_level??2}" /></div>`;
   else if(t==='questlog:experience')body=`<div class="field"><label>Amount</label><input type="number" class="rw-xp" value="${r.experience??0}" /></div><label class="toggle-label"><input type="checkbox" class="rw-levels" ${(r.level??r.levels)?'checked':''} /> Grant as levels</label>`;
   else if(t==='questlog:loot_table')body=`<div class="field"><label>Loot table</label><input type="text" class="rw-loot" value="${esc(r.loot_table||'')}" /></div>`;
-  return`<div class="rew-card is-collapsed" data-ri="${i}">${progressCompactRow(r,i,'rew',true)}<div class="card-head progress-edit-head"><span class="card-title">Reward #${i+1}</span><div class="card-actions">${rSel(t)}</div></div><div class="rew-fields"><div class="field"><label>Name — optional</label><input type="text" class="rw-name" value="${esc(r.name||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-trans" ${r.translatable?'checked':''} /> Translation key</label>${body}<div class="field"><label>Icon</label><input type="text" class="rw-icon" value="${esc(r.icon!=null?(typeof r.icon==='string'?r.icon:JSON.stringify(r.icon)):'')}" /></div><div class="field"><label>Claim sound</label><input type="text" class="rw-sound" value="${esc(r.claim_sound||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-autoclaim" ${r.auto_claim?'checked':''} /> Auto-claim</label></div></div>`;
+  const collapsed=isProgressCardOpen('rew',i)?'':' is-collapsed';
+  return`<div class="rew-card${collapsed}" data-ri="${i}">${progressCompactRow(r,i,'rew',true)}<div class="card-head progress-edit-head"><span class="card-title">Reward #${i+1}</span><div class="card-actions">${rSel(t)}</div></div><div class="rew-fields"><div class="field"><label>Name — optional</label><input type="text" class="rw-name" value="${esc(r.name||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-trans" ${r.translatable?'checked':''} /> Translation key</label>${body}<div class="field"><label>Icon</label><input type="text" class="rw-icon" value="${esc(r.icon!=null?(typeof r.icon==='string'?r.icon:JSON.stringify(r.icon)):'')}" /></div><div class="field"><label>Claim sound</label><input type="text" class="rw-sound" value="${esc(r.claim_sound||'')}" /></div><label class="toggle-label" style="margin-bottom:6px;"><input type="checkbox" class="rw-autoclaim" ${r.auto_claim?'checked':''} /> Auto-claim</label></div></div>`;
 }
 
 // ── Bind dropdowns (insert + format) ─────────────────────────────
@@ -14501,19 +14592,21 @@ function bindQForm(){
   $$('[data-r^="icon"]').forEach(el=>{el.addEventListener('input',updateDisplayIconPreview);el.addEventListener('change',updateDisplayIconPreview);});
   renderOL($('#reqList'),q.requirements||[],'req');renderOL($('#objList'),q.objectives||[],'obj');renderOL($('#failList'),q.failures||[],'fail');
   const rw=$('#rewList');rw.innerHTML=(q.rewards||[]).map((r,i)=>renderRC(r,i)).join('');
+  rw.querySelectorAll('.rew-card').forEach(card=>{if(isProgressCardOpen('rew',+card.dataset.ri))card.classList.remove('is-collapsed');});
   if(!rw.dataset.progressBlurBound){
     rw.dataset.progressBlurBound='1';
     rw.addEventListener('focusout',e=>{
       if(e.target?.matches?.('.rw-item,.rw-icon')){
+        rememberProgressCardOpenFromControl(e.target);
         setTimeout(()=>{syncQ();renderMain();},0);
       }
     });
   }
   rw.querySelectorAll('.rew-card').forEach(card=>{
-    card.querySelector('.rew-type').onchange=()=>{syncQ();const i=+card.dataset.ri;q.rewards[i]={type:card.querySelector('.rew-type').value};setCD(q);renderMain();};
+    card.querySelector('.rew-type').onchange=()=>{rememberProgressCardOpenFromControl(card.querySelector('.rew-type'));syncQ();const i=+card.dataset.ri;q.rewards[i]={type:card.querySelector('.rew-type').value};setCD(q);renderMain();};
     card.querySelector('.rew-remove')?.addEventListener('click',()=>{syncQ();q.rewards.splice(+card.dataset.ri,1);setCD(q);renderMain();});
     card.querySelector('.progress-compact-remove')?.addEventListener('click',()=>{syncQ();q.rewards.splice(+card.dataset.ri,1);setCD(q);renderMain();});
-    card.querySelector('.progress-edit-btn')?.addEventListener('click',()=>{card.classList.remove('is-collapsed');});
+    card.querySelector('.progress-edit-btn')?.addEventListener('click',()=>{toggleProgressCardOpen(card,'rew',+card.dataset.ri);});
     card.querySelector('.progress-save-btn')?.addEventListener('click',()=>{syncQ();renderMain();});
   });
   $('#addReq').onclick=()=>{syncQ();if(!Array.isArray(q.requirements))q.requirements=[];q.requirements.push({type:'questlog:item_obtain',item:'minecraft:dirt',required_amount:1});setCD(q);renderMain();};
